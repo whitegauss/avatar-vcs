@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.Model;
 using AvatarVcs.Runtime;
 using UnityEditor;
@@ -47,6 +48,13 @@ namespace AvatarVcs.Editor.Operations
                 instance.transform.localPosition = Vector3.zero;
                 instance.transform.localRotation = Quaternion.identity;
                 instance.transform.localScale = Vector3.one;
+            }
+
+            foreach (var componentState in snapshot.components)
+            {
+                var result = ComponentApplier.Apply(componentState, containerGo, createIfMissing: true);
+                if (!result.IsSuccess)
+                    Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{snapshot.containerId}': {result.Message}");
             }
 
             return containerGo;

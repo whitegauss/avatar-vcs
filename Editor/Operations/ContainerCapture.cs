@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.Model;
 using AvatarVcs.Runtime;
@@ -26,6 +27,16 @@ namespace AvatarVcs.Editor.Operations
                 .Where(guid => !string.IsNullOrEmpty(guid))
                 .ToList();
 
+            // Only components on the container root itself are captured (e.g. a
+            // ModularAvatarMergeArmature placed to configure the container) --
+            // matches the single "path": "" example in design doc section 2.1.
+            // Components inside the placed prefab's own hierarchy are reproduced
+            // by re-instantiating the prefab, not by capturing them here.
+            var components = container.GetComponents<Component>()
+                .Where(c => c != null && c is not Transform && c is not AvatarVcsContainer)
+                .Select(c => ComponentCapturer.Capture(c, container))
+                .ToList();
+
             return new ContainerSnapshot
             {
                 containerId = container.name,
@@ -34,6 +45,7 @@ namespace AvatarVcs.Editor.Operations
                 localPosition = container.localPosition,
                 localRotation = container.localRotation,
                 localScale = container.localScale,
+                components = components,
             };
         }
     }

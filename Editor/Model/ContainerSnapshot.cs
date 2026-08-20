@@ -18,5 +18,6 @@ namespace AvatarVcs.Editor.Model
         public Vector3 localPosition;
         public Quaternion localRotation = Quaternion.identity;
         public Vector3 localScale = Vector3.one;
+        public List<ComponentState> components = new();
     }
 }
