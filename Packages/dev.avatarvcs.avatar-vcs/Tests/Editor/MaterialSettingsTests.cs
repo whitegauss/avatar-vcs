@@ -95,7 +95,11 @@ namespace AvatarVcs.Tests.Editor
             Assert.Less(Vector4.Distance(newColor, duplicate.GetColor("_Color")), 0.001f);
 
             var renderer = avatarRoot.transform.Find("Body").GetComponent<MeshRenderer>();
-            Assert.AreSame(duplicate, renderer.sharedMaterials[0]);
+            // Compare by asset identity, not reference equality: Renderer.
+            // sharedMaterials allocates a fresh array (and sometimes a
+            // fresh wrapper) on every read, which isn't always AreSame to a
+            // previously-held reference even when nothing was reassigned.
+            Assert.AreEqual(AssetDatabase.GetAssetPath(duplicate), AssetDatabase.GetAssetPath(renderer.sharedMaterials[0]));
 
             var duplicatePath = AssetDatabase.GetAssetPath(duplicate);
             Assert.IsFalse(string.IsNullOrEmpty(duplicatePath), "duplicate must be saved as an asset");

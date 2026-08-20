@@ -230,7 +230,13 @@ namespace AvatarVcs.Tests.Editor
             LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Material GUID .* could not be resolved for slot 0"));
 
             Assert.DoesNotThrow(() => AvatarReferenceApplier.Apply(state, root.transform));
-            Assert.AreSame(testMat, mr.sharedMaterials[0], "Original material should remain untouched");
+            // Renderer.sharedMaterials returns a freshly allocated array each
+            // call, whose element wrappers aren't always reference-equal to
+            // a previously-held one even when nothing was reassigned; compare
+            // by asset identity instead (confirmed via an earlier, similar
+            // AreSame flake with a real Unity object re-read on this project).
+            Assert.AreEqual(AssetDatabase.GetAssetPath(testMat), AssetDatabase.GetAssetPath(mr.sharedMaterials[0]),
+                "Original material should remain untouched");
         }
 
         #endregion
