@@ -16,3 +16,6 @@ bin/
 # Local reviews and temporary docs
 CODE_REVIEW.md
 
+# Commit history the TestProject writes to ProjectSettings while running tests
+TestProject/ProjectSettings/AvatarVcs/
+
