@@ -41,7 +41,7 @@ namespace AvatarVcs.Editor.Reflection
         /// Resolves an asset by GUID + localId, distinguishing sub-assets that
         /// share a GUID (e.g. multiple materials inside one FBX).
         /// </summary>
-        public static Object ResolveAsset(string guid, long localId)
+        public static UnityEngine.Object ResolveAsset(string guid, long localId)
         {
             if (string.IsNullOrEmpty(guid)) return null;
 
