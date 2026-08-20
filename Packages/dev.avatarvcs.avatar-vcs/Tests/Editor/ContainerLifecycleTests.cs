@@ -159,15 +159,22 @@ namespace AvatarVcs.Tests.Editor
 
             var root = ContainerManager.EnsureRoot(avatarRoot);
             var container = ContainerManager.CreateContainer(root, "outfit_a");
-            PrefabUtility.InstantiatePrefab(privatePrefab, container.transform);
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(privatePrefab, container.transform);
             var snapshot = ContainerCapture.CaptureContainer(container.transform);
+            Assert.Contains(privateGuid, snapshot.prefabGuids, "captured snapshot should reference the private prefab's guid");
+
+            // A live instance in the scene can keep the GUID "in use"; remove
+            // it before deleting the source, matching the real checkout flow
+            // where the old container is destroyed before validating the next one.
+            Object.DestroyImmediate(instance);
 
             var deleted = AssetDatabase.DeleteAsset(privatePrefabPath);
             Assert.IsTrue(deleted, "DeleteAsset should have removed the private prefab.");
-            AssetDatabase.Refresh();
-            // GUIDToAssetPath can still resolve a just-deleted asset's path
-            // within the same frame; give Unity a frame to settle.
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             yield return null;
+
+            var resolvedPath = AssetDatabase.GUIDToAssetPath(privateGuid);
+            Debug.Log($"[DIAG] AssetDatabase.GUIDToAssetPath(privateGuid) after delete = '{resolvedPath}'");
 
             var isMissing = ContainerRestore.HasMissingPrefabs(snapshot, out var missingGuids);
             Assert.IsTrue(isMissing);

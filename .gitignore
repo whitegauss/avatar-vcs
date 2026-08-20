@@ -12,3 +12,7 @@ Thumbs.db
 *.sln
 obj/
 bin/
+
+# Local reviews and temporary docs
+CODE_REVIEW.md
+
