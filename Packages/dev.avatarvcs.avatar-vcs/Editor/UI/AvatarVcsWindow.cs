@@ -38,6 +38,13 @@ namespace AvatarVcs.Editor.UI
         private Vector2 diffScroll;
         private readonly Dictionary<string, bool> expandedContainers = new();
 
+        // GUID remapping (design doc 6.4): populated when a checkout fails
+        // with missing prefabs, so the user can point each one at its
+        // re-imported replacement and retry.
+        private List<string> pendingMissingGuids;
+        private readonly Dictionary<string, UnityEngine.Object> remapSelections = new();
+        private Func<CheckoutResult> pendingRetryCheckout;
+
         [MenuItem("Window/AvatarVCS")]
         public static void Open() => GetWindow<AvatarVcsWindow>("AvatarVCS");
 
@@ -73,6 +80,7 @@ namespace AvatarVcs.Editor.UI
                 return;
             }
 
+            DrawRemapSection();
             DrawBranchBar();
             DrawUncommittedWarning();
 
@@ -290,13 +298,71 @@ namespace AvatarVcs.Editor.UI
             var result = checkout();
             if (!result.IsSuccess)
             {
-                EditorUtility.DisplayDialog("Checkout Failed",
-                    "Missing prefabs, checkout aborted:\n" + string.Join("\n", result.MissingPrefabGuids),
-                    "OK");
+                pendingMissingGuids = result.MissingPrefabGuids;
+                remapSelections.Clear();
+                pendingRetryCheckout = checkout;
                 return;
             }
 
+            pendingMissingGuids = null;
+            pendingRetryCheckout = null;
+
+            if (result.VersionWarnings.Count > 0)
+                EditorUtility.DisplayDialog("Asset Versions Changed",
+                    "Checkout succeeded, but some referenced assets have changed since this commit was recorded "
+                    + "(the result may look different):\n\n" + string.Join("\n", result.VersionWarnings),
+                    "OK");
+
             Reload();
+        }
+
+        private void DrawRemapSection()
+        {
+            if (pendingMissingGuids == null || pendingMissingGuids.Count == 0) return;
+
+            EditorGUILayout.HelpBox(
+                "Checkout aborted: the following prefabs/materials could not be resolved. "
+                + "Assign their replacement (e.g. after a re-import) and retry, or Cancel.",
+                MessageType.Warning);
+
+            foreach (var guid in pendingMissingGuids)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(guid, GUILayout.Width(260));
+                remapSelections.TryGetValue(guid, out var current);
+                var picked = EditorGUILayout.ObjectField(current, typeof(UnityEngine.Object), false);
+                remapSelections[guid] = picked;
+                EditorGUILayout.EndHorizontal();
+            }
+
+            EditorGUILayout.BeginHorizontal();
+
+            GUI.enabled = pendingMissingGuids.All(g => remapSelections.TryGetValue(g, out var o) && o != null);
+            if (GUILayout.Button("Apply Remapping and Retry"))
+            {
+                foreach (var guid in pendingMissingGuids)
+                {
+                    var newPath = AssetDatabase.GetAssetPath(remapSelections[guid]);
+                    var newGuid = AssetDatabase.AssetPathToGUID(newPath);
+                    GuidRemapper.AddMapping(guid, newGuid);
+                }
+
+                var retry = pendingRetryCheckout;
+                pendingMissingGuids = null;
+                remapSelections.Clear();
+                pendingRetryCheckout = null;
+                RunCheckout(retry);
+            }
+            GUI.enabled = true;
+
+            if (GUILayout.Button("Cancel", GUILayout.Width(80)))
+            {
+                pendingMissingGuids = null;
+                remapSelections.Clear();
+                pendingRetryCheckout = null;
+            }
+
+            EditorGUILayout.EndHorizontal();
         }
 
         private void DeleteCommit(string commitId)

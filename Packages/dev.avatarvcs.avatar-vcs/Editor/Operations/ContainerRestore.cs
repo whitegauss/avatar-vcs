@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Editor.Apply;
+using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
 using AvatarVcs.Runtime;
 using UnityEditor;
@@ -86,11 +87,12 @@ namespace AvatarVcs.Editor.Operations
         /// asset's path for a while after AssetDatabase.DeleteAsset succeeds
         /// (confirmed empirically, not just a same-frame timing issue), so a
         /// non-empty path alone doesn't prove the asset still exists -- also
-        /// confirm it actually loads.
+        /// confirm it actually loads. Consults GuidRemapper first (design doc
+        /// 6.4): a re-imported prefab's new GUID is transparently substituted.
         /// </summary>
         private static bool TryResolvePrefabPath(string guid, out string assetPath)
         {
-            assetPath = AssetDatabase.GUIDToAssetPath(guid);
+            assetPath = AssetDatabase.GUIDToAssetPath(GuidRemapper.Resolve(guid));
             if (string.IsNullOrEmpty(assetPath)) return false;
             return AssetDatabase.LoadAssetAtPath<GameObject>(assetPath) != null;
         }
