@@ -46,7 +46,7 @@ namespace AvatarVcs.Editor.History
 
             foreach (var entry in recorded)
             {
-                var path = AssetDatabase.GUIDToAssetPath(entry.guid);
+                var path = AssetDatabase.GUIDToAssetPath(GuidRemapper.Resolve(entry.guid));
                 if (string.IsNullOrEmpty(path))
                 {
                     warnings.Add($"'{entry.assetName}' ({entry.guid}) is no longer in the project.");

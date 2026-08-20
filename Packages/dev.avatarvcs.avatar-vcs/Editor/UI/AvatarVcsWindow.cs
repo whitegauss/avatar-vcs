@@ -330,7 +330,10 @@ namespace AvatarVcs.Editor.UI
                 EditorGUILayout.BeginHorizontal();
                 EditorGUILayout.LabelField(guid, GUILayout.Width(260));
                 remapSelections.TryGetValue(guid, out var current);
-                var picked = EditorGUILayout.ObjectField(current, typeof(UnityEngine.Object), false);
+                // pendingMissingGuids only ever comes from HasMissingPrefabs
+                // (CheckoutOperation only pre-flight-checks container prefabs,
+                // never materials), so restrict the picker to prefab assets.
+                var picked = EditorGUILayout.ObjectField(current, typeof(GameObject), false);
                 remapSelections[guid] = picked;
                 EditorGUILayout.EndHorizontal();
             }

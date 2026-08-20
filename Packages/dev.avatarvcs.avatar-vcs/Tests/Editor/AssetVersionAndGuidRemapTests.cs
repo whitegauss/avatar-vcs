@@ -128,6 +128,52 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void GuidRemapper_ChainedMapping_ResolvesTransitively()
+        {
+            // A got re-imported to B, then later B itself got re-imported to
+            // C. A single-hop lookup would leave A stuck pointing at B.
+            GuidRemapper.AddMapping("guid-a", "guid-b");
+            GuidRemapper.AddMapping("guid-b", "guid-c");
+
+            Assert.AreEqual("guid-c", GuidRemapper.Resolve("guid-a"));
+        }
+
+        [Test]
+        public void CheckForChanges_ResolvesRecordedGuidThroughRemapping_BeforeWarningMissing()
+        {
+            // Record a version entry for a prefab, then simulate it having
+            // been re-imported to a new GUID (old asset gone, new one takes
+            // its place) and remapped. Without resolving through
+            // GuidRemapper first, CheckForChanges would look up the old,
+            // now-nonexistent GUID directly and always warn "no longer in
+            // the project", even though the remapping already made the
+            // reference resolve fine again.
+            var oldPath = $"{TestAssetDir}/ReimportOld.prefab";
+            var oldSource = new GameObject("ReimportOld");
+            PrefabUtility.SaveAsPrefabAsset(oldSource, oldPath);
+            Object.DestroyImmediate(oldSource);
+            var oldGuid = AssetDatabase.AssetPathToGUID(oldPath);
+
+            var entries = AssetVersionChecker.RecordVersions(new[] { oldGuid });
+            Assert.AreEqual(1, entries.Count);
+
+            var newPath = $"{TestAssetDir}/ReimportNew.prefab";
+            var newSource = new GameObject("ReimportNew");
+            PrefabUtility.SaveAsPrefabAsset(newSource, newPath);
+            Object.DestroyImmediate(newSource);
+            var newGuid = AssetDatabase.AssetPathToGUID(newPath);
+
+            AssetDatabase.DeleteAsset(oldPath);
+            GuidRemapper.AddMapping(oldGuid, newGuid);
+
+            var warnings = AssetVersionChecker.CheckForChanges(entries);
+            Assert.IsFalse(warnings.Any(w => w.Contains("no longer in the project")),
+                "a remapped GUID should resolve to its replacement instead of warning it's missing");
+
+            AssetDatabase.DeleteAsset(newPath);
+        }
+
+        [Test]
         public void HasMissingPrefabs_WithRemapping_ResolvesViaReplacementGuid()
         {
             var replacementPath = $"{TestAssetDir}/Replacement.prefab";

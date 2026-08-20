@@ -17,13 +17,33 @@ namespace AvatarVcs.Editor.History
         private static string ConfigPath =>
             Path.Combine("ProjectSettings", "AvatarVcs", "guid-remapping.json").Replace('\\', '/');
 
-        /// <summary>Returns the remapped GUID if one is recorded, else guid unchanged.</summary>
+        // Separate from Load()'s cache: Load() must keep returning an
+        // independent snapshot each call (callers mutate the result in
+        // place), while this cache exists purely to spare the many Resolve()
+        // calls in a single checkout's restore loop from re-reading the file.
+        // Invalidated on every Save().
+        private static GuidRemapConfig resolveCache;
+
+        /// <summary>
+        /// Returns the remapped GUID if one is recorded, else guid unchanged.
+        /// Follows chained mappings (A-&gt;B-&gt;C resolves A to C) with a cycle guard.
+        /// </summary>
         public static string Resolve(string guid)
         {
             if (string.IsNullOrEmpty(guid)) return guid;
 
-            var entry = Load().mappings.FirstOrDefault(m => m.oldGuid == guid);
-            return entry?.newGuid ?? guid;
+            resolveCache ??= Load();
+            var mappings = resolveCache.mappings;
+            var current = guid;
+            // Cap hops at the mapping count: a correct chain can be at most
+            // this long, so hitting the cap means a cycle.
+            for (var i = 0; i < mappings.Count; i++)
+            {
+                var entry = mappings.FirstOrDefault(m => m.oldGuid == current);
+                if (entry == null) break;
+                current = entry.newGuid;
+            }
+            return current;
         }
 
         public static void AddMapping(string oldGuid, string newGuid)
@@ -48,6 +68,7 @@ namespace AvatarVcs.Editor.History
         {
             Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
             File.WriteAllText(ConfigPath, JsonUtility.ToJson(config, true));
+            resolveCache = null;
         }
     }
 }
