@@ -41,6 +41,33 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Diagnostic_DumpHingeJointCapture()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var armature = Spawn("Armature", avatarRoot.transform);
+            var bone = Spawn("Hip", armature.transform);
+            var boneRigidbody = bone.AddComponent<Rigidbody>();
+
+            var configRoot = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(configRoot, "outfit_a");
+            var joint = container.AddComponent<HingeJoint>();
+            joint.connectedBody = boneRigidbody;
+
+            TestContext.WriteLine($"connectedBody after assignment: {(joint.connectedBody == null ? "null" : joint.connectedBody.name)}");
+
+            var state = ComponentCapturer.Capture(joint, container.transform, avatarRoot.transform);
+
+            TestContext.WriteLine($"fields.Count={state.fields.Count}");
+            foreach (var f in state.fields) TestContext.WriteLine($"  field key={f.key} type={f.type} value={f.value}");
+            TestContext.WriteLine($"assetRefs.Count={state.assetRefs.Count}");
+            foreach (var a in state.assetRefs) TestContext.WriteLine($"  assetRef key={a.key} guid={a.guid}");
+            TestContext.WriteLine($"sceneRefs.Count={state.sceneRefs.Count}");
+            foreach (var s in state.sceneRefs) TestContext.WriteLine($"  sceneRef key={s.key} path={s.path} type={s.type}");
+
+            Assert.Pass("diagnostic dump above");
+        }
+
+        [Test]
         public void Capture_ClassifiesSceneObjectReference_AsSceneRefByPath_NotAssetRef()
         {
             var avatarRoot = Spawn("Avatar");
