@@ -161,6 +161,7 @@ namespace AvatarVcs.Tests.Editor
             var snapshot = ContainerCapture.CaptureContainer(container.transform);
 
             AssetDatabase.DeleteAsset(privatePrefabPath);
+            AssetDatabase.Refresh(); // GUIDToAssetPath can still resolve the old path without this
 
             var isMissing = ContainerRestore.HasMissingPrefabs(snapshot, out var missingGuids);
             Assert.IsTrue(isMissing);

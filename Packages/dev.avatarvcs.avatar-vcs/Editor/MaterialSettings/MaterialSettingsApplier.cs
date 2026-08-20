@@ -66,6 +66,11 @@ namespace AvatarVcs.Editor.MaterialSettings
             var directory = System.IO.Path.GetDirectoryName(sourcePath)?.Replace('\\', '/');
             var assetPath = AssetDatabase.GenerateUniqueAssetPath($"{directory}/{duplicate.name}.mat");
             AssetDatabase.CreateAsset(duplicate, assetPath);
+            AssetDatabase.SaveAssets();
+            // CreateAsset can trigger a reimport that leaves the pre-save
+            // reference stale; reload so callers and the renderer get the
+            // same canonical instance that later AssetDatabase lookups see.
+            duplicate = AssetDatabase.LoadAssetAtPath<Material>(assetPath);
 
             var materials = renderer.sharedMaterials;
             if (state.slot < 0 || state.slot >= materials.Length)
