@@ -1,3 +1,4 @@
+using System.Linq;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
 using NUnit.Framework;
@@ -88,6 +89,32 @@ namespace AvatarVcs.Tests.Editor
             var toShortAgain = BranchManager.SwitchBranch(avatarRoot, "hair-short");
             Assert.IsTrue(toShortAgain.IsSuccess);
             AssertHairPrefab(prefabShortPath);
+        }
+
+        [Test]
+        public void RestoreToCommit_ReturnsToAnOlderCommit_OnTheSameBranch()
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var root = ContainerManager.FindRoot(avatarRoot);
+
+            var hairLong = ContainerManager.CreateContainer(root, "hair");
+            PrefabUtility.InstantiatePrefab(prefabSourceLong, hairLong.transform);
+            var commitA = BranchManager.Commit(avatarRoot, "hair long");
+
+            Object.DestroyImmediate(root.transform.Find("hair").gameObject);
+            var hairShort = ContainerManager.CreateContainer(root, "hair");
+            PrefabUtility.InstantiatePrefab(prefabSourceShort, hairShort.transform);
+            BranchManager.Commit(avatarRoot, "hair short");
+
+            var result = BranchManager.RestoreToCommit(avatarRoot, commitA.commitId);
+
+            Assert.IsTrue(result.IsSuccess);
+            AssertHairPrefab(prefabLongPath);
+
+            var config = CommitStore.LoadConfig(avatarGuid);
+            Assert.AreEqual("main", config.currentBranch, "RestoreToCommit stays on the current branch");
+            Assert.AreEqual(commitA.commitId, config.branches.First(b => b.name == "main").commitId,
+                "the branch head moves to the restored commit, not the auto-commit safety snapshot");
         }
 
         private void AssertHairPrefab(string expectedPrefabPath)

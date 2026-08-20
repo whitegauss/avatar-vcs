@@ -1,5 +1,6 @@
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
+using AvatarVcs.Editor.UI;
 using AvatarVcs.Runtime;
 using UnityEditor;
 using UnityEngine;
@@ -90,5 +91,21 @@ namespace AvatarVcs.Editor.Menu
 
         [MenuItem("GameObject/AvatarVCS/List Commits", true)]
         private static bool ValidateListCommitsMenuItem() => Selection.activeGameObject != null;
+
+        [MenuItem("GameObject/AvatarVCS/Open Window", false, 4)]
+        private static void OpenWindowMenuItem()
+        {
+            var target = Selection.activeGameObject;
+            if (target == null)
+            {
+                Debug.LogWarning("[AvatarVCS] Select the avatar root GameObject first.");
+                return;
+            }
+
+            AvatarVcsWindow.OpenFor(target);
+        }
+
+        [MenuItem("GameObject/AvatarVCS/Open Window", true)]
+        private static bool ValidateOpenWindowMenuItem() => Selection.activeGameObject != null;
     }
 }
