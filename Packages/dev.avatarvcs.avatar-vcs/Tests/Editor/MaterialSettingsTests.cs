@@ -121,6 +121,28 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Apply_CalledTwiceWithSameState_ReusesGeneratedDuplicate()
+        {
+            var state = new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = sourceMaterialGuid,
+                shader = "lilToon",
+            };
+            state.properties.Add(new MaterialPropertyValue { name = "_Color", type = "color", value = "0,1,0,1" });
+
+            var first = MaterialSettingsApplier.Apply(state, avatarRoot);
+            Assert.IsFalse(string.IsNullOrEmpty(state.generatedGuid));
+            var firstPath = AssetDatabase.GetAssetPath(first);
+
+            var second = MaterialSettingsApplier.Apply(state, avatarRoot);
+
+            Assert.AreSame(first, second, "second Apply should reuse the same duplicate, not create a new one");
+            Assert.AreEqual(firstPath, AssetDatabase.GetAssetPath(second));
+        }
+
+        [Test]
         public void Apply_UnsupportedShader_Throws()
         {
             var state = new MaterialSettingsState

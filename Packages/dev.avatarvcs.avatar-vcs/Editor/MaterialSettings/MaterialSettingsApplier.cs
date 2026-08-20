@@ -30,6 +30,13 @@ namespace AvatarVcs.Editor.MaterialSettings
             if (renderer == null)
                 throw new InvalidOperationException($"'{state.targetPath}' has no Renderer.");
 
+            // Validate the slot before generating anything: failing here
+            // after CreateAsset would leak an orphaned, untracked duplicate
+            // (state.generatedGuid never gets saved onto a returned commit,
+            // so GC would never find it).
+            if (state.slot < 0 || state.slot >= renderer.sharedMaterials.Length)
+                throw new InvalidOperationException($"Material slot {state.slot} out of range on '{state.targetPath}'.");
+
             var sourcePath = AssetDatabase.GUIDToAssetPath(state.sourceMaterialGuid);
             if (string.IsNullOrEmpty(sourcePath))
                 throw new InvalidOperationException($"Source material GUID '{state.sourceMaterialGuid}' could not be resolved.");
@@ -37,6 +44,20 @@ namespace AvatarVcs.Editor.MaterialSettings
             var sourceMaterial = AssetDatabase.LoadAssetAtPath<Material>(sourcePath);
             if (sourceMaterial == null)
                 throw new InvalidOperationException($"Asset at '{sourcePath}' is not a Material.");
+
+            // Reuse a previously-generated duplicate for this exact state if
+            // it's still there, instead of creating another one on every
+            // checkout of the same commit.
+            if (!string.IsNullOrEmpty(state.generatedGuid))
+            {
+                var existingPath = AssetDatabase.GUIDToAssetPath(state.generatedGuid);
+                var existing = string.IsNullOrEmpty(existingPath) ? null : AssetDatabase.LoadAssetAtPath<Material>(existingPath);
+                if (existing != null)
+                {
+                    PointRendererAt(renderer, state.slot, state.targetPath, existing);
+                    return existing;
+                }
+            }
 
             // Copy-constructing reads sourceMaterial but never writes to it.
             var duplicate = new Material(sourceMaterial) { name = sourceMaterial.name + "_avatarvcs" };
@@ -73,15 +94,21 @@ namespace AvatarVcs.Editor.MaterialSettings
             // same canonical instance that later AssetDatabase lookups see.
             duplicate = AssetDatabase.LoadAssetAtPath<Material>(assetPath);
 
-            var materials = renderer.sharedMaterials;
-            if (state.slot < 0 || state.slot >= materials.Length)
-                throw new InvalidOperationException($"Material slot {state.slot} out of range on '{state.targetPath}'.");
-
-            materials[state.slot] = duplicate;
-            Undo.RecordObject(renderer, "AvatarVCS Apply Material Settings");
-            renderer.sharedMaterials = materials;
+            state.generatedGuid = AssetDatabase.AssetPathToGUID(assetPath);
+            PointRendererAt(renderer, state.slot, state.targetPath, duplicate);
 
             return duplicate;
+        }
+
+        private static void PointRendererAt(Renderer renderer, int slot, string targetPath, Material material)
+        {
+            var materials = renderer.sharedMaterials;
+            if (slot < 0 || slot >= materials.Length)
+                throw new InvalidOperationException($"Material slot {slot} out of range on '{targetPath}'.");
+
+            materials[slot] = material;
+            Undo.RecordObject(renderer, "AvatarVCS Apply Material Settings");
+            renderer.sharedMaterials = materials;
         }
 
         private static Color ParseColor(string value)

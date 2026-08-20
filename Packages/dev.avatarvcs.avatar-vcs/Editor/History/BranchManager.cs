@@ -32,7 +32,10 @@ namespace AvatarVcs.Editor.History
 
         /// <summary>
         /// Creates a new branch pointing at fromCommitId (defaults to the
-        /// current branch's head) without switching to it.
+        /// current branch's head) without switching to it. Idempotent when
+        /// called again with the same name and the same starting commit;
+        /// throws if the name exists but points elsewhere (a genuine
+        /// conflict, not a repeat of the same call).
         /// </summary>
         public static void CreateBranch(GameObject avatarRoot, string branchName, string fromCommitId = null)
         {
@@ -41,10 +44,15 @@ namespace AvatarVcs.Editor.History
             var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
             var config = CommitStore.LoadConfig(avatarGuid);
 
-            if (FindEntry(config, branchName) != null)
-                throw new InvalidOperationException($"Branch '{branchName}' already exists.");
-
+            var existing = FindEntry(config, branchName);
             var startCommitId = fromCommitId ?? FindEntry(config, config.currentBranch)?.commitId;
+
+            if (existing != null)
+            {
+                if (existing.commitId == startCommitId) return;
+                throw new InvalidOperationException($"Branch '{branchName}' already exists and points at a different commit.");
+            }
+
             config.branches.Add(new BranchEntry { name = branchName, commitId = startCommitId });
             CommitStore.SaveConfig(avatarGuid, config);
         }

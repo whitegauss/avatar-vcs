@@ -170,10 +170,12 @@ namespace AvatarVcs.Editor.UI
 
             historyScroll = EditorGUILayout.BeginScrollView(historyScroll);
             var headId = CurrentHeadId();
-            foreach (var entry in commits)
+            foreach (var entry in commits.ToList())
             {
                 var label = entry.commitId == headId ? $"* {entry.message}" : $"  {entry.message}";
                 var selected = entry.commitId == selectedCommitId;
+
+                EditorGUILayout.BeginHorizontal();
 
                 var prevBg = GUI.backgroundColor;
                 if (selected) GUI.backgroundColor = new Color(0.6f, 0.8f, 1f);
@@ -183,6 +185,11 @@ namespace AvatarVcs.Editor.UI
                     RecomputeSelectedDiff();
                 }
                 GUI.backgroundColor = prevBg;
+
+                if (GUILayout.Button("x", GUILayout.Width(20)))
+                    DeleteCommit(entry.commitId);
+
+                EditorGUILayout.EndHorizontal();
             }
             EditorGUILayout.EndScrollView();
             EditorGUILayout.EndVertical();
@@ -286,6 +293,27 @@ namespace AvatarVcs.Editor.UI
                 return;
             }
 
+            Reload();
+        }
+
+        private void DeleteCommit(string commitId)
+        {
+            if (!EditorUtility.DisplayDialog("Delete Commit",
+                    "Delete this commit and its generated assets (e.g. duplicate materials)? This cannot be undone.",
+                    "Delete", "Cancel"))
+                return;
+
+            try
+            {
+                CommitStore.DeleteCommit(avatarGuid, commitId);
+            }
+            catch (InvalidOperationException e)
+            {
+                EditorUtility.DisplayDialog("Delete Failed", e.Message, "OK");
+                return;
+            }
+
+            if (selectedCommitId == commitId) selectedCommitId = null;
             Reload();
         }
 
