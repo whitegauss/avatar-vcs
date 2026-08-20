@@ -14,9 +14,14 @@ namespace AvatarVcs.Editor.Operations
     /// </summary>
     public static class ContainerCapture
     {
-        public static ContainerSnapshot CaptureContainer(Transform container)
+        /// <summary>
+        /// avatarRoot is used only to resolve scene-reference fields (see
+        /// ComponentCapturer); it defaults to container when omitted.
+        /// </summary>
+        public static ContainerSnapshot CaptureContainer(Transform container, Transform avatarRoot = null)
         {
             if (container == null) throw new ArgumentNullException(nameof(container));
+            avatarRoot ??= container;
 
             var marker = container.GetComponent<AvatarVcsContainer>();
             if (marker == null)
@@ -34,7 +39,7 @@ namespace AvatarVcs.Editor.Operations
             // by re-instantiating the prefab, not by capturing them here.
             var components = container.GetComponents<Component>()
                 .Where(c => c != null && c is not Transform && c is not AvatarVcsContainer)
-                .Select(c => ComponentCapturer.Capture(c, container))
+                .Select(c => ComponentCapturer.Capture(c, container, avatarRoot))
                 .ToList();
 
             return new ContainerSnapshot

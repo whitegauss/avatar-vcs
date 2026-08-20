@@ -15,5 +15,6 @@ namespace AvatarVcs.Editor.Model
         public string type;
         public List<FieldValue> fields = new();
         public List<AssetRef> assetRefs = new();
+        public List<SceneRef> sceneRefs = new();
     }
 }
