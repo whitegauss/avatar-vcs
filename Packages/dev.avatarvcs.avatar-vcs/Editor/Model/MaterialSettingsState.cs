@@ -24,5 +24,15 @@ namespace AvatarVcs.Editor.Model
         public string sourceMaterialGuid;
         public string shader;
         public List<MaterialPropertyValue> properties = new();
+
+        /// <summary>
+        /// GUID of the previously-generated duplicate material, if any.
+        /// Populated after the first Apply and persisted back onto the
+        /// commit so re-checking out the same commit reuses it instead of
+        /// generating a new duplicate every time (design doc 1.4.3's GC
+        /// section implies generated assets are commit-scoped and stable,
+        /// not regenerated per checkout).
+        /// </summary>
+        public string generatedGuid;
     }
 }

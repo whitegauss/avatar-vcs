@@ -77,8 +77,23 @@ namespace AvatarVcs.Editor.History
             foreach (var reference in commit.avatarReferences)
                 AvatarReferenceApplier.Apply(reference, avatarRoot.transform);
 
+            var priorGeneratedGuids = commit.materialSettings.Select(m => m.generatedGuid).ToList();
             foreach (var materialSetting in commit.materialSettings)
                 MaterialSettingsApplier.Apply(materialSetting, avatarRoot);
+
+            // Apply populates/reuses each entry's generatedGuid in place; if
+            // any of them are new, persist the commit so future checkouts of
+            // it reuse the same duplicates instead of generating more.
+            var generatedChanged = !commit.materialSettings.Select(m => m.generatedGuid).SequenceEqual(priorGeneratedGuids);
+            if (generatedChanged)
+            {
+                commit.generatedAssets = commit.materialSettings
+                    .Select(m => m.generatedGuid)
+                    .Where(g => !string.IsNullOrEmpty(g))
+                    .Distinct()
+                    .ToList();
+                CommitStore.SaveCommit(avatarGuid, commit);
+            }
 
             return CheckoutResult.Success(autoCommit.commitId);
         }

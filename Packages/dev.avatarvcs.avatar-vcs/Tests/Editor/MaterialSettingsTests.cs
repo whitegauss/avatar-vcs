@@ -95,7 +95,11 @@ namespace AvatarVcs.Tests.Editor
             Assert.Less(Vector4.Distance(newColor, duplicate.GetColor("_Color")), 0.001f);
 
             var renderer = avatarRoot.transform.Find("Body").GetComponent<MeshRenderer>();
-            Assert.AreSame(duplicate, renderer.sharedMaterials[0]);
+            // Compare by asset identity, not reference equality: Renderer.
+            // sharedMaterials allocates a fresh array (and sometimes a
+            // fresh wrapper) on every read, which isn't always AreSame to a
+            // previously-held reference even when nothing was reassigned.
+            Assert.AreEqual(AssetDatabase.GetAssetPath(duplicate), AssetDatabase.GetAssetPath(renderer.sharedMaterials[0]));
 
             var duplicatePath = AssetDatabase.GetAssetPath(duplicate);
             Assert.IsFalse(string.IsNullOrEmpty(duplicatePath), "duplicate must be saved as an asset");
@@ -118,6 +122,28 @@ namespace AvatarVcs.Tests.Editor
 
             // Standard doesn't declare _OutlineWidth; HasProperty guard must skip it.
             Assert.IsFalse(state.properties.Any(p => p.name == "_OutlineWidth"));
+        }
+
+        [Test]
+        public void Apply_CalledTwiceWithSameState_ReusesGeneratedDuplicate()
+        {
+            var state = new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = sourceMaterialGuid,
+                shader = "lilToon",
+            };
+            state.properties.Add(new MaterialPropertyValue { name = "_Color", type = "color", value = "0,1,0,1" });
+
+            var first = MaterialSettingsApplier.Apply(state, avatarRoot);
+            Assert.IsFalse(string.IsNullOrEmpty(state.generatedGuid));
+            var firstPath = AssetDatabase.GetAssetPath(first);
+
+            var second = MaterialSettingsApplier.Apply(state, avatarRoot);
+
+            Assert.AreSame(first, second, "second Apply should reuse the same duplicate, not create a new one");
+            Assert.AreEqual(firstPath, AssetDatabase.GetAssetPath(second));
         }
 
         [Test]

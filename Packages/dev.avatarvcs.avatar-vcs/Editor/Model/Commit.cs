@@ -21,5 +21,14 @@ namespace AvatarVcs.Editor.Model
         public List<ContainerSnapshot> containers = new();
         public List<AvatarReferenceState> avatarReferences = new();
         public List<MaterialSettingsState> materialSettings = new();
+
+        /// <summary>
+        /// GUIDs of assets generated while checking this commit out (design
+        /// doc section 4/1.4.3), currently just materialSettings' duplicate
+        /// materials. Kept in sync with each entry's generatedGuid by
+        /// CheckoutOperation; CommitStore.DeleteCommit deletes these assets
+        /// when the commit itself is deleted.
+        /// </summary>
+        public List<string> generatedAssets = new();
     }
 }
