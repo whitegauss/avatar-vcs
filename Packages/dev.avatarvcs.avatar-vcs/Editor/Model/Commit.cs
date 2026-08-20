@@ -30,5 +30,12 @@ namespace AvatarVcs.Editor.Model
         /// when the commit itself is deleted.
         /// </summary>
         public List<string> generatedAssets = new();
+
+        /// <summary>
+        /// Content hashes of referenced assets at commit time (design doc
+        /// section 6.3), so checkout can warn when a prefab/material has
+        /// since been overwritten in place (same GUID, different content).
+        /// </summary>
+        public List<AssetVersionEntry> assetVersions = new();
     }
 }

@@ -33,6 +33,14 @@ namespace AvatarVcs.Editor.History
             var containers = ContainerManager.GetContainers(configRoot)
                 .Select(container => ContainerCapture.CaptureContainer(container, avatarRoot.transform))
                 .ToList();
+            var avatarReferencesList = avatarReferences?.ToList() ?? new List<AvatarReferenceState>();
+            var materialSettingsList = materialSettings?.ToList() ?? new List<MaterialSettingsState>();
+
+            // Design doc 6.3: record every referenced asset's content hash
+            // so a later checkout can warn if it's since changed in place.
+            var referencedGuids = containers.SelectMany(c => c.prefabGuids)
+                .Concat(materialSettingsList.Select(m => m.sourceMaterialGuid))
+                .Concat(avatarReferencesList.SelectMany(r => r.materials.Select(m => m.guid)));
 
             return new Commit
             {
@@ -44,8 +52,9 @@ namespace AvatarVcs.Editor.History
                 avatarGuid = avatarGuid,
                 avatarName = avatarRoot.name,
                 containers = containers,
-                avatarReferences = avatarReferences?.ToList() ?? new List<AvatarReferenceState>(),
-                materialSettings = materialSettings?.ToList() ?? new List<MaterialSettingsState>(),
+                avatarReferences = avatarReferencesList,
+                materialSettings = materialSettingsList,
+                assetVersions = AssetVersionChecker.RecordVersions(referencedGuids),
             };
         }
     }

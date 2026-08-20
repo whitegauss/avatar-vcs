@@ -1,4 +1,5 @@
 using System;
+using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.Reflection;
 using UnityEditor;
@@ -77,7 +78,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                     continue;
                 }
 
-                var assetPath = AssetDatabase.GUIDToAssetPath(materialRef.guid);
+                var assetPath = AssetDatabase.GUIDToAssetPath(GuidRemapper.Resolve(materialRef.guid));
                 var material = string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.LoadAssetAtPath<Material>(assetPath);
                 if (material == null)
                 {

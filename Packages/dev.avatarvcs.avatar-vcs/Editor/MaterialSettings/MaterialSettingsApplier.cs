@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.Reflection;
 using UnityEditor;
@@ -44,7 +45,9 @@ namespace AvatarVcs.Editor.MaterialSettings
             if (state.slot < 0 || state.slot >= renderer.sharedMaterials.Length)
                 throw new InvalidOperationException($"Material slot {state.slot} out of range on '{state.targetPath}'.");
 
-            var sourcePath = AssetDatabase.GUIDToAssetPath(state.sourceMaterialGuid);
+            // GuidRemapper (design doc 6.4): a re-imported source material's
+            // new GUID is transparently substituted.
+            var sourcePath = AssetDatabase.GUIDToAssetPath(GuidRemapper.Resolve(state.sourceMaterialGuid));
             if (string.IsNullOrEmpty(sourcePath))
                 throw new InvalidOperationException($"Source material GUID '{state.sourceMaterialGuid}' could not be resolved.");
 
