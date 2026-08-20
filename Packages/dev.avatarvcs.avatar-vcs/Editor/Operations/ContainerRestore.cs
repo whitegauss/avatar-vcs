@@ -16,10 +16,18 @@ namespace AvatarVcs.Editor.Operations
     /// </summary>
     public static class ContainerRestore
     {
+        /// <summary>
+        /// root is the "[AvatarVCS]" container root (not the avatar itself);
+        /// its parent is used to resolve scene-reference fields that may
+        /// point outside the container, per the EnsureRoot invariant that
+        /// root is always parented directly under the avatar.
+        /// </summary>
         public static GameObject InstantiateContainer(ContainerSnapshot snapshot, GameObject root)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (root == null) throw new ArgumentNullException(nameof(root));
+
+            var avatarRoot = root.transform.parent != null ? root.transform.parent.gameObject : root;
 
             var existing = root.transform.Find(snapshot.containerId);
             if (existing != null)
@@ -51,7 +59,7 @@ namespace AvatarVcs.Editor.Operations
 
             foreach (var componentState in snapshot.components)
             {
-                var result = ComponentApplier.Apply(componentState, containerGo, createIfMissing: true);
+                var result = ComponentApplier.Apply(componentState, containerGo, avatarRoot, createIfMissing: true);
                 if (!result.IsSuccess)
                     Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{snapshot.containerId}': {result.Message}");
             }

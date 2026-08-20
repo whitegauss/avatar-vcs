@@ -31,7 +31,7 @@ namespace AvatarVcs.Editor.History
             var avatarGuid = configRoot.GetComponent<AvatarVcsRoot>().AvatarGuid;
 
             var containers = ContainerManager.GetContainers(configRoot)
-                .Select(ContainerCapture.CaptureContainer)
+                .Select(container => ContainerCapture.CaptureContainer(container, avatarRoot.transform))
                 .ToList();
 
             return new Commit

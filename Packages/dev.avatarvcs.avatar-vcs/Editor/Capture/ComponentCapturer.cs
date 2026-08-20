@@ -26,10 +26,18 @@ namespace AvatarVcs.Editor.Capture
             "m_EditorHideFlags",
         };
 
-        public static ComponentState Capture(Component component, Transform containerRoot)
+        /// <summary>
+        /// avatarRoot is used only to resolve scene references (fields
+        /// pointing at other live GameObjects/Components, as opposed to
+        /// assets) by path; it defaults to containerRoot when omitted, which
+        /// degrades scene-reference paths to being container-relative rather
+        /// than failing outright.
+        /// </summary>
+        public static ComponentState Capture(Component component, Transform containerRoot, Transform avatarRoot = null)
         {
             if (component == null) throw new ArgumentNullException(nameof(component));
             if (containerRoot == null) throw new ArgumentNullException(nameof(containerRoot));
+            avatarRoot ??= containerRoot;
 
             var state = new ComponentState
             {
@@ -56,21 +64,7 @@ namespace AvatarVcs.Editor.Capture
 
                 if (prop.propertyType == SerializedPropertyType.ObjectReference)
                 {
-                    var reference = prop.objectReferenceValue;
-                    var guid = string.Empty;
-                    long localId = 0;
-                    // TryGetGUIDAndLocalFileIdentifier throws on a null Object; an
-                    // unset reference (e.g. Light.cookie) is common and just means
-                    // "no reference" (empty guid).
-                    if (reference != null)
-                        AssetDatabase.TryGetGUIDAndLocalFileIdentifier(reference, out guid, out localId);
-
-                    state.assetRefs.Add(new AssetRef
-                    {
-                        key = prop.propertyPath,
-                        guid = guid ?? string.Empty,
-                        localId = localId,
-                    });
+                    CaptureObjectReference(state, prop, avatarRoot);
                     continue;
                 }
 
@@ -90,6 +84,67 @@ namespace AvatarVcs.Editor.Capture
             }
 
             return state;
+        }
+
+        /// <summary>
+        /// Asset references (EditorUtility.IsPersistent) go through
+        /// AssetDatabase GUID+localId, same as before. Everything else is a
+        /// live scene object (e.g. VRCPhysBone.rootTransform,
+        /// ModularAvatarMergeArmature pointing at a bone on the avatar's own
+        /// Armature): those are captured by path relative to avatarRoot
+        /// instead, since resolving them via AssetDatabase would silently
+        /// come back empty and null the field out on restore.
+        /// </summary>
+        private static void CaptureObjectReference(ComponentState state, SerializedProperty prop, Transform avatarRoot)
+        {
+            var reference = prop.objectReferenceValue;
+
+            if (reference == null || EditorUtility.IsPersistent(reference))
+            {
+                var guid = string.Empty;
+                long localId = 0;
+                // TryGetGUIDAndLocalFileIdentifier throws on a null Object; an
+                // unset reference (e.g. Light.cookie) is common and just means
+                // "no reference" (empty guid).
+                if (reference != null)
+                    AssetDatabase.TryGetGUIDAndLocalFileIdentifier(reference, out guid, out localId);
+
+                state.assetRefs.Add(new AssetRef
+                {
+                    key = prop.propertyPath,
+                    guid = guid ?? string.Empty,
+                    localId = localId,
+                });
+                return;
+            }
+
+            var referenceTransform = reference switch
+            {
+                GameObject go => go.transform,
+                Component c => c.transform,
+                _ => null,
+            };
+
+            if (referenceTransform == null)
+            {
+                Debug.LogWarning($"[AvatarVCS] Scene reference '{prop.propertyPath}' on {state.type} is neither a GameObject nor a Component and was skipped.");
+                return;
+            }
+
+            try
+            {
+                var path = ReferenceResolver.GetRelativePath(referenceTransform, avatarRoot);
+                state.sceneRefs.Add(new SceneRef
+                {
+                    key = prop.propertyPath,
+                    path = path,
+                    type = reference.GetType().FullName,
+                });
+            }
+            catch (ArgumentException)
+            {
+                Debug.LogWarning($"[AvatarVCS] Scene reference '{prop.propertyPath}' on {state.type} points outside the avatar hierarchy and was skipped.");
+            }
         }
     }
 }

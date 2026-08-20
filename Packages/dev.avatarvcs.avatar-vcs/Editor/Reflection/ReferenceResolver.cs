@@ -59,5 +59,23 @@ namespace AvatarVcs.Editor.Reflection
 
             return null;
         }
+
+        /// <summary>
+        /// Resolves a scene reference (design doc's distinction from asset
+        /// references, section 3.1) given the target GameObject's Transform
+        /// and the referenced object's full type name recorded at capture
+        /// time: GameObject/Transform resolve directly, anything else via
+        /// GetComponent(TypeResolver.Resolve(type)).
+        /// </summary>
+        public static UnityEngine.Object ResolveSceneReference(Transform target, string typeFullName)
+        {
+            if (target == null || string.IsNullOrEmpty(typeFullName)) return null;
+
+            if (typeFullName == typeof(GameObject).FullName) return target.gameObject;
+            if (typeFullName == typeof(Transform).FullName) return target;
+
+            var type = TypeResolver.Resolve(typeFullName);
+            return type == null ? null : target.GetComponent(type);
+        }
     }
 }
