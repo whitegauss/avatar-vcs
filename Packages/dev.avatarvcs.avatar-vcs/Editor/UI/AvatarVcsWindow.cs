@@ -30,6 +30,11 @@ namespace AvatarVcs.Editor.UI
         private string selectedCommitId;
         private List<ContainerDiff> selectedDiff = new();
 
+        // Design doc 5.1: the diff panel compares the selected commit
+        // against either the live scene (default, null) or another commit
+        // picked here, to answer "what changed between these two commits".
+        private string diffBaseCommitId;
+
         private string commitMessage = "";
         private bool showNewBranchField;
         private string newBranchName = "";
@@ -45,6 +50,15 @@ namespace AvatarVcs.Editor.UI
         private readonly Dictionary<string, UnityEngine.Object> remapSelections = new();
         private Func<CheckoutResult> pendingRetryCheckout;
 
+        // Compare mode (design doc 5.2): toggle between two commits without
+        // an auto-commit per flip. compareReturnCommitId is the safety-net
+        // auto-commit taken once, right before entering compare mode.
+        private bool compareModeActive;
+        private string compareCommitAId;
+        private string compareCommitBId;
+        private bool compareShowingB;
+        private string compareReturnCommitId;
+
         [MenuItem("Window/AvatarVCS")]
         public static void Open() => GetWindow<AvatarVcsWindow>("AvatarVCS");
 
@@ -53,6 +67,14 @@ namespace AvatarVcs.Editor.UI
             var window = GetWindow<AvatarVcsWindow>("AvatarVCS");
             window.avatarRoot = avatarRoot;
             window.avatarGuid = null;
+        }
+
+        private void OnDisable()
+        {
+            // Closing the window mid-compare would otherwise strand the
+            // scene showing whichever side was last toggled to.
+            if (compareModeActive && avatarRoot != null)
+                ExitCompare(keepCurrent: false);
         }
 
         private void OnGUI()
@@ -81,6 +103,9 @@ namespace AvatarVcs.Editor.UI
             }
 
             DrawRemapSection();
+            DrawCompareBar();
+            if (compareModeActive) return;
+
             DrawBranchBar();
             DrawUncommittedWarning();
 
@@ -103,10 +128,20 @@ namespace AvatarVcs.Editor.UI
 
             if (newRoot != avatarRoot)
             {
+                // Leaving an avatar mid-compare would strand its scene
+                // showing whichever side was last toggled to; restore it
+                // before switching away.
+                if (compareModeActive)
+                    ExitCompare(keepCurrent: false);
+
                 avatarRoot = newRoot;
                 avatarGuid = null;
                 selectedCommitId = null;
                 selectedDiff = new List<ContainerDiff>();
+                diffBaseCommitId = null;
+                compareModeActive = false;
+                compareCommitAId = null;
+                compareCommitBId = null;
             }
         }
 
@@ -119,6 +154,8 @@ namespace AvatarVcs.Editor.UI
 
             var head = config.branches.FirstOrDefault(b => b.name == config.currentBranch)?.commitId;
             selectedCommitId = commits.Any(c => c.commitId == head) ? head : commits.FirstOrDefault()?.commitId;
+            if (diffBaseCommitId != null && commits.All(c => c.commitId != diffBaseCommitId))
+                diffBaseCommitId = null;
             RecomputeSelectedDiff();
         }
 
@@ -164,7 +201,9 @@ namespace AvatarVcs.Editor.UI
 
         private void DrawUncommittedWarning()
         {
-            var uncommitted = selectedDiff.Any(d => d.kind != DiffKind.Unchanged) && selectedCommitId == CurrentHeadId();
+            var uncommitted = diffBaseCommitId == null
+                && selectedDiff.Any(d => d.kind != DiffKind.Unchanged)
+                && selectedCommitId == CurrentHeadId();
             if (uncommitted)
                 EditorGUILayout.HelpBox("Uncommitted changes in the scene (see diff below).", MessageType.Warning);
         }
@@ -209,8 +248,21 @@ namespace AvatarVcs.Editor.UI
         private void DrawDiffPanel()
         {
             EditorGUILayout.BeginVertical();
+
+            var baseLabel = diffBaseCommitId == null ? "current scene" : CommitMessage(diffBaseCommitId);
+            EditorGUILayout.LabelField($"Diff (selected commit -> {baseLabel})", EditorStyles.boldLabel);
+
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Diff (selected commit -> current scene)", EditorStyles.boldLabel);
+            var options = new[] { "Current Scene" }.Concat(commits.Select(CommitLabel)).ToArray();
+            var ids = new string[] { null }.Concat(commits.Select(c => c.commitId)).ToArray();
+            var currentIndex = Array.IndexOf(ids, diffBaseCommitId);
+            var newIndex = EditorGUILayout.Popup("Diff against", currentIndex < 0 ? 0 : currentIndex, options);
+            var newBaseId = ids[Mathf.Clamp(newIndex, 0, ids.Length - 1)];
+            if (newBaseId != diffBaseCommitId)
+            {
+                diffBaseCommitId = newBaseId;
+                RecomputeSelectedDiff();
+            }
             if (GUILayout.Button("Refresh", GUILayout.Width(70)))
                 RecomputeSelectedDiff();
             EditorGUILayout.EndHorizontal();
@@ -291,6 +343,137 @@ namespace AvatarVcs.Editor.UI
             if (GUILayout.Button("Checkout Selected Commit"))
                 RunCheckout(() => BranchManager.RestoreToCommit(avatarRoot, selectedCommitId));
             GUI.enabled = true;
+        }
+
+        private void DrawCompareBar()
+        {
+            if (!compareModeActive)
+            {
+                if (commits.Count < 2) return;
+
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Compare", GUILayout.Width(60));
+
+                var labels = commits.Select(CommitLabel).ToArray();
+                var ids = commits.Select(c => c.commitId).ToArray();
+
+                var aIndex = Array.IndexOf(ids, compareCommitAId);
+                var newAIndex = EditorGUILayout.Popup(aIndex, labels);
+                compareCommitAId = newAIndex >= 0 ? ids[newAIndex] : null;
+
+                var bIndex = Array.IndexOf(ids, compareCommitBId);
+                var newBIndex = EditorGUILayout.Popup(bIndex, labels);
+                compareCommitBId = newBIndex >= 0 ? ids[newBIndex] : null;
+
+                GUI.enabled = !string.IsNullOrEmpty(compareCommitAId)
+                    && !string.IsNullOrEmpty(compareCommitBId)
+                    && compareCommitAId != compareCommitBId;
+                if (GUILayout.Button("Start Compare", GUILayout.Width(110)))
+                    StartCompare();
+                GUI.enabled = true;
+
+                EditorGUILayout.EndHorizontal();
+                return;
+            }
+
+            var activeId = compareShowingB ? compareCommitBId : compareCommitAId;
+            EditorGUILayout.HelpBox(
+                $"Compare mode: viewing '{CommitMessage(activeId)}' ({(compareShowingB ? "B" : "A")}). "
+                + "Toggling does not create commits.",
+                MessageType.Info);
+
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button(compareShowingB ? "Show A" : "Show B", GUILayout.Width(100)))
+                ToggleCompare();
+            if (GUILayout.Button("Keep This as Current State", GUILayout.Width(180)))
+                ExitCompare(keepCurrent: true);
+            if (GUILayout.Button("Restore Original", GUILayout.Width(130)))
+                ExitCompare(keepCurrent: false);
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private string CommitMessage(string commitId) =>
+            commits.FirstOrDefault(c => c.commitId == commitId)?.message ?? commitId;
+
+        // Commit messages aren't unique (e.g. repeated "Manual commit"), so
+        // selection popups append a short id suffix to stay disambiguated.
+        private static string CommitLabel(CommitIndexEntry entry) =>
+            $"{entry.message} ({(entry.commitId.Length > 6 ? entry.commitId.Substring(0, 6) : entry.commitId)})";
+
+        private void StartCompare()
+        {
+            var sourceBranch = config.currentBranch;
+            var originalHeadId = CurrentHeadId();
+            var commitA = compareCommitAId;
+
+            RunCheckout(() =>
+            {
+                var commit = CommitStore.LoadCommit(avatarGuid, commitA);
+
+                // Only take the safety-net auto-commit if there's actually
+                // uncommitted work to protect; otherwise "Restore Original"
+                // would land on a redundant [auto] commit instead of the
+                // real original head, cluttering history for nothing.
+                CheckoutResult result;
+                if (HasUncommittedChanges(originalHeadId))
+                {
+                    result = CheckoutOperation.Checkout(commit, avatarRoot, sourceBranch, originalHeadId);
+                    if (result.IsSuccess) compareReturnCommitId = result.AutoCommitId;
+                }
+                else
+                {
+                    result = CheckoutOperation.CheckoutWithoutAutoCommit(commit, avatarRoot);
+                    if (result.IsSuccess) compareReturnCommitId = originalHeadId;
+                }
+
+                if (result.IsSuccess)
+                {
+                    compareModeActive = true;
+                    compareShowingB = false;
+                }
+                return result;
+            });
+        }
+
+        private bool HasUncommittedChanges(string headCommitId)
+        {
+            if (string.IsNullOrEmpty(headCommitId)) return true;
+            var head = CommitStore.LoadCommit(avatarGuid, headCommitId);
+            if (head == null) return true;
+            return SnapshotDiffer.Diff(head, CaptureLiveState()).Any(d => d.kind != DiffKind.Unchanged);
+        }
+
+        private Commit CaptureLiveState()
+        {
+            var configRoot = ContainerManager.FindRoot(avatarRoot);
+            var liveContainers = ContainerManager.GetContainers(configRoot)
+                .Select(c => ContainerCapture.CaptureContainer(c, avatarRoot.transform))
+                .ToList();
+            return new Commit { containers = liveContainers };
+        }
+
+        private void ToggleCompare()
+        {
+            var targetId = compareShowingB ? compareCommitAId : compareCommitBId;
+
+            RunCheckout(() =>
+            {
+                var target = CommitStore.LoadCommit(avatarGuid, targetId);
+                var result = CheckoutOperation.CheckoutWithoutAutoCommit(target, avatarRoot);
+                if (result.IsSuccess)
+                    compareShowingB = !compareShowingB;
+                return result;
+            });
+        }
+
+        private void ExitCompare(bool keepCurrent)
+        {
+            var targetCommitId = keepCurrent
+                ? (compareShowingB ? compareCommitBId : compareCommitAId)
+                : compareReturnCommitId;
+
+            compareModeActive = false;
+            RunCheckout(() => BranchManager.RestoreToCommit(avatarRoot, targetCommitId));
         }
 
         private void RunCheckout(Func<CheckoutResult> checkout)
@@ -399,13 +582,18 @@ namespace AvatarVcs.Editor.UI
 
             // Root is guaranteed to exist here: avatarGuid is only non-null
             // once a commit exists, which itself guarantees EnsureRoot ran.
-            var configRoot = ContainerManager.FindRoot(avatarRoot);
-            var liveContainers = ContainerManager.GetContainers(configRoot)
-                .Select(c => ContainerCapture.CaptureContainer(c, avatarRoot.transform))
-                .ToList();
-            var livePreview = new Commit { containers = liveContainers };
+            Commit other;
+            if (diffBaseCommitId == null)
+            {
+                other = CaptureLiveState();
+            }
+            else
+            {
+                other = CommitStore.LoadCommit(avatarGuid, diffBaseCommitId);
+                if (other == null) return;
+            }
 
-            selectedDiff = SnapshotDiffer.Diff(selectedCommit, livePreview);
+            selectedDiff = SnapshotDiffer.Diff(selectedCommit, other);
         }
     }
 }
