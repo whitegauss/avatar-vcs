@@ -55,6 +55,15 @@ namespace AvatarVcs.Tests.Editor
 
             TestContext.WriteLine($"connectedBody after assignment: {(joint.connectedBody == null ? "null" : joint.connectedBody.name)}");
 
+            var rawSo = new UnityEditor.SerializedObject(joint);
+            var rawProp = rawSo.GetIterator();
+            var rawEnter = true;
+            while (rawProp.NextVisible(rawEnter))
+            {
+                rawEnter = rawProp.propertyType == UnityEditor.SerializedPropertyType.Generic;
+                TestContext.WriteLine($"RAW path={rawProp.propertyPath} name={rawProp.name} type={rawProp.propertyType}");
+            }
+
             var state = ComponentCapturer.Capture(joint, container.transform, avatarRoot.transform);
 
             TestContext.WriteLine($"fields.Count={state.fields.Count}");
