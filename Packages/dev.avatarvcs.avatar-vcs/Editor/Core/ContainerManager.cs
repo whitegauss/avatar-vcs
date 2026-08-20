@@ -31,7 +31,8 @@ namespace AvatarVcs.Editor.Core
             rootGo.transform.localPosition = Vector3.zero;
             rootGo.transform.localRotation = Quaternion.identity;
             rootGo.transform.localScale = Vector3.one;
-            Undo.AddComponent<AvatarVcsRoot>(rootGo);
+            var marker = Undo.AddComponent<AvatarVcsRoot>(rootGo);
+            marker.AssignGuid(Guid.NewGuid().ToString("N"));
 
             return rootGo;
         }
@@ -42,6 +43,17 @@ namespace AvatarVcs.Editor.Core
 
             var child = avatarRoot.transform.Find(RootName);
             return child != null && child.GetComponent<AvatarVcsRoot>() != null ? child.gameObject : null;
+        }
+
+        /// <summary>
+        /// The avatar's stable identity, used to key commit history storage.
+        /// Calls EnsureRoot, so a guid is always available even before any
+        /// container exists.
+        /// </summary>
+        public static string GetAvatarGuid(GameObject avatarRoot)
+        {
+            var root = EnsureRoot(avatarRoot);
+            return root.GetComponent<AvatarVcsRoot>().AvatarGuid;
         }
 
         /// <summary>

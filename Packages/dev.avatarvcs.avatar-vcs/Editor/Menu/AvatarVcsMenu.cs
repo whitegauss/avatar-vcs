@@ -1,4 +1,5 @@
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.History;
 using AvatarVcs.Runtime;
 using UnityEditor;
 using UnityEngine;
@@ -6,9 +7,9 @@ using UnityEngine;
 namespace AvatarVcs.Editor.Menu
 {
     /// <summary>
-    /// Manual smoke-test entry points for phase 1 operations. The automated
-    /// coverage lives in Tests/Editor/ContainerLifecycleTests.cs; this menu is
-    /// for poking the tool by hand against a real avatar in the Hierarchy.
+    /// Manual smoke-test entry points. The automated coverage lives in
+    /// Tests/Editor/; this menu is for poking the tool by hand against a real
+    /// avatar in the Hierarchy.
     /// </summary>
     public static class AvatarVcsMenu
     {
@@ -47,5 +48,47 @@ namespace AvatarVcs.Editor.Menu
         [MenuItem("GameObject/AvatarVCS/Create Container", true)]
         private static bool ValidateCreateContainerMenuItem() =>
             Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<AvatarVcsRoot>() != null;
+
+        [MenuItem("GameObject/AvatarVCS/Commit Current State", false, 2)]
+        private static void CommitMenuItem()
+        {
+            var target = Selection.activeGameObject;
+            if (target == null)
+            {
+                Debug.LogWarning("[AvatarVCS] Select the avatar root GameObject first.");
+                return;
+            }
+
+            var commit = BranchManager.Commit(target, "Manual commit");
+            Debug.Log($"[AvatarVCS] Committed '{commit.commitId}' on branch '{commit.branch}' ({commit.containers.Count} container(s)).");
+        }
+
+        [MenuItem("GameObject/AvatarVCS/Commit Current State", true)]
+        private static bool ValidateCommitMenuItem() => Selection.activeGameObject != null;
+
+        [MenuItem("GameObject/AvatarVCS/List Commits", false, 3)]
+        private static void ListCommitsMenuItem()
+        {
+            var target = Selection.activeGameObject;
+            if (target == null)
+            {
+                Debug.LogWarning("[AvatarVCS] Select the avatar root GameObject first.");
+                return;
+            }
+
+            var avatarGuid = ContainerManager.GetAvatarGuid(target);
+            var index = CommitStore.LoadIndex(avatarGuid);
+            if (index.entries.Count == 0)
+            {
+                Debug.Log("[AvatarVCS] No commits yet.");
+                return;
+            }
+
+            foreach (var entry in index.entries)
+                Debug.Log($"[AvatarVCS] {entry.commitId} ({entry.branch}) {entry.timestamp}: {entry.message}");
+        }
+
+        [MenuItem("GameObject/AvatarVCS/List Commits", true)]
+        private static bool ValidateListCommitsMenuItem() => Selection.activeGameObject != null;
     }
 }
