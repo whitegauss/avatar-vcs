@@ -37,8 +37,7 @@ namespace AvatarVcs.Editor.Operations
 
             foreach (var prefabGuid in snapshot.prefabGuids)
             {
-                var assetPath = AssetDatabase.GUIDToAssetPath(prefabGuid);
-                if (string.IsNullOrEmpty(assetPath))
+                if (!TryResolvePrefabPath(prefabGuid, out var assetPath))
                     throw new InvalidOperationException(
                         $"Prefab with GUID '{prefabGuid}' could not be resolved. Call HasMissingPrefabs before InstantiateContainer.");
 
@@ -69,9 +68,23 @@ namespace AvatarVcs.Editor.Operations
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
 
             missingGuids = snapshot.prefabGuids
-                .Where(guid => string.IsNullOrEmpty(AssetDatabase.GUIDToAssetPath(guid)))
+                .Where(guid => !TryResolvePrefabPath(guid, out _))
                 .ToList();
             return missingGuids.Count > 0;
+        }
+
+        /// <summary>
+        /// AssetDatabase.GUIDToAssetPath can keep returning a just-deleted
+        /// asset's path for a while after AssetDatabase.DeleteAsset succeeds
+        /// (confirmed empirically, not just a same-frame timing issue), so a
+        /// non-empty path alone doesn't prove the asset still exists -- also
+        /// confirm it actually loads.
+        /// </summary>
+        private static bool TryResolvePrefabPath(string guid, out string assetPath)
+        {
+            assetPath = AssetDatabase.GUIDToAssetPath(guid);
+            if (string.IsNullOrEmpty(assetPath)) return false;
+            return AssetDatabase.LoadAssetAtPath<GameObject>(assetPath) != null;
         }
     }
 }

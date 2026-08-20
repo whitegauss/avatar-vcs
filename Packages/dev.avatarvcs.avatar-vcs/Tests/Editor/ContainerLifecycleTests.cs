@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Linq;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.Operations;
@@ -6,7 +5,6 @@ using AvatarVcs.Runtime;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.TestTools;
 
 namespace AvatarVcs.Tests.Editor
 {
@@ -146,8 +144,8 @@ namespace AvatarVcs.Tests.Editor
             Assert.Less(Vector3.Distance(expectedScale, restored.transform.localScale), 0.0001f);
         }
 
-        [UnityTest]
-        public IEnumerator HasMissingPrefabs_DetectsUnresolvableGuid()
+        [Test]
+        public void HasMissingPrefabs_DetectsUnresolvableGuid()
         {
             // Uses its own private prefab (rather than the shared fixture one)
             // since this test deletes it -- sharing would break sibling tests.
@@ -163,19 +161,12 @@ namespace AvatarVcs.Tests.Editor
             var snapshot = ContainerCapture.CaptureContainer(container.transform);
             Assert.Contains(privateGuid, snapshot.prefabGuids, "captured snapshot should reference the private prefab's guid");
 
-            // A live instance in the scene can keep the GUID "in use"; remove
-            // it before deleting the source, matching the real checkout flow
-            // where the old container is destroyed before validating the next one.
             Object.DestroyImmediate(instance);
+            AssetDatabase.DeleteAsset(privatePrefabPath);
 
-            var deleted = AssetDatabase.DeleteAsset(privatePrefabPath);
-            Assert.IsTrue(deleted, "DeleteAsset should have removed the private prefab.");
-            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            yield return null;
-
-            var resolvedPath = AssetDatabase.GUIDToAssetPath(privateGuid);
-            Debug.Log($"[DIAG] AssetDatabase.GUIDToAssetPath(privateGuid) after delete = '{resolvedPath}'");
-
+            // AssetDatabase.GUIDToAssetPath alone can keep resolving a
+            // just-deleted asset's path (confirmed against real CI), which is
+            // exactly why HasMissingPrefabs also checks that the asset loads.
             var isMissing = ContainerRestore.HasMissingPrefabs(snapshot, out var missingGuids);
             Assert.IsTrue(isMissing);
             CollectionAssert.Contains(missingGuids, privateGuid);
