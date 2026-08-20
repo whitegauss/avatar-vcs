@@ -69,6 +69,14 @@ namespace AvatarVcs.Editor.UI
             window.avatarGuid = null;
         }
 
+        private void OnDisable()
+        {
+            // Closing the window mid-compare would otherwise strand the
+            // scene showing whichever side was last toggled to.
+            if (compareModeActive && avatarRoot != null)
+                ExitCompare(keepCurrent: false);
+        }
+
         private void OnGUI()
         {
             DrawAvatarSelector();
@@ -120,6 +128,12 @@ namespace AvatarVcs.Editor.UI
 
             if (newRoot != avatarRoot)
             {
+                // Leaving an avatar mid-compare would strand its scene
+                // showing whichever side was last toggled to; restore it
+                // before switching away.
+                if (compareModeActive)
+                    ExitCompare(keepCurrent: false);
+
                 avatarRoot = newRoot;
                 avatarGuid = null;
                 selectedCommitId = null;
@@ -239,7 +253,7 @@ namespace AvatarVcs.Editor.UI
             EditorGUILayout.LabelField($"Diff (selected commit -> {baseLabel})", EditorStyles.boldLabel);
 
             EditorGUILayout.BeginHorizontal();
-            var options = new[] { "Current Scene" }.Concat(commits.Select(c => c.message)).ToArray();
+            var options = new[] { "Current Scene" }.Concat(commits.Select(CommitLabel)).ToArray();
             var ids = new string[] { null }.Concat(commits.Select(c => c.commitId)).ToArray();
             var currentIndex = Array.IndexOf(ids, diffBaseCommitId);
             var newIndex = EditorGUILayout.Popup("Diff against", currentIndex < 0 ? 0 : currentIndex, options);
@@ -340,7 +354,7 @@ namespace AvatarVcs.Editor.UI
                 EditorGUILayout.BeginHorizontal();
                 EditorGUILayout.LabelField("Compare", GUILayout.Width(60));
 
-                var labels = commits.Select(c => c.message).ToArray();
+                var labels = commits.Select(CommitLabel).ToArray();
                 var ids = commits.Select(c => c.commitId).ToArray();
 
                 var aIndex = Array.IndexOf(ids, compareCommitAId);
@@ -381,24 +395,61 @@ namespace AvatarVcs.Editor.UI
         private string CommitMessage(string commitId) =>
             commits.FirstOrDefault(c => c.commitId == commitId)?.message ?? commitId;
 
+        // Commit messages aren't unique (e.g. repeated "Manual commit"), so
+        // selection popups append a short id suffix to stay disambiguated.
+        private static string CommitLabel(CommitIndexEntry entry) =>
+            $"{entry.message} ({(entry.commitId.Length > 6 ? entry.commitId.Substring(0, 6) : entry.commitId)})";
+
         private void StartCompare()
         {
             var sourceBranch = config.currentBranch;
-            var parentId = CurrentHeadId();
+            var originalHeadId = CurrentHeadId();
             var commitA = compareCommitAId;
 
             RunCheckout(() =>
             {
                 var commit = CommitStore.LoadCommit(avatarGuid, commitA);
-                var result = CheckoutOperation.Checkout(commit, avatarRoot, sourceBranch, parentId);
+
+                // Only take the safety-net auto-commit if there's actually
+                // uncommitted work to protect; otherwise "Restore Original"
+                // would land on a redundant [auto] commit instead of the
+                // real original head, cluttering history for nothing.
+                CheckoutResult result;
+                if (HasUncommittedChanges(originalHeadId))
+                {
+                    result = CheckoutOperation.Checkout(commit, avatarRoot, sourceBranch, originalHeadId);
+                    if (result.IsSuccess) compareReturnCommitId = result.AutoCommitId;
+                }
+                else
+                {
+                    result = CheckoutOperation.CheckoutWithoutAutoCommit(commit, avatarRoot);
+                    if (result.IsSuccess) compareReturnCommitId = originalHeadId;
+                }
+
                 if (result.IsSuccess)
                 {
-                    compareReturnCommitId = result.AutoCommitId;
                     compareModeActive = true;
                     compareShowingB = false;
                 }
                 return result;
             });
+        }
+
+        private bool HasUncommittedChanges(string headCommitId)
+        {
+            if (string.IsNullOrEmpty(headCommitId)) return true;
+            var head = CommitStore.LoadCommit(avatarGuid, headCommitId);
+            if (head == null) return true;
+            return SnapshotDiffer.Diff(head, CaptureLiveState()).Any(d => d.kind != DiffKind.Unchanged);
+        }
+
+        private Commit CaptureLiveState()
+        {
+            var configRoot = ContainerManager.FindRoot(avatarRoot);
+            var liveContainers = ContainerManager.GetContainers(configRoot)
+                .Select(c => ContainerCapture.CaptureContainer(c, avatarRoot.transform))
+                .ToList();
+            return new Commit { containers = liveContainers };
         }
 
         private void ToggleCompare()
@@ -529,17 +580,12 @@ namespace AvatarVcs.Editor.UI
             var selectedCommit = CommitStore.LoadCommit(avatarGuid, selectedCommitId);
             if (selectedCommit == null) return;
 
+            // Root is guaranteed to exist here: avatarGuid is only non-null
+            // once a commit exists, which itself guarantees EnsureRoot ran.
             Commit other;
             if (diffBaseCommitId == null)
             {
-                // Root is guaranteed to exist here: avatarGuid is only
-                // non-null once a commit exists, which itself guarantees
-                // EnsureRoot ran.
-                var configRoot = ContainerManager.FindRoot(avatarRoot);
-                var liveContainers = ContainerManager.GetContainers(configRoot)
-                    .Select(c => ContainerCapture.CaptureContainer(c, avatarRoot.transform))
-                    .ToList();
-                other = new Commit { containers = liveContainers };
+                other = CaptureLiveState();
             }
             else
             {
