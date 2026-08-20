@@ -53,12 +53,7 @@ namespace AvatarVcs.Editor.History
             if (commit == null) throw new ArgumentNullException(nameof(commit));
             if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
 
-            var missing = new List<string>();
-            foreach (var container in commit.containers)
-            {
-                if (ContainerRestore.HasMissingPrefabs(container, out var containerMissing))
-                    missing.AddRange(containerMissing);
-            }
+            var missing = FindMissingPrefabs(commit);
             if (missing.Count > 0)
                 return CheckoutResult.MissingPrefabs(missing);
 
@@ -72,6 +67,50 @@ namespace AvatarVcs.Editor.History
                 autoCommitParentId);
             CommitStore.SaveCommit(avatarGuid, autoCommit);
 
+            var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid);
+
+            return CheckoutResult.Success(autoCommit.commitId, versionWarnings);
+        }
+
+        /// <summary>
+        /// Applies a commit to the scene without taking the "before checkout"
+        /// auto-commit safety net or touching branch/config state at all.
+        /// Design doc section 5.2 (compare mode): flipping between two
+        /// commits to eyeball a difference must not spam the history with a
+        /// commit per toggle. Callers that use this are responsible for
+        /// their own return-to-safety plan (e.g. an auto-commit taken once
+        /// before compare mode starts, not on every toggle).
+        /// </summary>
+        public static CheckoutResult CheckoutWithoutAutoCommit(Commit commit, GameObject avatarRoot)
+        {
+            if (commit == null) throw new ArgumentNullException(nameof(commit));
+            if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
+
+            var missing = FindMissingPrefabs(commit);
+            if (missing.Count > 0)
+                return CheckoutResult.MissingPrefabs(missing);
+
+            var configRoot = ContainerManager.EnsureRoot(avatarRoot);
+            var avatarGuid = configRoot.GetComponent<AvatarVcsRoot>().AvatarGuid;
+
+            var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid);
+
+            return CheckoutResult.Success(null, versionWarnings);
+        }
+
+        private static List<string> FindMissingPrefabs(Commit commit)
+        {
+            var missing = new List<string>();
+            foreach (var container in commit.containers)
+            {
+                if (ContainerRestore.HasMissingPrefabs(container, out var containerMissing))
+                    missing.AddRange(containerMissing);
+            }
+            return missing;
+        }
+
+        private static List<string> ApplyCommitToScene(Commit commit, GameObject avatarRoot, GameObject configRoot, string avatarGuid)
+        {
             foreach (var existing in ContainerManager.GetContainers(configRoot).ToList())
                 Undo.DestroyObjectImmediate(existing.gameObject);
 
@@ -99,9 +138,7 @@ namespace AvatarVcs.Editor.History
                 CommitStore.SaveCommit(avatarGuid, commit);
             }
 
-            var versionWarnings = AssetVersionChecker.CheckForChanges(commit.assetVersions);
-
-            return CheckoutResult.Success(autoCommit.commitId, versionWarnings);
+            return AssetVersionChecker.CheckForChanges(commit.assetVersions);
         }
     }
 }
