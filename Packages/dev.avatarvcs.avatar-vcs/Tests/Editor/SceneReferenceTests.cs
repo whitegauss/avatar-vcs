@@ -41,21 +41,20 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
-        public void Diagnostic_DumpHingeJointCapture()
+        public void Diagnostic_DumpSkinnedMeshRendererCapture()
         {
             var avatarRoot = Spawn("Avatar");
             var armature = Spawn("Armature", avatarRoot.transform);
             var bone = Spawn("Hip", armature.transform);
-            var boneRigidbody = bone.AddComponent<Rigidbody>();
 
             var configRoot = ContainerManager.EnsureRoot(avatarRoot);
             var container = ContainerManager.CreateContainer(configRoot, "outfit_a");
-            var joint = container.AddComponent<HingeJoint>();
-            joint.connectedBody = boneRigidbody;
+            var renderer = container.AddComponent<SkinnedMeshRenderer>();
+            renderer.rootBone = bone.transform;
 
-            TestContext.WriteLine($"connectedBody after assignment: {(joint.connectedBody == null ? "null" : joint.connectedBody.name)}");
+            TestContext.WriteLine($"rootBone after assignment: {(renderer.rootBone == null ? "null" : renderer.rootBone.name)}");
 
-            var rawSo = new UnityEditor.SerializedObject(joint);
+            var rawSo = new UnityEditor.SerializedObject(renderer);
             var rawProp = rawSo.GetIterator();
             var rawEnter = true;
             while (rawProp.NextVisible(rawEnter))
@@ -64,7 +63,7 @@ namespace AvatarVcs.Tests.Editor
                 TestContext.WriteLine($"RAW path={rawProp.propertyPath} name={rawProp.name} type={rawProp.propertyType}");
             }
 
-            var state = ComponentCapturer.Capture(joint, container.transform, avatarRoot.transform);
+            var state = ComponentCapturer.Capture(renderer, container.transform, avatarRoot.transform);
 
             TestContext.WriteLine($"fields.Count={state.fields.Count}");
             foreach (var f in state.fields) TestContext.WriteLine($"  field key={f.key} type={f.type} value={f.value}");
