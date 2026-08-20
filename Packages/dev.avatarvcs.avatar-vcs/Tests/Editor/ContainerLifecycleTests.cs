@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Linq;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.Operations;
@@ -5,6 +6,7 @@ using AvatarVcs.Runtime;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace AvatarVcs.Tests.Editor
 {
@@ -144,8 +146,8 @@ namespace AvatarVcs.Tests.Editor
             Assert.Less(Vector3.Distance(expectedScale, restored.transform.localScale), 0.0001f);
         }
 
-        [Test]
-        public void HasMissingPrefabs_DetectsUnresolvableGuid()
+        [UnityTest]
+        public IEnumerator HasMissingPrefabs_DetectsUnresolvableGuid()
         {
             // Uses its own private prefab (rather than the shared fixture one)
             // since this test deletes it -- sharing would break sibling tests.
@@ -160,8 +162,12 @@ namespace AvatarVcs.Tests.Editor
             PrefabUtility.InstantiatePrefab(privatePrefab, container.transform);
             var snapshot = ContainerCapture.CaptureContainer(container.transform);
 
-            AssetDatabase.DeleteAsset(privatePrefabPath);
-            AssetDatabase.Refresh(); // GUIDToAssetPath can still resolve the old path without this
+            var deleted = AssetDatabase.DeleteAsset(privatePrefabPath);
+            Assert.IsTrue(deleted, "DeleteAsset should have removed the private prefab.");
+            AssetDatabase.Refresh();
+            // GUIDToAssetPath can still resolve a just-deleted asset's path
+            // within the same frame; give Unity a frame to settle.
+            yield return null;
 
             var isMissing = ContainerRestore.HasMissingPrefabs(snapshot, out var missingGuids);
             Assert.IsTrue(isMissing);
