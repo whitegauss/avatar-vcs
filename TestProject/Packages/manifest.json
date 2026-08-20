@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "dev.avatarvcs.avatar-vcs": "file:../..",
+    "dev.avatarvcs.avatar-vcs": "file:../../Packages/dev.avatarvcs.avatar-vcs",
     "com.unity.test-framework": "1.1.33",
     "com.unity.ext.nunit": "1.0.6"
   },

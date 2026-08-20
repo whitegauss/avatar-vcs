@@ -17,7 +17,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: TestProject/Library
-          key: Library-TestProject-${{ hashFiles('Editor/**', 'Runtime/**', 'Tests/**', 'package.json') }}
+          key: Library-TestProject-${{ hashFiles('Packages/dev.avatarvcs.avatar-vcs/**') }}
           restore-keys: |
             Library-TestProject-
 
