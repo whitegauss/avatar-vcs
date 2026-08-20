@@ -125,6 +125,41 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void DeleteCommit_DoesNotDeleteAssetStillReferencedByAnotherCommit()
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = CommitWithMaterialSetting("first", null);
+            CheckoutOperation.Checkout(first, avatarRoot, "main", null);
+
+            var reloadedFirst = CommitStore.LoadCommit(avatarGuid, first.commitId);
+            var sharedGuid = reloadedFirst.materialSettings[0].generatedGuid;
+            Assert.IsTrue(AssetStillLoads(sharedGuid));
+
+            // Simulate a second commit (e.g. a branch point) that carries
+            // forward the same already-generated duplicate rather than
+            // regenerating its own.
+            var second = CommitBuilder.CreateCommit(avatarRoot, "second", "main", first.commitId);
+            second.materialSettings.Add(new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = sourceMaterialGuid,
+                shader = "lilToon",
+                generatedGuid = sharedGuid,
+            });
+            second.generatedAssets.Add(sharedGuid);
+            CommitStore.SaveCommit(avatarGuid, second);
+
+            CommitStore.DeleteCommit(avatarGuid, reloadedFirst.commitId, force: true);
+
+            Assert.IsTrue(AssetStillLoads(sharedGuid), "asset still referenced by another commit must survive deletion");
+
+            CommitStore.DeleteCommit(avatarGuid, second.commitId, force: true);
+
+            Assert.IsFalse(AssetStillLoads(sharedGuid), "once no commit references it, deleting the last one should clean it up");
+        }
+
+        [Test]
         public void DeleteCommit_RefusesWhenCommitIsABranchHead_UnlessForced()
         {
             avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);

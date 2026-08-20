@@ -186,8 +186,11 @@ namespace AvatarVcs.Editor.UI
                 }
                 GUI.backgroundColor = prevBg;
 
+                var isHead = entry.commitId == headId;
+                GUI.enabled = !isHead;
                 if (GUILayout.Button("x", GUILayout.Width(20)))
                     DeleteCommit(entry.commitId);
+                GUI.enabled = true;
 
                 EditorGUILayout.EndHorizontal();
             }

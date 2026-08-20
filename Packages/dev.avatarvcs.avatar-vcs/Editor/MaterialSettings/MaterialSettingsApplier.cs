@@ -11,6 +11,13 @@ namespace AvatarVcs.Editor.MaterialSettings
     /// Duplicates the source material (never mutated), applies the recorded
     /// properties to the duplicate, saves it alongside the source, and points
     /// the renderer's slot at the duplicate. Design doc 1.4.3.
+    ///
+    /// Apply mutates state.generatedGuid in place when it generates or
+    /// reuses a duplicate, but does not persist that back to storage itself
+    /// -- callers that want the reuse to survive a domain reload or a later
+    /// session (i.e. anyone driving a real checkout, not just probing this
+    /// method directly) must save the owning commit afterward.
+    /// CheckoutOperation.Checkout already does this.
     /// </summary>
     public static class MaterialSettingsApplier
     {

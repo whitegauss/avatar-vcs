@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AvatarVcs.Editor.Model;
@@ -97,10 +98,23 @@ namespace AvatarVcs.Editor.History
             }
 
             var commit = LoadCommit(avatarGuid, commitId);
-            if (commit != null)
+            if (commit != null && commit.generatedAssets.Count > 0)
             {
+                // A generated asset can be shared with other commits (e.g. a
+                // branch created from this one that never regenerated its own
+                // duplicate); only delete guids no other surviving commit
+                // still references.
+                var sharedElsewhere = LoadIndex(avatarGuid).entries
+                    .Where(e => e.commitId != commitId)
+                    .Select(e => LoadCommit(avatarGuid, e.commitId))
+                    .Where(c => c != null)
+                    .SelectMany(c => c.generatedAssets)
+                    .ToHashSet();
+
                 foreach (var guid in commit.generatedAssets)
                 {
+                    if (sharedElsewhere.Contains(guid)) continue;
+
                     var path = AssetDatabase.GUIDToAssetPath(guid);
                     if (!string.IsNullOrEmpty(path))
                         AssetDatabase.DeleteAsset(path);
