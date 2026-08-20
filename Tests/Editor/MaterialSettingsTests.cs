@@ -17,18 +17,23 @@ namespace AvatarVcs.Tests.Editor
     /// field is set to "lilToon" (decoupled from the material's real shader,
     /// exactly as MaterialSettingsApplier reads it), and only "_Color" is
     /// exercised since it's a property Standard actually declares.
+    ///
+    /// Asset creation/deletion is done once per fixture (OneTimeSetUp/
+    /// OneTimeTearDown) rather than per test: repeatedly creating and deleting
+    /// an asset at the same path across many tests in quick succession trips
+    /// Unity's "infinite import loop" detector.
     /// </summary>
     public class MaterialSettingsTests
     {
         private const string TestAssetDir = "Assets/AvatarVcsTests_MatSettings_Temp";
-        private GameObject avatarRoot;
         private Material sourceMaterial;
         private string sourceMaterialPath;
         private string sourceMaterialGuid;
         private Color originalColor;
+        private GameObject avatarRoot;
 
-        [SetUp]
-        public void SetUp()
+        [OneTimeSetUp]
+        public void OneTimeSetUp()
         {
             if (!AssetDatabase.IsValidFolder(TestAssetDir))
                 AssetDatabase.CreateFolder("Assets", "AvatarVcsTests_MatSettings_Temp");
@@ -39,7 +44,18 @@ namespace AvatarVcs.Tests.Editor
             sourceMaterialPath = $"{TestAssetDir}/Source.mat";
             AssetDatabase.CreateAsset(sourceMaterial, sourceMaterialPath);
             sourceMaterialGuid = AssetDatabase.AssetPathToGUID(sourceMaterialPath);
+        }
 
+        [OneTimeTearDown]
+        public void OneTimeTearDown()
+        {
+            if (AssetDatabase.IsValidFolder(TestAssetDir))
+                AssetDatabase.DeleteAsset(TestAssetDir);
+        }
+
+        [SetUp]
+        public void SetUp()
+        {
             avatarRoot = new GameObject("Avatar");
             var body = new GameObject("Body");
             body.transform.SetParent(avatarRoot.transform);
@@ -51,8 +67,6 @@ namespace AvatarVcs.Tests.Editor
         public void TearDown()
         {
             if (avatarRoot != null) Object.DestroyImmediate(avatarRoot);
-            if (AssetDatabase.IsValidFolder(TestAssetDir))
-                AssetDatabase.DeleteAsset(TestAssetDir);
         }
 
         [Test]

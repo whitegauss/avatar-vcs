@@ -56,7 +56,15 @@ namespace AvatarVcs.Editor.Capture
 
                 if (prop.propertyType == SerializedPropertyType.ObjectReference)
                 {
-                    AssetDatabase.TryGetGUIDAndLocalFileIdentifier(prop.objectReferenceValue, out var guid, out long localId);
+                    var reference = prop.objectReferenceValue;
+                    var guid = string.Empty;
+                    long localId = 0;
+                    // TryGetGUIDAndLocalFileIdentifier throws on a null Object; an
+                    // unset reference (e.g. Light.cookie) is common and just means
+                    // "no reference" (empty guid).
+                    if (reference != null)
+                        AssetDatabase.TryGetGUIDAndLocalFileIdentifier(reference, out guid, out localId);
+
                     state.assetRefs.Add(new AssetRef
                     {
                         key = prop.propertyPath,

@@ -11,6 +11,11 @@ namespace AvatarVcs.Tests.Editor
     /// Covers phase 2 tasks 6/7 from DesignDoc_avatar-vcs.md section 7.2:
     /// name-based blend shape record/restore, and material-slot GUID
     /// record/restore that never mutates the referenced material asset.
+    ///
+    /// Asset creation/deletion is done once per fixture (OneTimeSetUp/
+    /// OneTimeTearDown) rather than per test: repeatedly creating and deleting
+    /// an asset at the same path across many tests in quick succession trips
+    /// Unity's "infinite import loop" detector.
     /// </summary>
     public class AvatarReferenceTests
     {
@@ -21,8 +26,8 @@ namespace AvatarVcs.Tests.Editor
         private Material materialB;
         private string materialAGuid;
 
-        [SetUp]
-        public void SetUp()
+        [OneTimeSetUp]
+        public void OneTimeSetUp()
         {
             if (!AssetDatabase.IsValidFolder(TestAssetDir))
                 AssetDatabase.CreateFolder("Assets", "AvatarVcsTests_AvatarRef_Temp");
@@ -42,17 +47,21 @@ namespace AvatarVcs.Tests.Editor
             materialAGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(materialA));
         }
 
+        [OneTimeTearDown]
+        public void OneTimeTearDown()
+        {
+            if (testMesh != null) Object.DestroyImmediate(testMesh);
+
+            if (AssetDatabase.IsValidFolder(TestAssetDir))
+                AssetDatabase.DeleteAsset(TestAssetDir);
+        }
+
         [TearDown]
         public void TearDown()
         {
             foreach (var go in spawned)
                 if (go != null) Object.DestroyImmediate(go);
             spawned.Clear();
-
-            if (testMesh != null) Object.DestroyImmediate(testMesh);
-
-            if (AssetDatabase.IsValidFolder(TestAssetDir))
-                AssetDatabase.DeleteAsset(TestAssetDir);
         }
 
         private GameObject Spawn(string name, Transform parent = null)

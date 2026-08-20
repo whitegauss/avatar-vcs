@@ -12,21 +12,24 @@ namespace AvatarVcs.Tests.Editor
     /// Covers the phase 1 completion criteria from DesignDoc_avatar-vcs.md
     /// section 7.1: root/container creation without duplication, prefab GUID
     /// capture, destroy-then-regenerate idempotency, and Transform round-trip.
+    ///
+    /// Asset creation/deletion is done once per fixture (OneTimeSetUp/
+    /// OneTimeTearDown) rather than per test: repeatedly creating and deleting
+    /// an asset at the same path across many tests in quick succession trips
+    /// Unity's "infinite import loop" detector.
     /// </summary>
     public class ContainerLifecycleTests
     {
         private const string TestAssetDir = "Assets/AvatarVcsTests_Temp";
 
-        private GameObject avatarRoot;
         private GameObject testPrefabSource;
         private string testPrefabPath;
         private string testPrefabGuid;
+        private GameObject avatarRoot;
 
-        [SetUp]
-        public void SetUp()
+        [OneTimeSetUp]
+        public void OneTimeSetUp()
         {
-            avatarRoot = new GameObject("TestAvatar");
-
             if (!AssetDatabase.IsValidFolder(TestAssetDir))
                 AssetDatabase.CreateFolder("Assets", "AvatarVcsTests_Temp");
 
@@ -37,14 +40,24 @@ namespace AvatarVcs.Tests.Editor
             testPrefabGuid = AssetDatabase.AssetPathToGUID(testPrefabPath);
         }
 
+        [OneTimeTearDown]
+        public void OneTimeTearDown()
+        {
+            if (AssetDatabase.IsValidFolder(TestAssetDir))
+                AssetDatabase.DeleteAsset(TestAssetDir);
+        }
+
+        [SetUp]
+        public void SetUp()
+        {
+            avatarRoot = new GameObject("TestAvatar");
+        }
+
         [TearDown]
         public void TearDown()
         {
             if (avatarRoot != null)
                 Object.DestroyImmediate(avatarRoot);
-
-            if (AssetDatabase.IsValidFolder(TestAssetDir))
-                AssetDatabase.DeleteAsset(TestAssetDir);
         }
 
         [Test]
@@ -134,16 +147,24 @@ namespace AvatarVcs.Tests.Editor
         [Test]
         public void HasMissingPrefabs_DetectsUnresolvableGuid()
         {
+            // Uses its own private prefab (rather than the shared fixture one)
+            // since this test deletes it -- sharing would break sibling tests.
+            var privatePrefabPath = $"{TestAssetDir}/TestOutfit_ForMissingCheck.prefab";
+            var privateSource = new GameObject("TestOutfit_ForMissingCheck");
+            var privatePrefab = PrefabUtility.SaveAsPrefabAsset(privateSource, privatePrefabPath);
+            Object.DestroyImmediate(privateSource);
+            var privateGuid = AssetDatabase.AssetPathToGUID(privatePrefabPath);
+
             var root = ContainerManager.EnsureRoot(avatarRoot);
             var container = ContainerManager.CreateContainer(root, "outfit_a");
-            PrefabUtility.InstantiatePrefab(testPrefabSource, container.transform);
+            PrefabUtility.InstantiatePrefab(privatePrefab, container.transform);
             var snapshot = ContainerCapture.CaptureContainer(container.transform);
 
-            AssetDatabase.DeleteAsset(testPrefabPath);
+            AssetDatabase.DeleteAsset(privatePrefabPath);
 
             var isMissing = ContainerRestore.HasMissingPrefabs(snapshot, out var missingGuids);
             Assert.IsTrue(isMissing);
-            CollectionAssert.Contains(missingGuids, testPrefabGuid);
+            CollectionAssert.Contains(missingGuids, privateGuid);
         }
     }
 }
