@@ -82,6 +82,32 @@ namespace AvatarVcs.Editor.History
             return result;
         }
 
+        /// <summary>
+        /// Restores the current branch to an arbitrary past commit (not
+        /// necessarily its current head) -- e.g. picking an older checkpoint
+        /// from history in the UI. The current branch's head moves to
+        /// commitId; the auto-commit taken beforehand is preserved but left
+        /// orphaned (design doc 4: orphan commit GC is out of MVP scope).
+        /// </summary>
+        public static CheckoutResult RestoreToCommit(GameObject avatarRoot, string commitId)
+        {
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var config = CommitStore.LoadConfig(avatarGuid);
+
+            var targetCommit = CommitStore.LoadCommit(avatarGuid, commitId);
+            if (targetCommit == null)
+                throw new InvalidOperationException($"Commit '{commitId}' could not be loaded.");
+
+            var currentHead = FindEntry(config, config.currentBranch)?.commitId;
+            var result = CheckoutOperation.Checkout(targetCommit, avatarRoot, config.currentBranch, currentHead);
+            if (!result.IsSuccess) return result;
+
+            SetBranchHead(config, config.currentBranch, commitId);
+            CommitStore.SaveConfig(avatarGuid, config);
+
+            return result;
+        }
+
         private static BranchEntry FindEntry(BranchConfig config, string branchName) =>
             config.branches.FirstOrDefault(b => b.name == branchName);
 
