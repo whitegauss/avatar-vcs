@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "dev.avatarvcs.avatar-vcs": "file:../..",
+    "com.unity.test-framework": "1.1.33",
+    "com.unity.ext.nunit": "1.0.6"
+  }
+}
