@@ -64,6 +64,7 @@ namespace AvatarVcs.Editor.MaterialSettings
             }
 
             var directory = System.IO.Path.GetDirectoryName(sourcePath)?.Replace('\\', '/');
+            if (string.IsNullOrEmpty(directory)) directory = "Assets";
             var assetPath = AssetDatabase.GenerateUniqueAssetPath($"{directory}/{duplicate.name}.mat");
             AssetDatabase.CreateAsset(duplicate, assetPath);
             AssetDatabase.SaveAssets();
