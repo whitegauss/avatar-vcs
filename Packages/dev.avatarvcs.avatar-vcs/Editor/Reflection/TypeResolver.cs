@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace AvatarVcs.Editor.Reflection
 {
@@ -9,20 +10,30 @@ namespace AvatarVcs.Editor.Reflection
     /// </summary>
     public static class TypeResolver
     {
+        // Assembly scanning is done once per name (including misses, cached as
+        // null) since a capture/apply pass can resolve the same component type
+        // repeatedly across many containers.
+        private static readonly Dictionary<string, Type> Cache = new();
+
         public static Type Resolve(string fullTypeName)
         {
             if (string.IsNullOrEmpty(fullTypeName)) return null;
 
-            var direct = Type.GetType(fullTypeName);
-            if (direct != null) return direct;
+            if (Cache.TryGetValue(fullTypeName, out var cached))
+                return cached;
 
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            var resolved = Type.GetType(fullTypeName);
+            if (resolved == null)
             {
-                var type = assembly.GetType(fullTypeName);
-                if (type != null) return type;
+                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    resolved = assembly.GetType(fullTypeName);
+                    if (resolved != null) break;
+                }
             }
 
-            return null;
+            Cache[fullTypeName] = resolved;
+            return resolved;
         }
     }
 }
