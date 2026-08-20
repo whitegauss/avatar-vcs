@@ -1,0 +1,14 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vs/
+.idea/
+*.swp
+
+# Stray C# project files (if opened outside a Unity project)
+*.csproj
+*.sln
+obj/
+bin/

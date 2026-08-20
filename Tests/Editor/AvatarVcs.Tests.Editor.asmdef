@@ -1,0 +1,25 @@
+{
+    "name": "AvatarVcs.Tests.Editor",
+    "rootNamespace": "AvatarVcs.Tests.Editor",
+    "references": [
+        "AvatarVcs.Runtime",
+        "AvatarVcs.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
