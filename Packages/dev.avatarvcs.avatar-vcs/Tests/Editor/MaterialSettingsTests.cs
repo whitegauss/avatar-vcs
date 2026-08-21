@@ -147,6 +147,34 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Apply_OnReuse_ReappliesPropertiesInsteadOfTrustingWhateverIsThere()
+        {
+            // A checkout is a regenerate, not a one-time stamp: if the
+            // duplicate drifted (hand-edited, or a stale value from before
+            // the commit was amended) between two Applies of the same
+            // state, the recorded properties must win again, the same way
+            // containers always destroy and rebuild rather than trusting
+            // whatever object happens to already be there.
+            var state = new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = sourceMaterialGuid,
+                shader = "lilToon",
+            };
+            state.properties.Add(new MaterialPropertyValue { name = "_Color", type = "color", value = "0,1,0,1" });
+
+            var first = MaterialSettingsApplier.Apply(state, avatarRoot);
+            first.SetColor("_Color", new Color(1f, 1f, 1f, 1f)); // simulate drift on the duplicate itself
+
+            var second = MaterialSettingsApplier.Apply(state, avatarRoot);
+
+            Assert.AreSame(first, second);
+            Assert.Less(Vector4.Distance(new Color(0f, 1f, 0f, 1f), second.GetColor("_Color")), 0.001f,
+                "the recorded property must be reasserted, not left at the drifted value");
+        }
+
+        [Test]
         public void Apply_MalformedPropertyValue_SkipsThatPropertyInsteadOfThrowing()
         {
             // property.value ultimately comes from commit JSON on disk, which
