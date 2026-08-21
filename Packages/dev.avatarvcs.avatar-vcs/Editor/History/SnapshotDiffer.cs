@@ -70,8 +70,8 @@ namespace AvatarVcs.Editor.History
             System.Func<T, string> describeBefore = null,
             System.Func<T, string> describeAfter = null)
         {
-            var beforeByKey = beforeItems.ToDictionary(keySelector);
-            var afterByKey = afterItems.ToDictionary(keySelector);
+            var beforeByKey = SafeToDictionary(beforeItems, keySelector, item => item);
+            var afterByKey = SafeToDictionary(afterItems, keySelector, item => item);
 
             var diffs = new List<ContainerDiff>();
             foreach (var key in beforeByKey.Keys.Union(afterByKey.Keys).OrderBy(k => k))
@@ -151,21 +151,21 @@ namespace AvatarVcs.Editor.History
             var notes = new List<string>();
 
             notes.AddRange(DiffMap(
-                before.blendShapes.ToDictionary(s => s.name, s => s.weight),
-                after.blendShapes.ToDictionary(s => s.name, s => s.weight),
+                SafeToDictionary(before.blendShapes, s => s.name, s => s.weight),
+                SafeToDictionary(after.blendShapes, s => s.name, s => s.weight),
                 (name, b, a) => $"blendShape '{name}': {b} -> {a}"));
 
             notes.AddRange(DiffMap(
-                before.materials.ToDictionary(m => m.slot, m => m.guid),
-                after.materials.ToDictionary(m => m.slot, m => m.guid),
+                SafeToDictionary(before.materials, m => m.slot, m => m.guid),
+                SafeToDictionary(after.materials, m => m.slot, m => m.guid),
                 (slot, b, a) => $"material slot {slot}: '{b}' -> '{a}'"));
 
             notes.AddRange(DiffMap(FlattenFields(before.components), FlattenFields(after.components),
                 (key, b, a) => $"{key}: '{b}' -> '{a}'"));
 
             notes.AddRange(DiffMap(
-                before.activeStates.ToDictionary(s => s.path, s => s.activeSelf),
-                after.activeStates.ToDictionary(s => s.path, s => s.activeSelf),
+                SafeToDictionary(before.activeStates, s => s.path, s => s.activeSelf),
+                SafeToDictionary(after.activeStates, s => s.path, s => s.activeSelf),
                 (path, b, a) => $"active '{path}': {b} -> {a}"));
 
             return notes;
@@ -181,8 +181,8 @@ namespace AvatarVcs.Editor.History
                 notes.Add($"shader: '{before.shader}' -> '{after.shader}'");
 
             notes.AddRange(DiffMap(
-                before.properties.ToDictionary(p => p.name, p => p.value),
-                after.properties.ToDictionary(p => p.name, p => p.value),
+                SafeToDictionary(before.properties, p => p.name, p => p.value),
+                SafeToDictionary(after.properties, p => p.name, p => p.value),
                 (name, b, a) => $"{name}: '{b}' -> '{a}'"));
 
             return notes;
@@ -199,6 +199,28 @@ namespace AvatarVcs.Editor.History
                     result[$"{component.type}@{component.path}.{assetRef.key}"] = assetRef.guid;
                 foreach (var sceneRef in component.sceneRefs)
                     result[$"{component.type}@{component.path}.{sceneRef.key}"] = $"{sceneRef.path} ({sceneRef.type})";
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// LINQ's ToDictionary throws on a null or duplicate key -- fine for
+        /// data this tool itself produced, but every one of these maps is
+        /// built from commit JSON, which can be hand-edited or corrupted.
+        /// A duplicate containerId/path/name/slot must degrade the diff view
+        /// (last one wins) rather than throw and break it entirely.
+        /// </summary>
+        private static Dictionary<TKey, TValue> SafeToDictionary<TSource, TKey, TValue>(
+            IEnumerable<TSource> source,
+            System.Func<TSource, TKey> keySelector,
+            System.Func<TSource, TValue> valueSelector)
+        {
+            var result = new Dictionary<TKey, TValue>();
+            foreach (var item in source)
+            {
+                var key = keySelector(item);
+                if (key == null) continue;
+                result[key] = valueSelector(item);
             }
             return result;
         }

@@ -61,6 +61,17 @@ namespace AvatarVcs.Editor.AvatarReferences
 
             foreach (var shape in preset.blendShapes)
             {
+                // A hand-edited/corrupted preset file can be missing the
+                // "name" key entirely (JsonUtility leaves it null rather
+                // than failing to parse) -- GetBlendShapeIndex(null) throws,
+                // so this must be treated the same as "not found" rather
+                // than crashing the whole import.
+                if (string.IsNullOrEmpty(shape.name))
+                {
+                    skipped.Add(shape.name ?? "(missing name)");
+                    continue;
+                }
+
                 var index = mesh.GetBlendShapeIndex(shape.name);
                 if (index < 0)
                 {
