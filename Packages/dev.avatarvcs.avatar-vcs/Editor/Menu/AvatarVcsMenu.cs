@@ -50,17 +50,26 @@ namespace AvatarVcs.Editor.Menu
         private static bool ValidateCreateContainerMenuItem() =>
             ResolveExistingRoot(Selection.activeGameObject) != null;
 
+        // No validate function: unlike Ensure Root/Create Container/Track
+        // Properties, Open Window is always available with nothing
+        // selected -- it just opens blank (same as Window/AvatarVCS), with
+        // an ObjectField/"Use Selected" inside to assign the avatar
+        // afterward. Previously required a selection here even though the
+        // window itself never did (issue #47).
         [MenuItem("GameObject/AvatarVCS/Open Window", false, 2)]
         private static void OpenWindowMenuItem()
         {
+            if (Selection.activeGameObject == null)
+            {
+                AvatarVcsWindow.Open();
+                return;
+            }
+
             var target = ResolveSelectionAsAvatarRoot("Open Window");
-            if (target == null) return;
+            if (target == null) return; // user cancelled the "start tracking?" confirmation
 
             AvatarVcsWindow.OpenFor(target);
         }
-
-        [MenuItem("GameObject/AvatarVCS/Open Window", true)]
-        private static bool ValidateOpenWindowMenuItem() => Selection.activeGameObject != null;
 
         // Design doc 1.4: the avatar body (e.g. "Body", "Armature", the
         // avatar root's own components like VRCAvatarDescriptor) stays
