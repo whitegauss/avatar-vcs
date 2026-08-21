@@ -1,4 +1,8 @@
+using System;
+using System.IO;
+using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.UI;
 using AvatarVcs.Runtime;
 using UnityEditor;
@@ -112,6 +116,65 @@ namespace AvatarVcs.Editor.Menu
         [MenuItem("GameObject/AvatarVCS/Untrack Properties Here", true)]
         private static bool ValidateUntrackReferenceMenuItem() =>
             Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<AvatarVcsTrackedReference>() != null;
+
+        // Issue #58: standalone BlendShape preset export/import, entirely
+        // separate from the commit/checkout system -- for sharing a
+        // BlendShape configuration outside this tool (e.g. a shape-key
+        // pack sold to another creator). Not tied to any avatarGuid/commit
+        // history; applied purely by BlendShape name onto whatever mesh
+        // the importer has.
+        [MenuItem("GameObject/AvatarVCS/Export BlendShapes...", false, 5)]
+        private static void ExportBlendShapesMenuItem()
+        {
+            var renderer = Selection.activeGameObject.GetComponent<SkinnedMeshRenderer>();
+            var path = EditorUtility.SaveFilePanel("Export BlendShapes", "", $"{renderer.sharedMesh.name}_blendshapes", "json");
+            if (string.IsNullOrEmpty(path)) return;
+
+            var preset = BlendShapePresetIO.Capture(renderer);
+            File.WriteAllText(path, JsonUtility.ToJson(preset, true));
+            Debug.Log($"[AvatarVCS] Exported {preset.blendShapes.Count} BlendShape(s) to '{path}'.");
+        }
+
+        [MenuItem("GameObject/AvatarVCS/Export BlendShapes...", true)]
+        private static bool ValidateExportBlendShapesMenuItem()
+        {
+            var renderer = Selection.activeGameObject?.GetComponent<SkinnedMeshRenderer>();
+            return renderer != null && renderer.sharedMesh != null;
+        }
+
+        [MenuItem("GameObject/AvatarVCS/Import BlendShapes...", false, 6)]
+        private static void ImportBlendShapesMenuItem()
+        {
+            var renderer = Selection.activeGameObject.GetComponent<SkinnedMeshRenderer>();
+            var path = EditorUtility.OpenFilePanel("Import BlendShapes", "", "json");
+            if (string.IsNullOrEmpty(path)) return;
+
+            BlendShapePreset preset;
+            try
+            {
+                preset = JsonUtility.FromJson<BlendShapePreset>(File.ReadAllText(path));
+            }
+            catch (Exception e) when (e is IOException or ArgumentException)
+            {
+                Debug.LogError($"[AvatarVCS] Could not read '{path}': {e.Message}");
+                return;
+            }
+
+            if (preset == null)
+            {
+                Debug.LogError($"[AvatarVCS] '{path}' is not a valid BlendShape preset file.");
+                return;
+            }
+
+            var skipped = BlendShapePresetIO.Apply(preset, renderer);
+            var appliedCount = preset.blendShapes.Count - skipped.Count;
+            Debug.Log($"[AvatarVCS] Imported {appliedCount} BlendShape(s) from '{path}'."
+                + (skipped.Count > 0 ? $" {skipped.Count} not found on this mesh, skipped: {string.Join(", ", skipped)}" : ""));
+        }
+
+        [MenuItem("GameObject/AvatarVCS/Import BlendShapes...", true)]
+        private static bool ValidateImportBlendShapesMenuItem() =>
+            Selection.activeGameObject?.GetComponent<SkinnedMeshRenderer>() != null;
 
         /// <summary>
         /// selection accepted as-is if it already IS the "[AvatarVCS]" root;
