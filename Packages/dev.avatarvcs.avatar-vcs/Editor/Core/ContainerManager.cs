@@ -16,7 +16,14 @@ namespace AvatarVcs.Editor.Core
 
         /// <summary>
         /// Finds the existing management root under avatarRoot, or creates one.
-        /// Safe to call repeatedly: never creates a duplicate.
+        /// Safe to call repeatedly: never creates a duplicate. Deliberately
+        /// does not seed a default container -- this is called from deep,
+        /// container-count-agnostic internal plumbing (CommitBuilder,
+        /// BranchManager, CheckoutOperation) as well as the user-facing
+        /// "Ensure Root" command, and only the latter should ever add
+        /// anything beyond the root itself. See
+        /// AvatarVcsMenu.EnsureRootMenuItem for the seeded-default-container
+        /// UX.
         /// </summary>
         public static GameObject EnsureRoot(GameObject avatarRoot)
         {
@@ -38,6 +45,31 @@ namespace AvatarVcs.Editor.Core
         }
 
         /// <summary>
+        /// Name of the container seeded by EnsureRootAndDefaultContainer's
+        /// (and EnsureRootWithDefaults') first-ever run for a given avatar.
+        /// </summary>
+        public const string DefaultContainerId = "container_1";
+
+        /// <summary>
+        /// EnsureRoot, plus (only on the root's actual first creation) a
+        /// default container, so there's immediately somewhere to place a
+        /// prefab instead of requiring a separate Create Container step
+        /// first. Kept separate from EnsureRoot itself, which internal
+        /// plumbing (CommitBuilder, BranchManager, CheckoutOperation) also
+        /// calls and must stay container-count-agnostic -- this is for the
+        /// user-facing "Ensure Root" command only.
+        /// </summary>
+        public static GameObject EnsureRootAndDefaultContainer(GameObject avatarRoot)
+        {
+            var isNewRoot = FindRoot(avatarRoot) == null;
+            var root = EnsureRoot(avatarRoot);
+            if (isNewRoot)
+                SeedDefaultContainer(root);
+
+            return root;
+        }
+
+        /// <summary>
         /// EnsureRoot, plus (only on the root's actual first creation)
         /// AvatarVcsTrackedReference on the avatar root itself and on every
         /// top-level child that already exists -- issue #46: most users
@@ -53,23 +85,47 @@ namespace AvatarVcs.Editor.Core
         /// </summary>
         public static GameObject EnsureRootWithDefaultTracking(GameObject avatarRoot)
         {
-            if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
-
             var isNewRoot = FindRoot(avatarRoot) == null;
             var root = EnsureRoot(avatarRoot);
+            if (isNewRoot)
+                SeedDefaultTracking(avatarRoot, root);
 
+            return root;
+        }
+
+        /// <summary>
+        /// EnsureRoot, plus both EnsureRootAndDefaultContainer's and
+        /// EnsureRootWithDefaultTracking's first-creation seeding in one
+        /// pass -- what the "Ensure Root" command actually calls. Calling
+        /// those two methods back to back here instead would break: each
+        /// independently re-checks "is this a new root?", and the first
+        /// call's side effect (creating the root) would make the second
+        /// call see an already-existing root and skip its own seeding.
+        /// </summary>
+        public static GameObject EnsureRootWithDefaults(GameObject avatarRoot)
+        {
+            var isNewRoot = FindRoot(avatarRoot) == null;
+            var root = EnsureRoot(avatarRoot);
             if (isNewRoot)
             {
-                TrackIfUntracked(avatarRoot);
-                for (var i = 0; i < avatarRoot.transform.childCount; i++)
-                {
-                    var child = avatarRoot.transform.GetChild(i).gameObject;
-                    if (child == root) continue; // [AvatarVCS] is container-managed, never tracked this way
-                    TrackIfUntracked(child);
-                }
+                SeedDefaultContainer(root);
+                SeedDefaultTracking(avatarRoot, root);
             }
 
             return root;
+        }
+
+        private static void SeedDefaultContainer(GameObject root) => CreateContainer(root, DefaultContainerId);
+
+        private static void SeedDefaultTracking(GameObject avatarRoot, GameObject root)
+        {
+            TrackIfUntracked(avatarRoot);
+            for (var i = 0; i < avatarRoot.transform.childCount; i++)
+            {
+                var child = avatarRoot.transform.GetChild(i).gameObject;
+                if (child == root) continue; // [AvatarVCS] is container-managed, never tracked this way
+                TrackIfUntracked(child);
+            }
         }
 
         private static void TrackIfUntracked(GameObject go)

@@ -75,15 +75,41 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
-        public void EnsureRoot_NeverAddsTracking()
+        public void EnsureRoot_NeverSeedsADefaultContainerOrTracking()
         {
-            // Only EnsureRootWithDefaultTracking (the user-facing "Ensure
-            // Root" command) seeds tracking -- EnsureRoot itself is also
-            // called by container-count/tracking-agnostic internal
-            // plumbing and must stay exactly as before.
-            ContainerManager.EnsureRoot(avatarRoot);
+            // Only EnsureRootWithDefaults (the user-facing "Ensure Root"
+            // command) seeds either -- EnsureRoot itself is also called by
+            // container-count/tracking-agnostic internal plumbing and must
+            // stay exactly as before.
+            var root = ContainerManager.EnsureRoot(avatarRoot);
 
+            Assert.IsEmpty(ContainerManager.GetContainers(root));
             Assert.IsNull(avatarRoot.GetComponent<AvatarVcsTrackedReference>());
+        }
+
+        [Test]
+        public void EnsureRootAndDefaultContainer_OnFirstCreation_SeedsOneContainer()
+        {
+            var root = ContainerManager.EnsureRootAndDefaultContainer(avatarRoot);
+
+            var containers = ContainerManager.GetContainers(root);
+            Assert.AreEqual(1, containers.Length);
+            Assert.AreEqual(ContainerManager.DefaultContainerId, containers[0].name);
+        }
+
+        [Test]
+        public void EnsureRootAndDefaultContainer_OnExistingRoot_DoesNotReSeedAfterManualDeletion()
+        {
+            var root = ContainerManager.EnsureRootAndDefaultContainer(avatarRoot);
+            Object.DestroyImmediate(ContainerManager.GetContainers(root)[0].gameObject);
+            Assert.IsEmpty(ContainerManager.GetContainers(root));
+
+            // Rerunning against the now-existing root must not silently
+            // bring the deleted default container back.
+            var rerun = ContainerManager.EnsureRootAndDefaultContainer(avatarRoot);
+
+            Assert.AreSame(root, rerun);
+            Assert.IsEmpty(ContainerManager.GetContainers(rerun));
         }
 
         [Test]
@@ -127,6 +153,28 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.DoesNotThrow(() => ContainerManager.EnsureRootWithDefaultTracking(avatarRoot));
             Assert.AreEqual(1, body.GetComponents<AvatarVcsTrackedReference>().Length);
+        }
+
+        [Test]
+        public void EnsureRootWithDefaults_OnFirstCreation_SeedsBothContainerAndTracking()
+        {
+            // The combined method the "Ensure Root" menu command actually
+            // calls -- must seed both in one pass. Calling
+            // EnsureRootAndDefaultContainer then EnsureRootWithDefaultTracking
+            // back to back would NOT work here: each independently checks
+            // "is this a new root?", and the first call already having
+            // created the root would make the second one see it as
+            // pre-existing and skip its own seeding.
+            var body = new GameObject("Body");
+            body.transform.SetParent(avatarRoot.transform, false);
+
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+
+            var containers = ContainerManager.GetContainers(root);
+            Assert.AreEqual(1, containers.Length);
+            Assert.AreEqual(ContainerManager.DefaultContainerId, containers[0].name);
+            Assert.IsNotNull(avatarRoot.GetComponent<AvatarVcsTrackedReference>());
+            Assert.IsNotNull(body.GetComponent<AvatarVcsTrackedReference>());
         }
 
         [Test]
