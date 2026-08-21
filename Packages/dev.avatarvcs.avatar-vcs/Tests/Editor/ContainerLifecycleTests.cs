@@ -75,6 +75,43 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void EnsureRoot_NeverSeedsADefaultContainer()
+        {
+            // Only EnsureRootAndDefaultContainer (the user-facing "Ensure
+            // Root" command) seeds one -- EnsureRoot itself is also called
+            // by container-count-agnostic internal plumbing and must stay
+            // exactly as before.
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+
+            Assert.IsEmpty(ContainerManager.GetContainers(root));
+        }
+
+        [Test]
+        public void EnsureRootAndDefaultContainer_OnFirstCreation_SeedsOneContainer()
+        {
+            var root = ContainerManager.EnsureRootAndDefaultContainer(avatarRoot);
+
+            var containers = ContainerManager.GetContainers(root);
+            Assert.AreEqual(1, containers.Length);
+            Assert.AreEqual(ContainerManager.DefaultContainerId, containers[0].name);
+        }
+
+        [Test]
+        public void EnsureRootAndDefaultContainer_OnExistingRoot_DoesNotReSeedAfterManualDeletion()
+        {
+            var root = ContainerManager.EnsureRootAndDefaultContainer(avatarRoot);
+            Object.DestroyImmediate(ContainerManager.GetContainers(root)[0].gameObject);
+            Assert.IsEmpty(ContainerManager.GetContainers(root));
+
+            // Rerunning against the now-existing root must not silently
+            // bring the deleted default container back.
+            var rerun = ContainerManager.EnsureRootAndDefaultContainer(avatarRoot);
+
+            Assert.AreSame(root, rerun);
+            Assert.IsEmpty(ContainerManager.GetContainers(rerun));
+        }
+
+        [Test]
         public void FindRoot_StillResolvesAfterManualRename()
         {
             var root = ContainerManager.EnsureRoot(avatarRoot);
