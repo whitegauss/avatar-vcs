@@ -20,7 +20,7 @@ namespace AvatarVcs.Editor.Menu
         [MenuItem("GameObject/AvatarVCS/Ensure Root", false, 0)]
         private static void EnsureRootMenuItem()
         {
-            var target = ResolveAvatarRootWithConfirmation(Selection.activeGameObject, "Ensure Root");
+            var target = ResolveSelectionAsAvatarRoot("Ensure Root");
             if (target == null) return;
 
             var root = ContainerManager.EnsureRoot(target);
@@ -53,7 +53,7 @@ namespace AvatarVcs.Editor.Menu
         [MenuItem("GameObject/AvatarVCS/Open Window", false, 2)]
         private static void OpenWindowMenuItem()
         {
-            var target = ResolveAvatarRootWithConfirmation(Selection.activeGameObject, "Open Window");
+            var target = ResolveSelectionAsAvatarRoot("Open Window");
             if (target == null) return;
 
             AvatarVcsWindow.OpenFor(target);
@@ -75,33 +75,22 @@ namespace AvatarVcs.Editor.Menu
         }
 
         /// <summary>
-        /// Resolves the avatar to operate on from a raw Hierarchy selection.
-        /// If selection is already inside an existing AvatarVCS structure (a
-        /// container, something inside one, or the "[AvatarVCS]" root
-        /// itself), walks up to the actual owning avatar automatically. If
-        /// selection has no existing structure at all, confirms with the
-        /// user before treating it as a brand new avatar root -- it could
-        /// just as easily be a single outfit item as the avatar itself.
+        /// Menu-specific wrapper around ContainerManager's shared
+        /// resolve-or-confirm logic: warns (rather than silently no-op'ing)
+        /// when nothing is selected, since a menu command has no other way
+        /// to tell the user why it did nothing.
         /// </summary>
-        private static GameObject ResolveAvatarRootWithConfirmation(GameObject selection, string actionLabel)
+        private static GameObject ResolveSelectionAsAvatarRoot(string actionLabel)
         {
+            var selection = Selection.activeGameObject;
             if (selection == null)
             {
                 Debug.LogWarning("[AvatarVCS] Select the avatar root GameObject first.");
                 return null;
             }
 
-            var enclosing = ContainerManager.FindEnclosingAvatarRoot(selection);
-            if (enclosing != null) return enclosing;
-
-            if (ContainerManager.FindRoot(selection) != null) return selection;
-
-            return EditorUtility.DisplayDialog("Start Tracking This Object?",
-                    $"'{selection.name}' has no AvatarVCS history yet. {actionLabel} will start tracking IT as the avatar.\n\n"
-                    + "If you meant to select your actual avatar's root GameObject (or something inside its existing containers), cancel and select that instead.",
-                    "Start Tracking", "Cancel")
-                ? selection
-                : null;
+            return ContainerManager.ResolveAvatarRootWithConfirmation(
+                selection, $"{actionLabel} will start tracking IT as the avatar.");
         }
     }
 }

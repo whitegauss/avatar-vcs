@@ -199,27 +199,16 @@ namespace AvatarVcs.Editor.UI
         }
 
         /// <summary>
-        /// Mirrors AvatarVcsMenu's ResolveAvatarRootWithConfirmation: walks
-        /// up to the real avatar if selection is inside an existing
-        /// AvatarVCS structure, otherwise asks before adopting selection
-        /// itself as a brand new one. Returns avatarRoot (the previous
-        /// value, possibly null) on cancel, so the caller's != comparison
-        /// naturally becomes a no-op.
+        /// Thin wrapper around ContainerManager's shared resolve-or-confirm
+        /// logic: on cancel (or no existing structure that could be
+        /// resolved), falls back to avatarRoot (the previous value, possibly
+        /// null) rather than null, so the caller's != comparison naturally
+        /// becomes a no-op instead of clearing the selection.
         /// </summary>
-        private GameObject ResolveAvatarRoot(GameObject selection)
-        {
-            var enclosing = ContainerManager.FindEnclosingAvatarRoot(selection);
-            if (enclosing != null) return enclosing;
-
-            if (ContainerManager.FindRoot(selection) != null) return selection;
-
-            return EditorUtility.DisplayDialog("Start Tracking This Object?",
-                    $"'{selection.name}' has no AvatarVCS history yet. This window will treat it as the avatar to commit/checkout for.\n\n"
-                    + "If you meant to select your actual avatar's root GameObject (or something inside its existing containers), cancel and pick that instead.",
-                    "Use This Object", "Cancel")
-                ? selection
-                : avatarRoot;
-        }
+        private GameObject ResolveAvatarRoot(GameObject selection) =>
+            ContainerManager.ResolveAvatarRootWithConfirmation(
+                selection, "This window will treat it as the avatar to commit/checkout for.")
+            ?? avatarRoot;
 
         private void Reload()
         {
