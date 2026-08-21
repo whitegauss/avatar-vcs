@@ -120,7 +120,9 @@ namespace AvatarVcs.Tests.Editor
             var parsed = colorEntry.value.Split(',').Select(float.Parse).ToArray();
             Assert.Less(Vector4.Distance(originalColor, new Vector4(parsed[0], parsed[1], parsed[2], parsed[3])), 0.001f);
 
-            // Standard doesn't declare _OutlineWidth; HasProperty guard must skip it.
+            // Standard doesn't declare _OutlineWidth (a lilToon property), so
+            // ShaderPropertyMap.GetProperties -- which reads properties off
+            // the material's actual shader -- never produces it here.
             Assert.IsFalse(state.properties.Any(p => p.name == "_OutlineWidth"));
         }
 
@@ -248,23 +250,47 @@ namespace AvatarVcs.Tests.Editor
             Assert.Throws<System.NotSupportedException>(() => MaterialSettingsApplier.Apply(state, avatarRoot));
         }
 
+        [TestCase("lilToon")]
         [TestCase(".poiyomi/Poiyomi")]
         [TestCase("VRM/MToon")]
         [TestCase("VRM10/MToon10")]
         public void ShaderPropertyMap_SupportsCommonAvatarShaders(string shaderName)
         {
-            // Poiyomi/MToon aren't available in a bare Unity project (same
-            // constraint as lilToon, see the fixture-level comment above),
-            // so this exercises the map directly rather than a real material.
+            // None of these are available in a bare Unity project (see the
+            // fixture-level comment above), so this only exercises the
+            // name-based allowlist; GetProperties itself (dynamic shader
+            // introspection) is exercised against a real shader below.
             Assert.IsTrue(ShaderPropertyMap.IsSupported(shaderName));
-            Assert.IsNotEmpty(ShaderPropertyMap.GetProperties(shaderName));
         }
 
         [Test]
-        public void ShaderPropertyMap_UnknownShader_IsNotSupported_AndReturnsNoProperties()
+        public void ShaderPropertyMap_UnknownShader_IsNotSupported()
         {
             Assert.IsFalse(ShaderPropertyMap.IsSupported("Standard"));
-            Assert.IsEmpty(ShaderPropertyMap.GetProperties("Standard"));
+        }
+
+        [Test]
+        public void ShaderPropertyMap_GetProperties_NullShader_ReturnsEmpty()
+        {
+            Assert.IsEmpty(ShaderPropertyMap.GetProperties(null));
+        }
+
+        [Test]
+        public void ShaderPropertyMap_GetProperties_EnumeratesColorAndFloatPropertiesFromTheShaderItself()
+        {
+            // Standard stands in for a real supported shader here (same
+            // constraint as lilToon not being available), since GetProperties
+            // needs to introspect an actual Shader object -- it declares
+            // _Color (Color) and _Glossiness/_Metallic (Range, i.e. "float"),
+            // which is enough to prove properties come from the shader's own
+            // declared surface rather than a hand-curated list that could
+            // miss one (see issue #44).
+            var shader = Shader.Find("Standard");
+            var properties = ShaderPropertyMap.GetProperties(shader);
+
+            Assert.IsTrue(properties.Any(p => p.name == "_Color" && p.type == "color"));
+            Assert.IsTrue(properties.Any(p => p.name == "_Glossiness" && p.type == "float"));
+            Assert.IsFalse(properties.Any(p => p.name == "_MainTex"), "texture properties must be excluded");
         }
     }
 }
