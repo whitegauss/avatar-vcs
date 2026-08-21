@@ -23,7 +23,7 @@ namespace AvatarVcs.Editor.Menu
             var target = ResolveSelectionAsAvatarRoot("Ensure Root");
             if (target == null) return;
 
-            var root = ContainerManager.EnsureRootAndDefaultContainer(target);
+            var root = ContainerManager.EnsureRootWithDefaults(target);
             Selection.activeGameObject = root;
         }
 

@@ -46,7 +46,7 @@ namespace AvatarVcs.Editor.Core
 
         /// <summary>
         /// Name of the container seeded by EnsureRootAndDefaultContainer's
-        /// first-ever run for a given avatar.
+        /// (and EnsureRootWithDefaults') first-ever run for a given avatar.
         /// </summary>
         public const string DefaultContainerId = "container_1";
 
@@ -64,9 +64,74 @@ namespace AvatarVcs.Editor.Core
             var isNewRoot = FindRoot(avatarRoot) == null;
             var root = EnsureRoot(avatarRoot);
             if (isNewRoot)
-                CreateContainer(root, DefaultContainerId);
+                SeedDefaultContainer(root);
 
             return root;
+        }
+
+        /// <summary>
+        /// EnsureRoot, plus (only on the root's actual first creation)
+        /// AvatarVcsTrackedReference on the avatar root itself and on every
+        /// top-level child that already exists -- issue #46: most users
+        /// want their avatar body/armature/accessories tracked by default
+        /// (e.g. toggling a default accessory on/off), rather than having
+        /// to remember to opt each one in via Track Properties Here, and
+        /// some assets (bone-attached colliders/accessories) can only be
+        /// placed directly under Armature, bypassing container management
+        /// entirely -- untracked, their changes wouldn't be recorded at
+        /// all. Kept out of EnsureRoot itself for the same reason
+        /// EnsureRootAndDefaultContainer is -- see that method's doc
+        /// comment.
+        /// </summary>
+        public static GameObject EnsureRootWithDefaultTracking(GameObject avatarRoot)
+        {
+            var isNewRoot = FindRoot(avatarRoot) == null;
+            var root = EnsureRoot(avatarRoot);
+            if (isNewRoot)
+                SeedDefaultTracking(avatarRoot, root);
+
+            return root;
+        }
+
+        /// <summary>
+        /// EnsureRoot, plus both EnsureRootAndDefaultContainer's and
+        /// EnsureRootWithDefaultTracking's first-creation seeding in one
+        /// pass -- what the "Ensure Root" command actually calls. Calling
+        /// those two methods back to back here instead would break: each
+        /// independently re-checks "is this a new root?", and the first
+        /// call's side effect (creating the root) would make the second
+        /// call see an already-existing root and skip its own seeding.
+        /// </summary>
+        public static GameObject EnsureRootWithDefaults(GameObject avatarRoot)
+        {
+            var isNewRoot = FindRoot(avatarRoot) == null;
+            var root = EnsureRoot(avatarRoot);
+            if (isNewRoot)
+            {
+                SeedDefaultContainer(root);
+                SeedDefaultTracking(avatarRoot, root);
+            }
+
+            return root;
+        }
+
+        private static void SeedDefaultContainer(GameObject root) => CreateContainer(root, DefaultContainerId);
+
+        private static void SeedDefaultTracking(GameObject avatarRoot, GameObject root)
+        {
+            TrackIfUntracked(avatarRoot);
+            for (var i = 0; i < avatarRoot.transform.childCount; i++)
+            {
+                var child = avatarRoot.transform.GetChild(i).gameObject;
+                if (child == root) continue; // [AvatarVCS] is container-managed, never tracked this way
+                TrackIfUntracked(child);
+            }
+        }
+
+        private static void TrackIfUntracked(GameObject go)
+        {
+            if (go.GetComponent<AvatarVcsTrackedReference>() == null)
+                Undo.AddComponent<AvatarVcsTrackedReference>(go);
         }
 
         public static GameObject FindRoot(GameObject avatarRoot)
