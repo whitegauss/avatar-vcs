@@ -20,17 +20,90 @@ namespace AvatarVcs.Editor.History
         private static string AvatarsRoot =>
             Path.Combine("ProjectSettings", "AvatarVcs", "avatars").Replace('\\', '/');
 
-        public static string GetAvatarDir(string avatarGuid) =>
-            $"{AvatarsRoot}/{avatarGuid}";
+        /// <summary>
+        /// Both avatarGuid and commitId are always Guid.NewGuid().ToString("N")
+        /// in normal operation, but they're interpolated directly into
+        /// filesystem paths below -- avatarGuid comes off a SerializeField
+        /// that Unity deserializes directly (a hand-edited or shared scene/
+        /// prefab could contain anything), and commitId is re-read from
+        /// commit JSON on disk during checkout. This is the actual defense
+        /// boundary against a value like "../../../outside" escaping
+        /// ProjectSettings/AvatarVcs/ -- not AvatarVcsRoot.AssignGuid, which
+        /// only guards this tool's own generation path.
+        /// </summary>
+        private static bool IsValidIdentifierShape(string value)
+        {
+            if (value == null || value.Length != 32) return false;
+            foreach (var c in value)
+            {
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+            }
+            return true;
+        }
+
+        private static void EnsureValidIdentifier(string value, string paramName)
+        {
+            if (!IsValidIdentifierShape(value))
+                throw new ArgumentException(
+                    $"{paramName} must be a 32-character lowercase hex string (as produced by Guid.NewGuid().ToString(\"N\")); got '{value}'.",
+                    paramName);
+        }
+
+        public static string GetAvatarDir(string avatarGuid)
+        {
+            EnsureValidIdentifier(avatarGuid, nameof(avatarGuid));
+            return $"{AvatarsRoot}/{avatarGuid}";
+        }
+
+        /// <summary>
+        /// Writes via a temp file in the same directory, then swaps it into
+        /// place -- a crash or disk-full partway through leaves either the
+        /// old content or the new content at path, never a truncated file.
+        /// File.WriteAllText directly to the final path had no such
+        /// guarantee, and a truncated JSON file permanently broke every
+        /// future load for that avatar (JsonUtility.FromJson throwing, see
+        /// TryLoadJson below).
+        /// </summary>
+        private static void WriteAtomically(string path, string content)
+        {
+            var tempPath = $"{path}.tmp";
+            File.WriteAllText(tempPath, content);
+            if (File.Exists(path))
+                File.Replace(tempPath, path, null);
+            else
+                File.Move(tempPath, path);
+        }
+
+        /// <summary>
+        /// JsonUtility.FromJson throws on malformed JSON (e.g. a file
+        /// truncated by a crash mid-write, or a bad manual/merge edit).
+        /// Returns default(T) and warns instead of propagating -- every
+        /// caller already treats "file doesn't exist" as a recoverable,
+        /// often totally normal case (a fresh avatar's history), so a
+        /// corrupt-but-present file should degrade the same way rather than
+        /// permanently breaking the window for that avatar.
+        /// </summary>
+        private static T TryLoadJson<T>(string path)
+        {
+            try
+            {
+                return JsonUtility.FromJson<T>(File.ReadAllText(path));
+            }
+            catch (Exception e) when (e is ArgumentException or IOException)
+            {
+                Debug.LogWarning($"[AvatarVCS] Could not parse '{path}' as {typeof(T).Name}; treating as missing. {e.Message}");
+                return default;
+            }
+        }
 
         public static void SaveCommit(string avatarGuid, Commit commit)
         {
-            if (string.IsNullOrEmpty(avatarGuid)) throw new ArgumentException("avatarGuid must not be empty.", nameof(avatarGuid));
             if (commit == null) throw new ArgumentNullException(nameof(commit));
+            EnsureValidIdentifier(commit.commitId, nameof(commit.commitId));
 
             var commitsDir = $"{GetAvatarDir(avatarGuid)}/commits";
             Directory.CreateDirectory(commitsDir);
-            File.WriteAllText($"{commitsDir}/{commit.commitId}.json", JsonUtility.ToJson(commit, true));
+            WriteAtomically($"{commitsDir}/{commit.commitId}.json", JsonUtility.ToJson(commit, true));
 
             var index = LoadIndex(avatarGuid);
             index.entries.RemoveAll(e => e.commitId == commit.commitId);
@@ -45,36 +118,47 @@ namespace AvatarVcs.Editor.History
             SaveIndex(avatarGuid, index);
         }
 
+        /// <summary>
+        /// Returns null (same as "no commit with this id") for a malformed
+        /// commitId instead of throwing -- unlike SaveCommit's commitId
+        /// (always this tool's own freshly-generated guid), callers here
+        /// often iterate ids straight from a possibly hand-edited/corrupted
+        /// index.json (see DeleteCommit's shared-asset scan), and every
+        /// existing call site already handles "commit not found" gracefully.
+        /// Still the actual defense boundary: an invalid shape never reaches
+        /// the path interpolation below.
+        /// </summary>
         public static Commit LoadCommit(string avatarGuid, string commitId)
         {
+            if (!IsValidIdentifierShape(commitId)) return null;
             var path = $"{GetAvatarDir(avatarGuid)}/commits/{commitId}.json";
-            return File.Exists(path) ? JsonUtility.FromJson<Commit>(File.ReadAllText(path)) : null;
+            return File.Exists(path) ? TryLoadJson<Commit>(path) : null;
         }
 
         public static CommitIndex LoadIndex(string avatarGuid)
         {
             var path = $"{GetAvatarDir(avatarGuid)}/index.json";
-            return File.Exists(path) ? JsonUtility.FromJson<CommitIndex>(File.ReadAllText(path)) : new CommitIndex();
+            return (File.Exists(path) ? TryLoadJson<CommitIndex>(path) : null) ?? new CommitIndex();
         }
 
         private static void SaveIndex(string avatarGuid, CommitIndex index)
         {
             var dir = GetAvatarDir(avatarGuid);
             Directory.CreateDirectory(dir);
-            File.WriteAllText($"{dir}/index.json", JsonUtility.ToJson(index, true));
+            WriteAtomically($"{dir}/index.json", JsonUtility.ToJson(index, true));
         }
 
         public static BranchConfig LoadConfig(string avatarGuid)
         {
             var path = $"{GetAvatarDir(avatarGuid)}/config.json";
-            return File.Exists(path) ? JsonUtility.FromJson<BranchConfig>(File.ReadAllText(path)) : new BranchConfig();
+            return (File.Exists(path) ? TryLoadJson<BranchConfig>(path) : null) ?? new BranchConfig();
         }
 
         public static void SaveConfig(string avatarGuid, BranchConfig config)
         {
             var dir = GetAvatarDir(avatarGuid);
             Directory.CreateDirectory(dir);
-            File.WriteAllText($"{dir}/config.json", JsonUtility.ToJson(config, true));
+            WriteAtomically($"{dir}/config.json", JsonUtility.ToJson(config, true));
         }
 
         /// <summary>
@@ -86,8 +170,16 @@ namespace AvatarVcs.Editor.History
         /// </summary>
         public static void DeleteCommit(string avatarGuid, string commitId, bool force = false)
         {
-            if (string.IsNullOrEmpty(avatarGuid)) throw new ArgumentException("avatarGuid must not be empty.", nameof(avatarGuid));
-            if (string.IsNullOrEmpty(commitId)) throw new ArgumentException("commitId must not be empty.", nameof(commitId));
+            // A malformed commitId (e.g. from a corrupted index.json entry
+            // the user selected in the UI) is treated the same as "no such
+            // commit" -- consistent with the silent no-op this method already
+            // does below when commitPath doesn't exist -- rather than
+            // reaching the path interpolation further down. avatarGuid is
+            // still validated (via GetAvatarDir, reached from LoadConfig/
+            // LoadCommit just below): unlike commitId, it identifies which
+            // avatar's history this call is even operating on, so a bad
+            // value there can't be treated as a harmless no-op the same way.
+            if (!IsValidIdentifierShape(commitId)) return;
 
             if (!force)
             {
