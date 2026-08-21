@@ -222,6 +222,77 @@ namespace AvatarVcs.Editor.History
         }
 
         /// <summary>
+        /// Batch counterpart to DeleteCommit, for deleting several commits at
+        /// once (the UI's "Delete Selected" bulk action). DeleteCommit's
+        /// shared-generated-asset scan reloads every OTHER commit from disk
+        /// on every single call -- calling it once per id in a loop is
+        /// O(k*n) file reads for k deletions across n total commits. This
+        /// computes "still referenced by a surviving commit" once for the
+        /// whole batch instead.
+        ///
+        /// Best-effort: a commit that's currently a branch head is skipped
+        /// (its id is included in the returned list) rather than aborting
+        /// the rest of the batch, since a mixed selection of deletable and
+        /// head-blocked commits is a normal thing to select in the UI.
+        /// </summary>
+        public static List<string> DeleteCommits(string avatarGuid, IEnumerable<string> commitIds, bool force = false)
+        {
+            var requestedIds = commitIds.Where(IsValidIdentifierShape).Distinct().ToList();
+            var blocked = new List<string>();
+            if (requestedIds.Count == 0) return blocked;
+
+            var config = LoadConfig(avatarGuid);
+            var index = LoadIndex(avatarGuid);
+
+            var toDelete = new List<string>();
+            foreach (var commitId in requestedIds)
+            {
+                if (!force && config.branches.Any(b => b.commitId == commitId))
+                {
+                    blocked.Add(commitId);
+                    continue;
+                }
+                toDelete.Add(commitId);
+            }
+            if (toDelete.Count == 0) return blocked;
+
+            var allCommits = index.entries.ToDictionary(e => e.commitId, e => LoadCommit(avatarGuid, e.commitId));
+            var toDeleteSet = new HashSet<string>(toDelete);
+
+            // Every generated-asset guid still referenced by a commit that
+            // will SURVIVE this batch (not just "any other commit right
+            // now", since two commits sharing a guid could both be in the
+            // same batch -- neither survives, so the asset has no more
+            // referrers and should go too).
+            var stillReferenced = allCommits
+                .Where(kv => kv.Value != null && !toDeleteSet.Contains(kv.Key))
+                .SelectMany(kv => kv.Value.generatedAssets)
+                .ToHashSet();
+
+            foreach (var commitId in toDelete)
+            {
+                if (allCommits.TryGetValue(commitId, out var commit) && commit != null)
+                {
+                    foreach (var guid in commit.generatedAssets)
+                    {
+                        if (stillReferenced.Contains(guid)) continue;
+                        var path = AssetDatabase.GUIDToAssetPath(guid);
+                        if (!string.IsNullOrEmpty(path))
+                            AssetDatabase.DeleteAsset(path);
+                    }
+                }
+
+                var commitPath = $"{GetAvatarDir(avatarGuid)}/commits/{commitId}.json";
+                if (File.Exists(commitPath)) File.Delete(commitPath);
+            }
+
+            index.entries.RemoveAll(e => toDeleteSet.Contains(e.commitId));
+            SaveIndex(avatarGuid, index);
+
+            return blocked;
+        }
+
+        /// <summary>
         /// Deletes all stored history for one avatar. Mainly for test cleanup;
         /// not part of the normal user-facing flow.
         /// </summary>
