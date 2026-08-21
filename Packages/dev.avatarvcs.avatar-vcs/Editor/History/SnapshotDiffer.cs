@@ -28,19 +28,57 @@ namespace AvatarVcs.Editor.History
             return diffs;
         }
 
-        private static List<ContainerDiff> DiffContainers(Commit before, Commit after)
+        private static List<ContainerDiff> DiffContainers(Commit before, Commit after) =>
+            DiffByKey(
+                before?.containers ?? new List<ContainerSnapshot>(),
+                after?.containers ?? new List<ContainerSnapshot>(),
+                c => c.containerId,
+                id => id,
+                DescribeContainerChanges,
+                DescribePrefabs,
+                DescribePrefabs);
+
+        private static List<ContainerDiff> DiffAvatarReferences(Commit before, Commit after) =>
+            DiffByKey(
+                before?.avatarReferences ?? new List<AvatarReferenceState>(),
+                after?.avatarReferences ?? new List<AvatarReferenceState>(),
+                r => r.path,
+                path => $"avatarRef:{path}",
+                DescribeAvatarReferenceChanges);
+
+        private static List<ContainerDiff> DiffMaterialSettings(Commit before, Commit after) =>
+            DiffByKey(
+                before?.materialSettings ?? new List<MaterialSettingsState>(),
+                after?.materialSettings ?? new List<MaterialSettingsState>(),
+                m => $"{m.targetPath}[{m.slot}]",
+                key => $"material:{key}",
+                DescribeMaterialSettingsChanges);
+
+        /// <summary>
+        /// Shared shape behind DiffContainers/DiffAvatarReferences/
+        /// DiffMaterialSettings: key both snapshots by keySelector, union the
+        /// keys, and classify each as Added/Removed/Changed/Unchanged.
+        /// describeBefore/describeAfter are optional -- only containers show
+        /// a prefab summary on their diff rows.
+        /// </summary>
+        private static List<ContainerDiff> DiffByKey<T>(
+            IEnumerable<T> beforeItems,
+            IEnumerable<T> afterItems,
+            System.Func<T, string> keySelector,
+            System.Func<string, string> label,
+            System.Func<T, T, List<string>> changeNotes,
+            System.Func<T, string> describeBefore = null,
+            System.Func<T, string> describeAfter = null)
         {
-            var beforeById = (before?.containers ?? new List<ContainerSnapshot>())
-                .ToDictionary(c => c.containerId);
-            var afterById = (after?.containers ?? new List<ContainerSnapshot>())
-                .ToDictionary(c => c.containerId);
+            var beforeByKey = beforeItems.ToDictionary(keySelector);
+            var afterByKey = afterItems.ToDictionary(keySelector);
 
             var diffs = new List<ContainerDiff>();
-
-            foreach (var id in beforeById.Keys.Union(afterById.Keys).OrderBy(id => id))
+            foreach (var key in beforeByKey.Keys.Union(afterByKey.Keys).OrderBy(k => k))
             {
-                var hasBefore = beforeById.TryGetValue(id, out var b);
-                var hasAfter = afterById.TryGetValue(id, out var a);
+                var id = label(key);
+                var hasBefore = beforeByKey.TryGetValue(key, out var b);
+                var hasAfter = afterByKey.TryGetValue(key, out var a);
 
                 if (!hasBefore)
                 {
@@ -48,7 +86,7 @@ namespace AvatarVcs.Editor.History
                     {
                         containerId = id,
                         kind = DiffKind.Added,
-                        prefabNameAfter = DescribePrefabs(a),
+                        prefabNameAfter = describeAfter?.Invoke(a),
                     });
                     continue;
                 }
@@ -59,119 +97,29 @@ namespace AvatarVcs.Editor.History
                     {
                         containerId = id,
                         kind = DiffKind.Removed,
-                        prefabNameBefore = DescribePrefabs(b),
+                        prefabNameBefore = describeBefore?.Invoke(b),
                     });
                     continue;
                 }
 
-                var notes = DescribeChanges(b, a);
+                var notes = changeNotes(b, a);
                 diffs.Add(new ContainerDiff
                 {
                     containerId = id,
                     kind = notes.Count > 0 ? DiffKind.Changed : DiffKind.Unchanged,
-                    prefabNameBefore = DescribePrefabs(b),
-                    prefabNameAfter = DescribePrefabs(a),
+                    prefabNameBefore = describeBefore?.Invoke(b),
+                    prefabNameAfter = describeAfter?.Invoke(a),
                     changeNotes = notes,
                 });
             }
 
-            return diffs;
-        }
-
-        private static List<ContainerDiff> DiffAvatarReferences(Commit before, Commit after)
-        {
-            var beforeByPath = (before?.avatarReferences ?? new List<AvatarReferenceState>()).ToDictionary(r => r.path);
-            var afterByPath = (after?.avatarReferences ?? new List<AvatarReferenceState>()).ToDictionary(r => r.path);
-
-            var diffs = new List<ContainerDiff>();
-            foreach (var path in beforeByPath.Keys.Union(afterByPath.Keys).OrderBy(p => p))
-            {
-                var label = $"avatarRef:{path}";
-                var hasBefore = beforeByPath.TryGetValue(path, out var b);
-                var hasAfter = afterByPath.TryGetValue(path, out var a);
-
-                if (!hasBefore) { diffs.Add(new ContainerDiff { containerId = label, kind = DiffKind.Added }); continue; }
-                if (!hasAfter) { diffs.Add(new ContainerDiff { containerId = label, kind = DiffKind.Removed }); continue; }
-
-                var notes = new List<string>();
-
-                var beforeShapes = b.blendShapes.ToDictionary(s => s.name, s => s.weight);
-                var afterShapes = a.blendShapes.ToDictionary(s => s.name, s => s.weight);
-                foreach (var name in beforeShapes.Keys.Union(afterShapes.Keys).OrderBy(n => n))
-                {
-                    beforeShapes.TryGetValue(name, out var bw);
-                    afterShapes.TryGetValue(name, out var aw);
-                    if (bw != aw)
-                        notes.Add($"blendShape '{name}': {bw} -> {aw}");
-                }
-
-                var beforeMats = b.materials.ToDictionary(m => m.slot, m => m.guid);
-                var afterMats = a.materials.ToDictionary(m => m.slot, m => m.guid);
-                foreach (var slot in beforeMats.Keys.Union(afterMats.Keys).OrderBy(s => s))
-                {
-                    beforeMats.TryGetValue(slot, out var bg);
-                    afterMats.TryGetValue(slot, out var ag);
-                    if (bg != ag)
-                        notes.Add($"material slot {slot}: '{bg}' -> '{ag}'");
-                }
-
-                diffs.Add(new ContainerDiff
-                {
-                    containerId = label,
-                    kind = notes.Count > 0 ? DiffKind.Changed : DiffKind.Unchanged,
-                    changeNotes = notes,
-                });
-            }
-            return diffs;
-        }
-
-        private static List<ContainerDiff> DiffMaterialSettings(Commit before, Commit after)
-        {
-            var beforeByKey = (before?.materialSettings ?? new List<MaterialSettingsState>())
-                .ToDictionary(m => $"{m.targetPath}[{m.slot}]");
-            var afterByKey = (after?.materialSettings ?? new List<MaterialSettingsState>())
-                .ToDictionary(m => $"{m.targetPath}[{m.slot}]");
-
-            var diffs = new List<ContainerDiff>();
-            foreach (var key in beforeByKey.Keys.Union(afterByKey.Keys).OrderBy(k => k))
-            {
-                var label = $"material:{key}";
-                var hasBefore = beforeByKey.TryGetValue(key, out var b);
-                var hasAfter = afterByKey.TryGetValue(key, out var a);
-
-                if (!hasBefore) { diffs.Add(new ContainerDiff { containerId = label, kind = DiffKind.Added }); continue; }
-                if (!hasAfter) { diffs.Add(new ContainerDiff { containerId = label, kind = DiffKind.Removed }); continue; }
-
-                var notes = new List<string>();
-                if (b.sourceMaterialGuid != a.sourceMaterialGuid)
-                    notes.Add($"sourceMaterialGuid: '{b.sourceMaterialGuid}' -> '{a.sourceMaterialGuid}'");
-                if (b.shader != a.shader)
-                    notes.Add($"shader: '{b.shader}' -> '{a.shader}'");
-
-                var beforeProps = b.properties.ToDictionary(p => p.name, p => p.value);
-                var afterProps = a.properties.ToDictionary(p => p.name, p => p.value);
-                foreach (var name in beforeProps.Keys.Union(afterProps.Keys).OrderBy(n => n))
-                {
-                    beforeProps.TryGetValue(name, out var bv);
-                    afterProps.TryGetValue(name, out var av);
-                    if (bv != av)
-                        notes.Add($"{name}: '{bv}' -> '{av}'");
-                }
-
-                diffs.Add(new ContainerDiff
-                {
-                    containerId = label,
-                    kind = notes.Count > 0 ? DiffKind.Changed : DiffKind.Unchanged,
-                    changeNotes = notes,
-                });
-            }
             return diffs;
         }
 
         private static string DescribePrefabs(ContainerSnapshot snapshot) =>
             string.Join(",", snapshot.prefabGuids);
 
-        private static List<string> DescribeChanges(ContainerSnapshot before, ContainerSnapshot after)
+        private static List<string> DescribeContainerChanges(ContainerSnapshot before, ContainerSnapshot after)
         {
             var notes = new List<string>();
 
@@ -192,15 +140,42 @@ namespace AvatarVcs.Editor.History
             if (before.layer != after.layer)
                 notes.Add($"layer: {before.layer} -> {after.layer}");
 
-            var beforeFields = FlattenFields(before);
-            var afterFields = FlattenFields(after);
-            foreach (var key in beforeFields.Keys.Union(afterFields.Keys).OrderBy(k => k))
-            {
-                beforeFields.TryGetValue(key, out var beforeValue);
-                afterFields.TryGetValue(key, out var afterValue);
-                if (beforeValue != afterValue)
-                    notes.Add($"{key}: '{beforeValue}' -> '{afterValue}'");
-            }
+            notes.AddRange(DiffMap(FlattenFields(before), FlattenFields(after),
+                (key, b, a) => $"{key}: '{b}' -> '{a}'"));
+
+            return notes;
+        }
+
+        private static List<string> DescribeAvatarReferenceChanges(AvatarReferenceState before, AvatarReferenceState after)
+        {
+            var notes = new List<string>();
+
+            notes.AddRange(DiffMap(
+                before.blendShapes.ToDictionary(s => s.name, s => s.weight),
+                after.blendShapes.ToDictionary(s => s.name, s => s.weight),
+                (name, b, a) => $"blendShape '{name}': {b} -> {a}"));
+
+            notes.AddRange(DiffMap(
+                before.materials.ToDictionary(m => m.slot, m => m.guid),
+                after.materials.ToDictionary(m => m.slot, m => m.guid),
+                (slot, b, a) => $"material slot {slot}: '{b}' -> '{a}'"));
+
+            return notes;
+        }
+
+        private static List<string> DescribeMaterialSettingsChanges(MaterialSettingsState before, MaterialSettingsState after)
+        {
+            var notes = new List<string>();
+
+            if (before.sourceMaterialGuid != after.sourceMaterialGuid)
+                notes.Add($"sourceMaterialGuid: '{before.sourceMaterialGuid}' -> '{after.sourceMaterialGuid}'");
+            if (before.shader != after.shader)
+                notes.Add($"shader: '{before.shader}' -> '{after.shader}'");
+
+            notes.AddRange(DiffMap(
+                before.properties.ToDictionary(p => p.name, p => p.value),
+                after.properties.ToDictionary(p => p.name, p => p.value),
+                (name, b, a) => $"{name}: '{b}' -> '{a}'"));
 
             return notes;
         }
@@ -218,6 +193,26 @@ namespace AvatarVcs.Editor.History
                     result[$"{component.type}@{component.path}.{sceneRef.key}"] = $"{sceneRef.path} ({sceneRef.type})";
             }
             return result;
+        }
+
+        /// <summary>
+        /// Union two before/after maps by key, in key order, and emit one
+        /// note per differing value via describe. Shared by every "diff a
+        /// flat field-name/slot -> value map" spot above (container fields,
+        /// blend shapes, material slots, shader properties).
+        /// </summary>
+        private static IEnumerable<string> DiffMap<TKey, TValue>(
+            Dictionary<TKey, TValue> before,
+            Dictionary<TKey, TValue> after,
+            System.Func<TKey, TValue, TValue, string> describe)
+        {
+            foreach (var key in before.Keys.Union(after.Keys).OrderBy(k => k))
+            {
+                before.TryGetValue(key, out var b);
+                after.TryGetValue(key, out var a);
+                if (!EqualityComparer<TValue>.Default.Equals(b, a))
+                    yield return describe(key, b, a);
+            }
         }
     }
 }
