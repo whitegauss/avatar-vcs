@@ -68,6 +68,15 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void CheckForChanges_NullRecorded_ReturnsEmptyWarningsInsteadOfThrowing()
+        {
+            System.Collections.Generic.List<string> warnings = null;
+            Assert.DoesNotThrow(() => warnings = AssetVersionChecker.CheckForChanges(null));
+            Assert.IsNotNull(warnings);
+            Assert.IsEmpty(warnings);
+        }
+
+        [Test]
         public void CreateCommit_RecordsAssetVersionForReferencedPrefab()
         {
             avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
