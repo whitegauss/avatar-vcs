@@ -18,6 +18,11 @@ namespace AvatarVcs.Editor.Model
         public Vector3 localPosition;
         public Quaternion localRotation = Quaternion.identity;
         public Vector3 localScale = Vector3.one;
+        // The container root's Inspector tag (e.g. "EditorOnly" to keep it
+        // out of an avatar upload, or the default "Untagged"). A freshly
+        // created GameObject is always "Untagged", so this is also the
+        // correct default for commits recorded before this field existed.
+        public string tag = "Untagged";
         public List<ComponentState> components = new();
     }
 }

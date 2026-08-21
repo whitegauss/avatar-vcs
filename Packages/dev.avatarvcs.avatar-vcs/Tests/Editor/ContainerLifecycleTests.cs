@@ -145,6 +145,36 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void RestoreContainer_ReproducesTag()
+        {
+            // "EditorOnly" is the common VRChat trick for keeping a
+            // container out of the avatar upload; it must survive the
+            // destroy-then-regenerate round trip like everything else.
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "helper");
+            container.tag = "EditorOnly";
+
+            var snapshot = ContainerCapture.CaptureContainer(container.transform);
+            Assert.AreEqual("EditorOnly", snapshot.tag);
+
+            var restored = ContainerRestore.InstantiateContainer(snapshot, root);
+            Assert.AreEqual("EditorOnly", restored.tag);
+        }
+
+        [Test]
+        public void RestoreContainer_DefaultsToUntagged_ForSnapshotsRecordedBeforeTagExisted()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+
+            var snapshot = ContainerCapture.CaptureContainer(container.transform);
+            snapshot.tag = null; // simulates JsonUtility deserializing an old commit with no "tag" key
+
+            var restored = ContainerRestore.InstantiateContainer(snapshot, root);
+            Assert.AreEqual("Untagged", restored.tag);
+        }
+
+        [Test]
         public void HasMissingPrefabs_DetectsUnresolvableGuid()
         {
             // Uses its own private prefab (rather than the shared fixture one)

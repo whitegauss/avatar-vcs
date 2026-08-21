@@ -50,6 +50,7 @@ namespace AvatarVcs.Editor.Operations
                 localPosition = container.localPosition,
                 localRotation = container.localRotation,
                 localScale = container.localScale,
+                tag = container.gameObject.tag,
                 components = components,
             };
         }
