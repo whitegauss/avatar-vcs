@@ -67,24 +67,52 @@ namespace AvatarVcs.Tests.Editor
             CollectionAssert.AreEquivalent(new[] { "commit B1" }, indexB.entries.Select(e => e.message));
         }
 
+        // Valid-shaped (32-char lowercase hex, as CommitStore now requires --
+        // see IsValidIdentifierShape) but nonexistent ids: these tests are
+        // about "no history written yet for this avatar", not about
+        // malformed-id handling (covered separately below).
+        private const string NonExistentAvatarGuid = "deadbeefdeadbeefdeadbeefdeadbeef";
+        private static readonly string NonExistentCommitId = new('0', 32);
+
         [Test]
         public void CommitStore_NonExistentCommit_ReturnsNull()
         {
-            var loaded = CommitStore.LoadCommit("non_existent_avatar_guid", "fake_commit_id");
+            var loaded = CommitStore.LoadCommit(NonExistentAvatarGuid, NonExistentCommitId);
             Assert.IsNull(loaded);
         }
 
         [Test]
         public void CommitStore_NonExistentIndexAndConfig_ReturnsEmptyDefaultsWithoutThrowing()
         {
-            var index = CommitStore.LoadIndex("non_existent_avatar_guid");
+            var index = CommitStore.LoadIndex(NonExistentAvatarGuid);
             Assert.IsNotNull(index);
             Assert.IsEmpty(index.entries);
 
-            var config = CommitStore.LoadConfig("non_existent_avatar_guid");
+            var config = CommitStore.LoadConfig(NonExistentAvatarGuid);
             Assert.IsNotNull(config);
             Assert.AreEqual("main", config.currentBranch);
             Assert.IsEmpty(config.branches);
+        }
+
+        [Test]
+        public void CommitStore_MalformedIdentifierShape_TreatedAsNotFound_WithoutThrowing()
+        {
+            // Defense against path-traversal-shaped values (e.g. from a
+            // hand-edited or corrupted commit/index file): CommitStore
+            // treats these the same as "not found", not an exception.
+            Assert.IsNull(CommitStore.LoadCommit(NonExistentAvatarGuid, "../../../outside"));
+            Assert.DoesNotThrow(() => CommitStore.DeleteCommit(NonExistentAvatarGuid, "../../../outside"));
+        }
+
+        [Test]
+        public void CommitStore_GetAvatarDir_RejectsPathTraversalShapedAvatarGuid()
+        {
+            // avatarGuid identifies *which* avatar's history a call operates
+            // on, so unlike commitId it can't be treated as a harmless
+            // "not found" -- GetAvatarDir (and everything built on it) must
+            // refuse to turn a malformed value into a path at all.
+            Assert.Throws<ArgumentException>(() => CommitStore.GetAvatarDir("../../../outside"));
+            Assert.Throws<ArgumentException>(() => CommitStore.LoadIndex("../../../outside"));
         }
 
         #endregion

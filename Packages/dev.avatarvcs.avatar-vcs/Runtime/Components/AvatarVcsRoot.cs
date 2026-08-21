@@ -29,10 +29,31 @@ namespace AvatarVcs.Runtime
         {
             if (string.IsNullOrEmpty(guid))
                 throw new ArgumentException("guid must not be empty.", nameof(guid));
+            if (!IsValidGuidShape(guid))
+                throw new ArgumentException(
+                    $"guid must be a 32-character lowercase hex string (as produced by Guid.NewGuid().ToString(\"N\")); got '{guid}'.",
+                    nameof(guid));
             if (!string.IsNullOrEmpty(avatarGuid))
                 throw new InvalidOperationException("avatarGuid is already assigned and is immutable.");
 
             avatarGuid = guid;
+        }
+
+        // Catches a bug in this tool's own guid generation early. Does NOT
+        // by itself protect against a malicious avatarGuid baked directly
+        // into a shared scene/prefab's serialized data -- Unity deserializes
+        // [SerializeField] fields directly, bypassing this method entirely.
+        // CommitStore validates the same shape again at the point avatarGuid
+        // is actually turned into a filesystem path, which is the real
+        // defense boundary.
+        private static bool IsValidGuidShape(string value)
+        {
+            if (value == null || value.Length != 32) return false;
+            foreach (var c in value)
+            {
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+            }
+            return true;
         }
 
         // Duplicating a whole avatar (a common way to make a variant) clones
