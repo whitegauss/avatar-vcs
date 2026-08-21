@@ -441,5 +441,39 @@ namespace AvatarVcs.Tests.Editor
                 CommitStore.DeleteAvatarHistory(avatarGuid);
             }
         }
+
+        [Test]
+        public void BranchManagerCommit_And_RestoreToCommit_RoundTripsAvatarRootsOwnComponentField_AfterDrift()
+        {
+            // Issue #45: reported that settings on the avatar root itself
+            // (e.g. VRCAvatarDescriptor) don't come back after a checkout
+            // when AvatarVcsTrackedReference is placed on the avatar root
+            // directly, rather than on a child like Body/Armature. This
+            // exercises the exact same path through the real commit/
+            // checkout pipeline (not just Capture/Apply in isolation) to
+            // confirm the general mechanism -- a component sitting directly
+            // on a tracked avatar root -- round-trips correctly.
+            var avatarRoot = Spawn("Avatar");
+            avatarRoot.AddComponent<AvatarVcsTrackedReference>();
+            var extra = avatarRoot.AddComponent<ExtraComponent>();
+            extra.value = 42f;
+
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            try
+            {
+                var commit = BranchManager.Commit(avatarRoot, "with avatar root's own component");
+
+                extra.value = 0f; // simulate drift after committing
+
+                var result = BranchManager.RestoreToCommit(avatarRoot, commit.commitId);
+
+                Assert.IsTrue(result.IsSuccess);
+                Assert.AreEqual(42f, extra.value, 0.0001f);
+            }
+            finally
+            {
+                CommitStore.DeleteAvatarHistory(avatarGuid);
+            }
+        }
     }
 }
