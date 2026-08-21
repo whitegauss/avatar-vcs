@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
@@ -351,6 +352,55 @@ namespace AvatarVcs.Tests.Editor
             var hairDiff = diffs.Single(d => d.containerId == "hair");
             Assert.AreEqual(DiffKind.Changed, hairDiff.kind);
             Assert.IsTrue(hairDiff.changeNotes.Any(n => n.Contains("layer") && n.Contains("5")));
+        }
+
+        [Test]
+        public void Diff_DoesNotThrow_OnDuplicateContainerIds_InHandEditedCommit()
+        {
+            // A hand-edited/corrupted commit JSON can contain two entries
+            // with the same key -- ToDictionary would throw ArgumentException
+            // ("same key has already been added") and break the diff view
+            // entirely; it must degrade gracefully instead.
+            var before = MakeCommit(MakeContainer("hair", "guid_a"));
+            var after = MakeCommit(MakeContainer("hair", "guid_b"), MakeContainer("hair", "guid_c"));
+
+            List<ContainerDiff> diffs = null;
+            Assert.DoesNotThrow(() => diffs = SnapshotDiffer.Diff(before, after));
+            Assert.IsTrue(diffs.Any(d => d.containerId == "hair"));
+        }
+
+        [Test]
+        public void Diff_DoesNotThrow_OnDuplicateBlendShapeOrActiveStatePaths_InHandEditedCommit()
+        {
+            var before = new Commit
+            {
+                avatarReferences =
+                {
+                    new AvatarReferenceState { path = "Body" },
+                },
+            };
+            var after = new Commit
+            {
+                avatarReferences =
+                {
+                    new AvatarReferenceState
+                    {
+                        path = "Body",
+                        blendShapes =
+                        {
+                            new BlendShapeRef { name = "Shape_A", weight = 10f },
+                            new BlendShapeRef { name = "Shape_A", weight = 20f },
+                        },
+                        activeStates =
+                        {
+                            new ActiveStateRef { path = "Toggle", activeSelf = true },
+                            new ActiveStateRef { path = "Toggle", activeSelf = false },
+                        },
+                    },
+                },
+            };
+
+            Assert.DoesNotThrow(() => SnapshotDiffer.Diff(before, after));
         }
     }
 }

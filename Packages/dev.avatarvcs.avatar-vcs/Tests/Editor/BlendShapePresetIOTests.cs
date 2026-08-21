@@ -136,5 +136,24 @@ namespace AvatarVcs.Tests.Editor
             Assert.Throws<System.ArgumentNullException>(() => BlendShapePresetIO.Apply(null, renderer));
             Assert.Throws<System.ArgumentNullException>(() => BlendShapePresetIO.Apply(preset, null));
         }
+
+        [Test]
+        public void Apply_EntryWithMissingName_IsSkippedAndReported_WithoutThrowing()
+        {
+            // A hand-edited/corrupted preset file can be missing the "name"
+            // key on one entry entirely -- JsonUtility leaves the field null
+            // rather than failing to parse -- and GetBlendShapeIndex(null)
+            // would throw if not guarded against.
+            var target = SpawnRenderer("Target", "Shape_A");
+            var preset = new BlendShapePreset { meshName = "Source" };
+            preset.blendShapes.Add(new BlendShapeRef { name = "Shape_A", weight = 10f });
+            preset.blendShapes.Add(new BlendShapeRef { name = null, weight = 99f });
+
+            List<string> skipped = null;
+            Assert.DoesNotThrow(() => skipped = BlendShapePresetIO.Apply(preset, target));
+
+            Assert.AreEqual(1, skipped.Count);
+            Assert.AreEqual(10f, target.GetBlendShapeWeight(0), 0.0001f);
+        }
     }
 }
