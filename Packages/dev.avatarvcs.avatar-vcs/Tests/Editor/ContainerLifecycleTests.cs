@@ -100,6 +100,46 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void ValidateContainers_DetectsDuplicateNameFromManualRename()
+        {
+            // CreateContainer itself already rejects this; the case that
+            // actually needs guarding is a manual Hierarchy rename after
+            // creation, which bypasses that check entirely.
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var a = ContainerManager.CreateContainer(root, "outfit_a");
+            ContainerManager.CreateContainer(root, "outfit_b");
+            a.name = "outfit_b";
+
+            var ex = Assert.Throws<System.InvalidOperationException>(() =>
+                ContainerManager.ValidateContainers(root));
+            StringAssert.Contains("outfit_b", ex.Message);
+        }
+
+        [Test]
+        public void ValidateContainers_DetectsManuallyNestedContainer()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var outer = ContainerManager.CreateContainer(root, "outfit_a");
+            var innerGo = new GameObject("hair");
+            innerGo.transform.SetParent(outer.transform, false);
+            innerGo.AddComponent<AvatarVcsContainer>();
+
+            var ex = Assert.Throws<System.InvalidOperationException>(() =>
+                ContainerManager.ValidateContainers(root));
+            StringAssert.Contains("nested", ex.Message);
+        }
+
+        [Test]
+        public void ValidateContainers_AcceptsFlatValidStructure()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            ContainerManager.CreateContainer(root, "outfit_a");
+            ContainerManager.CreateContainer(root, "hair");
+
+            Assert.DoesNotThrow(() => ContainerManager.ValidateContainers(root));
+        }
+
+        [Test]
         public void RestoreContainer_TwiceFromSameSnapshot_ProducesIdenticalResult()
         {
             var root = ContainerManager.EnsureRoot(avatarRoot);

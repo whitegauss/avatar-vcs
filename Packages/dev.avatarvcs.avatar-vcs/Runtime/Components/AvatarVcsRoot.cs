@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using UnityEngine;
 
 namespace AvatarVcs.Runtime
@@ -25,6 +26,43 @@ namespace AvatarVcs.Runtime
                 throw new InvalidOperationException("avatarGuid is already assigned and is immutable.");
 
             avatarGuid = guid;
+        }
+
+        // Duplicating a whole avatar (a common way to make a variant) clones
+        // this along with everything else, so the duplicate starts out
+        // sharing the original's avatarGuid -- two "different" avatars would
+        // then read/write the exact same commit history storage. Self-heals
+        // the common case of the duplicate avatar landing as a sibling of
+        // the original: whichever avatar has the lower sibling index keeps
+        // the guid, the other regenerates. Compares avatar-level siblings
+        // (this object's parent's siblings), not this object's own siblings
+        // -- each avatar has its own separate "[AvatarVCS]" child, so those
+        // are never siblings of each other.
+        private void OnValidate()
+        {
+            if (string.IsNullOrEmpty(avatarGuid)) return;
+
+            var avatarTransform = transform.parent; // EnsureRoot always parents this under the avatar
+            if (avatarTransform == null) return;
+
+            var avatarSiblings = avatarTransform.parent != null
+                ? Enumerable.Range(0, avatarTransform.parent.childCount).Select(i => avatarTransform.parent.GetChild(i))
+                : avatarTransform.gameObject.scene.GetRootGameObjects().Select(go => go.transform);
+
+            var mySiblingIndex = avatarTransform.GetSiblingIndex();
+            foreach (var sibling in avatarSiblings)
+            {
+                if (sibling == avatarTransform) continue;
+
+                var siblingRoot = sibling.GetComponentInChildren<AvatarVcsRoot>(includeInactive: true);
+                if (siblingRoot != null && siblingRoot != this
+                    && siblingRoot.avatarGuid == avatarGuid
+                    && sibling.GetSiblingIndex() < mySiblingIndex)
+                {
+                    avatarGuid = Guid.NewGuid().ToString("N");
+                    break;
+                }
+            }
         }
     }
 }

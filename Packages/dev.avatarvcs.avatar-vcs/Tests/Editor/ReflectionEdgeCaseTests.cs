@@ -169,5 +169,83 @@ namespace AvatarVcs.Tests.Editor
         }
 
         #endregion
+
+        #region FieldCodec 64-bit Integer Tests
+
+        // SerializedPropertyType.Integer covers int, long, and ulong alike;
+        // a real component with a long/ulong field is needed to exercise the
+        // .intValue-truncates-a-long bug, since no built-in Unity component
+        // exposes one.
+        private class LongFieldHolder : MonoBehaviour
+        {
+            public long longField;
+            public ulong ulongField;
+            public int intField;
+        }
+
+        [Test]
+        public void FieldCodec_LongField_RoundTripsBeyondIntRange()
+        {
+            var go = Spawn("LongHolder");
+            var holder = go.AddComponent<LongFieldHolder>();
+            const long value = 5_000_000_000L; // beyond int.MaxValue (~2.1B)
+            holder.longField = value;
+
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(LongFieldHolder.longField));
+
+            Assert.IsTrue(FieldCodec.TryEncode(prop, out var encoded, out var type));
+            Assert.AreEqual("long", type);
+            Assert.AreEqual(value.ToString(), encoded);
+
+            holder.longField = 0;
+            so.Update();
+            prop = so.FindProperty(nameof(LongFieldHolder.longField));
+            Assert.IsTrue(FieldCodec.TryDecode(prop, type, encoded));
+            so.ApplyModifiedProperties();
+
+            Assert.AreEqual(value, holder.longField);
+        }
+
+        [Test]
+        public void FieldCodec_UlongField_RoundTripsBeyondLongRange()
+        {
+            var go = Spawn("UlongHolder");
+            var holder = go.AddComponent<LongFieldHolder>();
+            const ulong value = 18_000_000_000_000_000_000UL; // beyond long.MaxValue
+            holder.ulongField = value;
+
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(LongFieldHolder.ulongField));
+
+            Assert.IsTrue(FieldCodec.TryEncode(prop, out var encoded, out var type));
+            Assert.AreEqual("ulong", type);
+            Assert.AreEqual(value.ToString(), encoded);
+
+            holder.ulongField = 0;
+            so.Update();
+            prop = so.FindProperty(nameof(LongFieldHolder.ulongField));
+            Assert.IsTrue(FieldCodec.TryDecode(prop, type, encoded));
+            so.ApplyModifiedProperties();
+
+            Assert.AreEqual(value, holder.ulongField);
+        }
+
+        [Test]
+        public void FieldCodec_IntField_StillUsesIntValue_NotAffectedByLongHandling()
+        {
+            var go = Spawn("IntHolder");
+            var holder = go.AddComponent<LongFieldHolder>();
+            holder.intField = 42;
+
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(LongFieldHolder.intField));
+
+            Assert.IsTrue(FieldCodec.TryEncode(prop, out var encoded, out var type));
+            Assert.AreEqual("int", type);
+            Assert.AreEqual("42", encoded);
+        }
+
+        #endregion
     }
 }

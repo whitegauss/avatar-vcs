@@ -377,7 +377,15 @@ namespace AvatarVcs.Editor.UI
             if (GUILayout.Button("Commit", GUILayout.Width(100)))
             {
                 var message = string.IsNullOrEmpty(commitMessage) ? "Manual commit" : commitMessage;
-                BranchManager.Commit(avatarRoot, message);
+                try
+                {
+                    BranchManager.Commit(avatarRoot, message);
+                }
+                catch (InvalidOperationException e)
+                {
+                    EditorUtility.DisplayDialog("Commit Failed", e.Message, "OK");
+                    return;
+                }
                 commitMessage = "";
                 // The very first commit creates the root (and its guid) as a
                 // side effect; avatarGuid may still be null/stale here.
@@ -429,8 +437,9 @@ namespace AvatarVcs.Editor.UI
             var activeId = compareShowingB ? compareCommitBId : compareCommitAId;
             EditorGUILayout.HelpBox(
                 $"Compare mode: viewing '{CommitMessage(activeId)}' ({(compareShowingB ? "B" : "A")}). "
-                + "Toggling does not create commits.",
-                MessageType.Info);
+                + "Toggling does not create commits, so don't edit the scene here -- any edit will be "
+                + "discarded (with a confirmation) the moment you toggle or exit.",
+                MessageType.Warning);
 
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button(compareShowingB ? "Show A" : "Show B", GUILayout.Width(100)))
@@ -504,6 +513,24 @@ namespace AvatarVcs.Editor.UI
 
         private void ToggleCompare()
         {
+            // Compare mode's toggle always re-applies a fixed historical
+            // commit, silently overwriting anything hand-edited in the
+            // scene since the last toggle -- exactly the "no warning at
+            // all" surprise CODE_REVIEW.md 3.4 called out. This is the one
+            // spot in compare mode where a discard isn't already the whole
+            // point of the button (unlike Restore Original / Keep As
+            // Current), so it's the one that needs a confirmation.
+            var currentlyShownId = compareShowingB ? compareCommitBId : compareCommitAId;
+            if (HasUncommittedChanges(currentlyShownId))
+            {
+                if (!EditorUtility.DisplayDialog("Discard Scene Edits?",
+                        "The scene has changed since you entered (or last toggled) compare mode. "
+                        + "Toggling now will discard those changes -- compare mode doesn't take a "
+                        + "safety-net commit on toggle.",
+                        "Discard and Toggle", "Cancel"))
+                    return;
+            }
+
             var targetId = compareShowingB ? compareCommitAId : compareCommitBId;
 
             RunCheckout(() =>
@@ -528,7 +555,22 @@ namespace AvatarVcs.Editor.UI
 
         private void RunCheckout(Func<CheckoutResult> checkout)
         {
-            var result = checkout();
+            CheckoutResult result;
+            try
+            {
+                result = checkout();
+            }
+            catch (InvalidOperationException e)
+            {
+                // The safety-net auto-commit taken before a checkout runs
+                // the same container validation as a manual Commit, so a
+                // pre-existing structural problem (duplicate/nested
+                // containers) surfaces here too -- before anything gets
+                // destroyed, not after.
+                EditorUtility.DisplayDialog("Checkout Failed", e.Message, "OK");
+                return;
+            }
+
             if (!result.IsSuccess)
             {
                 pendingMissingGuids = result.MissingPrefabGuids;

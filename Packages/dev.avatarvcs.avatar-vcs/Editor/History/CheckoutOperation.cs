@@ -122,7 +122,22 @@ namespace AvatarVcs.Editor.History
 
             var priorGeneratedGuids = commit.materialSettings.Select(m => m.generatedGuid).ToList();
             foreach (var materialSetting in commit.materialSettings)
-                MaterialSettingsApplier.Apply(materialSetting, avatarRoot);
+            {
+                // One slot failing (unsupported shader, an out-of-range slot
+                // after the target's material list shrank, an unresolvable
+                // source guid, ...) must not abort the checkout with the
+                // rest of materialSettings/avatarReferences left unapplied
+                // and containers already destroyed/regenerated.
+                try
+                {
+                    MaterialSettingsApplier.Apply(materialSetting, avatarRoot);
+                }
+                catch (Exception e) when (e is InvalidOperationException or NotSupportedException)
+                {
+                    Debug.LogWarning($"[AvatarVCS] Failed to apply material settings for slot {materialSetting.slot} "
+                        + $"on '{materialSetting.targetPath}': {e.Message}");
+                }
+            }
 
             // Apply populates/reuses each entry's generatedGuid in place; if
             // any of them are new, persist the commit so future checkouts of

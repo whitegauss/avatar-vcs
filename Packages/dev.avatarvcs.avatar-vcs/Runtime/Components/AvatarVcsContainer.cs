@@ -24,5 +24,35 @@ namespace AvatarVcs.Runtime
 
             containerGuid = guid;
         }
+
+        // Ctrl+D duplication clones serialized field data verbatim, so a
+        // duplicated container starts out sharing its source's containerGuid
+        // -- silently breaking every guid-keyed lookup (commit deletion's
+        // shared-asset check, diff/restore by containerGuid, ...). OnValidate
+        // runs after a duplicate is created, so this self-heals: whichever of
+        // a colliding pair has the lower sibling index keeps the guid, the
+        // other regenerates. Deterministic given a stable hierarchy, so it
+        // converges instead of flip-flopping on repeated calls.
+        private void OnValidate()
+        {
+            if (string.IsNullOrEmpty(containerGuid) || transform.parent == null) return;
+
+            var parent = transform.parent;
+            var mySiblingIndex = transform.GetSiblingIndex();
+            for (var i = 0; i < parent.childCount; i++)
+            {
+                var sibling = parent.GetChild(i);
+                if (sibling == transform) continue;
+
+                var siblingContainer = sibling.GetComponent<AvatarVcsContainer>();
+                if (siblingContainer != null
+                    && siblingContainer.containerGuid == containerGuid
+                    && sibling.GetSiblingIndex() < mySiblingIndex)
+                {
+                    containerGuid = Guid.NewGuid().ToString("N");
+                    break;
+                }
+            }
+        }
     }
 }

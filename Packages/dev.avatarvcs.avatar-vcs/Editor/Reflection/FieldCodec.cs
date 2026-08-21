@@ -20,6 +20,20 @@ namespace AvatarVcs.Editor.Reflection
         {
             switch (prop.propertyType)
             {
+                // Integer covers both int and 64-bit (long/ulong) fields;
+                // .intValue silently truncates a long to 32 bits, so the
+                // underlying field type (prop.type) decides which accessor
+                // to use. ulong's bit pattern round-trips through .longValue
+                // like any other 64-bit storage; only the string
+                // representation needs to reinterpret it as unsigned.
+                case SerializedPropertyType.Integer when prop.type == "ulong":
+                    value = unchecked((ulong)prop.longValue).ToString(Culture);
+                    type = "ulong";
+                    return true;
+                case SerializedPropertyType.Integer when prop.type == "long":
+                    value = prop.longValue.ToString(Culture);
+                    type = "long";
+                    return true;
                 case SerializedPropertyType.Integer:
                 case SerializedPropertyType.ArraySize:
                     value = prop.intValue.ToString(Culture);
@@ -120,6 +134,12 @@ namespace AvatarVcs.Editor.Reflection
                 case "enum":
                 case "character":
                     prop.intValue = int.Parse(value, Culture);
+                    return true;
+                case "long":
+                    prop.longValue = long.Parse(value, Culture);
+                    return true;
+                case "ulong":
+                    prop.longValue = unchecked((long)ulong.Parse(value, Culture));
                     return true;
                 case "bool":
                     prop.boolValue = value == "true";

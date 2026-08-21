@@ -79,5 +79,18 @@ namespace AvatarVcs.Tests.Editor
             var head = config.branches.First(b => b.name == "main");
             Assert.AreEqual(commit.commitId, head.commitId);
         }
+
+        [Test]
+        public void CreateCommit_RejectsDuplicateContainerNameFromManualRename()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            avatarGuid = root.GetComponent<AvatarVcsRoot>().AvatarGuid;
+            var a = ContainerManager.CreateContainer(root, "outfit_a");
+            ContainerManager.CreateContainer(root, "outfit_b");
+            a.name = "outfit_b";
+
+            Assert.Throws<System.InvalidOperationException>(() =>
+                CommitBuilder.CreateCommit(avatarRoot, "should be blocked", "main", null));
+        }
     }
 }

@@ -117,6 +117,45 @@ namespace AvatarVcs.Editor.Core
         }
 
         /// <summary>
+        /// Catches two ways a container structure can violate the tool's
+        /// invariants (design doc 1.3.1: containers live directly under
+        /// "[AvatarVCS]", are not nested, and are uniquely named) without
+        /// going through CreateContainer -- a manual Hierarchy rename or
+        /// drag-and-drop can still produce either. Both silently corrupt
+        /// commits (duplicate names collide on the same key; a nested
+        /// container isn't itself a prefab instance, so it's invisible to
+        /// its parent's capture and is lost on the next checkout) rather
+        /// than failing loudly, so this is meant to be called right before
+        /// a commit is taken.
+        /// </summary>
+        public static void ValidateContainers(GameObject root)
+        {
+            if (root == null) throw new ArgumentNullException(nameof(root));
+
+            var containers = GetContainers(root);
+
+            var duplicateNames = containers
+                .GroupBy(t => t.name)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToList();
+            if (duplicateNames.Count > 0)
+                throw new InvalidOperationException(
+                    $"Duplicate container name(s) under '{root.name}': {string.Join(", ", duplicateNames)}. "
+                    + "Rename one of them before committing -- containerId must be unique.");
+
+            foreach (var container in containers)
+            {
+                var nested = container.GetComponentsInChildren<AvatarVcsContainer>(includeInactive: true)
+                    .FirstOrDefault(c => c.transform != container);
+                if (nested != null)
+                    throw new InvalidOperationException(
+                        $"Container '{container.name}' has another container ('{nested.name}') nested inside it. "
+                        + $"Containers cannot be nested -- move '{nested.name}' directly under '{root.name}' instead.");
+            }
+        }
+
+        /// <summary>
         /// Resolves the GUID of the prefab asset instance derives from, via
         /// GetCorrespondingObjectFromSource. Returns null if instance is not a
         /// prefab instance.
