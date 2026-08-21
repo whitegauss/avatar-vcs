@@ -114,7 +114,45 @@ namespace AvatarVcs.Tests.Editor
             var config = CommitStore.LoadConfig(avatarGuid);
             Assert.AreEqual("main", config.currentBranch, "RestoreToCommit stays on the current branch");
             Assert.AreEqual(commitA.commitId, config.branches.First(b => b.name == "main").commitId,
-                "the branch head moves to the restored commit, not the auto-commit safety snapshot");
+                "the branch head moves to the restored commit, not an auto-commit safety snapshot");
+        }
+
+        // Checkout no longer takes a safety-net auto-commit (Ctrl+Z is the
+        // recovery path for uncommitted work instead) -- these guard against
+        // that regressing back to spamming history with [auto] commits.
+
+        [Test]
+        public void SwitchBranch_DoesNotCreateAnAutoCommit()
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var root = ContainerManager.FindRoot(avatarRoot);
+            ContainerManager.CreateContainer(root, "hair");
+            var mainCommit = BranchManager.Commit(avatarRoot, "hair long");
+            BranchManager.CreateBranch(avatarRoot, "hair-short", mainCommit.commitId);
+
+            var countBefore = CommitStore.LoadIndex(avatarGuid).entries.Count;
+            var result = BranchManager.SwitchBranch(avatarRoot, "hair-short");
+
+            Assert.IsTrue(result.IsSuccess);
+            Assert.IsNull(result.AutoCommitId);
+            Assert.AreEqual(countBefore, CommitStore.LoadIndex(avatarGuid).entries.Count);
+        }
+
+        [Test]
+        public void RestoreToCommit_DoesNotCreateAnAutoCommit()
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var root = ContainerManager.FindRoot(avatarRoot);
+            ContainerManager.CreateContainer(root, "hair");
+            var commitA = BranchManager.Commit(avatarRoot, "hair long");
+            BranchManager.Commit(avatarRoot, "hair long again");
+
+            var countBefore = CommitStore.LoadIndex(avatarGuid).entries.Count;
+            var result = BranchManager.RestoreToCommit(avatarRoot, commitA.commitId);
+
+            Assert.IsTrue(result.IsSuccess);
+            Assert.IsNull(result.AutoCommitId);
+            Assert.AreEqual(countBefore, CommitStore.LoadIndex(avatarGuid).entries.Count);
         }
 
         private void AssertHairPrefab(string expectedPrefabPath)

@@ -57,7 +57,7 @@ Hierarchy でアバターのルート GameObject を選択し、`GameObject > Av
 
 EditorWindow (`Window > AvatarVCS`、またはアバターの GameObject を選択した状態で `GameObject > AvatarVCS > Open Window` を使うとアバターが自動セットされた状態で開けます) で以下が行えます。
 
-- ブランチの作成・切り替え（切り替え前に現在の状態を自動コミット）
+- ブランチの作成・切り替え（コミットしていない変更がある場合は確認ダイアログ。取り消しは Ctrl+Z)
 - コミット履歴の閲覧、任意のコミットへの checkout
 - 選択コミットと現在のシーン、または任意の2コミット間の diff 表示
 - **Compare**: 2つのコミットを選んで比較モードに入り、「Show A / Show B」で自動コミットなしに交互 checkout。終了時に「今表示中の状態を採用してコミット」か「比較前の状態に戻す」を選択
