@@ -144,6 +144,96 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Diff_DetectsBlendShapeAndMaterialChange_InAvatarReferences()
+        {
+            var before = new Commit
+            {
+                avatarReferences =
+                {
+                    new AvatarReferenceState
+                    {
+                        path = "Body",
+                        blendShapes = { new BlendShapeRef { name = "Shape_A", weight = 0f } },
+                        materials = { new MaterialRef { slot = 0, guid = "guid_before" } },
+                    },
+                },
+            };
+            var after = new Commit
+            {
+                avatarReferences =
+                {
+                    new AvatarReferenceState
+                    {
+                        path = "Body",
+                        blendShapes = { new BlendShapeRef { name = "Shape_A", weight = 100f } },
+                        materials = { new MaterialRef { slot = 0, guid = "guid_after" } },
+                    },
+                },
+            };
+
+            var diffs = SnapshotDiffer.Diff(before, after);
+
+            var bodyDiff = diffs.Single(d => d.containerId == "avatarRef:Body");
+            Assert.AreEqual(DiffKind.Changed, bodyDiff.kind);
+            Assert.IsTrue(bodyDiff.changeNotes.Any(n => n.Contains("Shape_A") && n.Contains("100")));
+            Assert.IsTrue(bodyDiff.changeNotes.Any(n => n.Contains("slot 0") && n.Contains("guid_after")));
+        }
+
+        [Test]
+        public void Diff_DetectsAddedAvatarReferencePath()
+        {
+            var before = new Commit();
+            var after = new Commit
+            {
+                avatarReferences = { new AvatarReferenceState { path = "Body" } },
+            };
+
+            var diffs = SnapshotDiffer.Diff(before, after);
+
+            var bodyDiff = diffs.Single(d => d.containerId == "avatarRef:Body");
+            Assert.AreEqual(DiffKind.Added, bodyDiff.kind);
+        }
+
+        [Test]
+        public void Diff_DetectsMaterialSettingsPropertyChange()
+        {
+            var before = new Commit
+            {
+                materialSettings =
+                {
+                    new MaterialSettingsState
+                    {
+                        targetPath = "Body",
+                        slot = 0,
+                        sourceMaterialGuid = "guid_src",
+                        shader = "lilToon",
+                        properties = { new MaterialPropertyValue { name = "_Color", type = "color", value = "1,1,1,1" } },
+                    },
+                },
+            };
+            var after = new Commit
+            {
+                materialSettings =
+                {
+                    new MaterialSettingsState
+                    {
+                        targetPath = "Body",
+                        slot = 0,
+                        sourceMaterialGuid = "guid_src",
+                        shader = "lilToon",
+                        properties = { new MaterialPropertyValue { name = "_Color", type = "color", value = "1,0,0,1" } },
+                    },
+                },
+            };
+
+            var diffs = SnapshotDiffer.Diff(before, after);
+
+            var matDiff = diffs.Single(d => d.containerId == "material:Body[0]");
+            Assert.AreEqual(DiffKind.Changed, matDiff.kind);
+            Assert.IsTrue(matDiff.changeNotes.Any(n => n.Contains("_Color") && n.Contains("1,0,0,1")));
+        }
+
+        [Test]
         public void Diff_DetectsTagChange_WithNote()
         {
             var before = MakeContainer("hair", "guid_a");
