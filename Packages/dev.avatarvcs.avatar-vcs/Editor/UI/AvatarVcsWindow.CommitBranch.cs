@@ -62,11 +62,24 @@ namespace AvatarVcs.Editor.UI
                 EditorGUILayout.HelpBox("Uncommitted changes in the scene (see diff below).", MessageType.Warning);
         }
 
+        private const string CommitMessageControlName = "AvatarVcsCommitMessageField";
+
         private void DrawCommitBar()
         {
             EditorGUILayout.BeginHorizontal();
+            GUI.SetNextControlName(CommitMessageControlName);
             commitMessage = EditorGUILayout.TextField(commitMessage);
-            if (GUILayout.Button("Commit", GUILayout.Width(100)))
+
+            // Enter while the message field has focus commits, same as
+            // clicking the button -- typing a message then reaching for the
+            // mouse just to click Commit is friction for the single most
+            // frequent action in this window.
+            var enterInMessageField = Event.current.type == EventType.KeyDown
+                && (Event.current.keyCode == KeyCode.Return || Event.current.keyCode == KeyCode.KeypadEnter)
+                && GUI.GetNameOfFocusedControl() == CommitMessageControlName;
+            if (enterInMessageField) Event.current.Use();
+
+            if (GUILayout.Button("Commit", GUILayout.Width(100)) || enterInMessageField)
             {
                 var message = string.IsNullOrEmpty(commitMessage) ? "Manual commit" : commitMessage;
                 try
