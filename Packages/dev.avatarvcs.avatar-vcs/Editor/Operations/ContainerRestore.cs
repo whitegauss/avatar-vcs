@@ -41,6 +41,8 @@ namespace AvatarVcs.Editor.Operations
             containerGo.transform.localRotation = snapshot.localRotation;
             containerGo.transform.localScale = snapshot.localScale;
             ApplyTag(containerGo, snapshot);
+            containerGo.layer = snapshot.layer;
+            containerGo.SetActive(snapshot.activeSelf);
 
             var marker = Undo.AddComponent<AvatarVcsContainer>(containerGo);
             marker.AssignGuid(snapshot.containerGuid);
