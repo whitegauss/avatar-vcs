@@ -242,10 +242,29 @@ namespace AvatarVcs.Tests.Editor
                 targetPath = "Body",
                 slot = 0,
                 sourceMaterialGuid = sourceMaterialGuid,
-                shader = "Standard", // not in ShaderPropertyMap (MVP: lilToon only)
+                shader = "Standard", // not in ShaderPropertyMap
             };
 
             Assert.Throws<System.NotSupportedException>(() => MaterialSettingsApplier.Apply(state, avatarRoot));
+        }
+
+        [TestCase(".poiyomi/Poiyomi")]
+        [TestCase("VRM/MToon")]
+        [TestCase("VRM10/MToon10")]
+        public void ShaderPropertyMap_SupportsCommonAvatarShaders(string shaderName)
+        {
+            // Poiyomi/MToon aren't available in a bare Unity project (same
+            // constraint as lilToon, see the fixture-level comment above),
+            // so this exercises the map directly rather than a real material.
+            Assert.IsTrue(ShaderPropertyMap.IsSupported(shaderName));
+            Assert.IsNotEmpty(ShaderPropertyMap.GetProperties(shaderName));
+        }
+
+        [Test]
+        public void ShaderPropertyMap_UnknownShader_IsNotSupported_AndReturnsNoProperties()
+        {
+            Assert.IsFalse(ShaderPropertyMap.IsSupported("Standard"));
+            Assert.IsEmpty(ShaderPropertyMap.GetProperties("Standard"));
         }
     }
 }
