@@ -2,8 +2,11 @@ using System.Collections.Generic;
 using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Model;
+using AvatarVcs.Editor.Reflection;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace AvatarVcs.Tests.Editor
 {
@@ -109,6 +112,68 @@ namespace AvatarVcs.Tests.Editor
             var state = ComponentCapturer.Capture(light, containerRoot.transform);
 
             Assert.AreEqual("Child", state.path);
+        }
+
+        private class ReservedPropertyTestBehaviour : MonoBehaviour
+        {
+        }
+
+        private class OtherReservedPropertyTestBehaviour : MonoBehaviour
+        {
+        }
+
+        [Test]
+        public void Capture_NeverIncludes_ReservedPropertyNames()
+        {
+            var root = Spawn("Root");
+            var behaviour = root.AddComponent<ReservedPropertyTestBehaviour>();
+
+            var state = ComponentCapturer.Capture(behaviour, root.transform);
+
+            foreach (var reserved in ReservedPropertyNames.Names)
+            {
+                Assert.IsFalse(state.fields.Exists(f => f.key == reserved), $"'{reserved}' must never be captured (fields)");
+                Assert.IsFalse(state.assetRefs.Exists(a => a.key == reserved), $"'{reserved}' must never be captured (assetRefs)");
+            }
+        }
+
+        [Test]
+        public void Apply_RefusesToWrite_MScript_EvenIfPresentInState()
+        {
+            // Simulates a hand-edited or corrupted commit file: a
+            // ComponentState whose assetRefs targets "m_Script" -- something
+            // ComponentCapturer itself would never produce (see the test
+            // above), but ComponentApplier must still defend against on the
+            // way in, since a value here would silently swap which script
+            // drives an existing component.
+            var root = Spawn("Root");
+            var behaviour = root.AddComponent<ReservedPropertyTestBehaviour>();
+            var originalScript = MonoScript.FromMonoBehaviour(behaviour);
+
+            // A different script's guid, so the assertion below actually
+            // fails if the reserved-property guard regresses (rather than
+            // trivially passing because "the other script" happens to be
+            // the same one).
+            var otherGo = new GameObject("Other");
+            var otherBehaviour = otherGo.AddComponent<OtherReservedPropertyTestBehaviour>();
+            var otherScript = MonoScript.FromMonoBehaviour(otherBehaviour);
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(otherScript, out var otherScriptGuid, out var otherLocalId);
+            Object.DestroyImmediate(otherGo);
+
+            var maliciousState = new ComponentState
+            {
+                path = string.Empty,
+                type = typeof(ReservedPropertyTestBehaviour).FullName,
+                assetRefs = { new AssetRef { key = "m_Script", guid = otherScriptGuid, localId = otherLocalId } },
+            };
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex(".*Refusing to write reserved property.*"));
+            var result = ComponentApplier.Apply(maliciousState, root, createIfMissing: false);
+
+            Assert.IsTrue(result.IsSuccess); // the reserved field is skipped, not a hard failure
+            var so = new SerializedObject(behaviour);
+            Assert.AreSame(originalScript, so.FindProperty("m_Script").objectReferenceValue,
+                "m_Script must be left exactly as it was, never overwritten from commit data");
         }
     }
 }

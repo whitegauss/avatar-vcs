@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.Reflection;
 using UnityEditor;
@@ -14,18 +13,6 @@ namespace AvatarVcs.Editor.Capture
     /// </summary>
     public static class ComponentCapturer
     {
-        private static readonly HashSet<string> SkippedPropertyNames = new()
-        {
-            "m_Script",
-            "m_ObjectHideFlags",
-            "m_CorrespondingSourceObject",
-            "m_PrefabInstance",
-            "m_PrefabAsset",
-            "m_GameObject",
-            "m_EditorClassIdentifier",
-            "m_EditorHideFlags",
-        };
-
         /// <summary>
         /// avatarRoot is used only to resolve scene references (fields
         /// pointing at other live GameObjects/Components, as opposed to
@@ -53,7 +40,7 @@ namespace AvatarVcs.Editor.Capture
             {
                 enterChildren = prop.propertyType == SerializedPropertyType.Generic;
 
-                if (SkippedPropertyNames.Contains(prop.name))
+                if (ReservedPropertyNames.Names.Contains(prop.name))
                 {
                     enterChildren = false;
                     continue;
