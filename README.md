@@ -2,11 +2,11 @@
 
 VRChat アバターの「構成」（衣装・髪型などのプレハブ構成、BlendShape、マテリアル設定）をバージョン管理する Unity エディタ拡張ツールです。
 
-Git のブランチ／コミットに似たモデルで、「髪ロング版」と「髪ショート版」のような複数構成を並行管理し、いつでも切り替え・比較・復元できるようにします。詳細な設計思想は [DesignDoc_avatar-vcs.md](DesignDoc_avatar-vcs.md) を参照してください。
+Git のブランチ／コミットに似たモデルで、「髪ロング版」と「髪ショート版」のような複数構成を並行管理し、いつでも切り替え・比較・復元できるようにします。
 
 ## 現在のステータス
 
-設計書の Phase 1〜4（[7章](DesignDoc_avatar-vcs.md#7-poc-実装計画v2) 参照）を実装済みです。
+設計書の Phase 1〜4 を実装済みです。
 
 - **Phase 1**: 管理下コンテナ方式によるプレハブ構成の記録・破棄→再生成による冪等な復元
 - **Phase 2**: コンポーネント設定（Transform 以外のフィールド、アセット参照、シーン内参照）の記録・復元、アバター本体の BlendShape / マテリアル参照のホワイトリスト管理、マテリアル設定（lilToon）の複製・再適用
@@ -21,7 +21,7 @@ CI (`.github/workflows/tests.yml`) で [game-ci/unity-test-runner](https://githu
 
 ## できないこと（設計上の境界）
 
-このツールは**アセット実体（Prefab/Material の中身）を保持しません**。「過去のバージョンの Prefab に戻す」ことは原理的にできず、あくまで「どの構成がどのアセットを参照していたか」を記録・復元するのみです（設計書 [6.1](DesignDoc_avatar-vcs.md#61-構造的な限界先に明示する) 参照）。アセット自体のバックアップは別途ユーザー側で行ってください。
+このツールは**アセット実体（Prefab/Material の中身）を保持しません**。「過去のバージョンの Prefab に戻す」ことは原理的にできず、あくまで「どの構成がどのアセットを参照していたか」を記録・復元するのみです。アセット自体のバックアップは別途ユーザー側で行ってください。
 
 またアバター本体（Body / Armature 等の骨格構造）はスコープ外で、変更しても管理対象になりません。管理対象は `[AvatarVCS]` ルート配下のコンテナと、ホワイトリストされた BlendShape / マテリアル参照のみです。
 
@@ -90,10 +90,3 @@ TestProject/                          # ローカル/CI 用の検証用 Unity �
 ### テストの実行
 
 `TestProject` を Unity 2022.3 系で開き、Test Runner (EditMode) から `Tests/Editor/` 配下のテストを実行してください。CI でも同じテストが push / PR ごとに走ります。
-
-## ドキュメント
-
-- [USAGE.md](USAGE.md) — 使い方ガイド(元の状態に戻す方法、コミット削除、比較モードなど)
-- [DesignDoc_avatar-vcs.md](DesignDoc_avatar-vcs.md) — 詳細設計書（v2、現行）
-- [PRD_avatar-vcs.md](PRD_avatar-vcs.md) — プロダクト要求仕様
-- [DesignDoc_v1_superseded.md](DesignDoc_v1_superseded.md) — 旧設計（参考、廃止済み）
