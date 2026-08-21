@@ -75,6 +75,61 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void EnsureRoot_NeverAddsTracking()
+        {
+            // Only EnsureRootWithDefaultTracking (the user-facing "Ensure
+            // Root" command) seeds tracking -- EnsureRoot itself is also
+            // called by container-count/tracking-agnostic internal
+            // plumbing and must stay exactly as before.
+            ContainerManager.EnsureRoot(avatarRoot);
+
+            Assert.IsNull(avatarRoot.GetComponent<AvatarVcsTrackedReference>());
+        }
+
+        [Test]
+        public void EnsureRootWithDefaultTracking_OnFirstCreation_TracksRootAndExistingTopLevelChildren()
+        {
+            var body = new GameObject("Body");
+            body.transform.SetParent(avatarRoot.transform, false);
+            var armature = new GameObject("Armature");
+            armature.transform.SetParent(avatarRoot.transform, false);
+
+            var root = ContainerManager.EnsureRootWithDefaultTracking(avatarRoot);
+
+            Assert.IsNotNull(avatarRoot.GetComponent<AvatarVcsTrackedReference>(), "the avatar root itself must be tracked");
+            Assert.IsNotNull(body.GetComponent<AvatarVcsTrackedReference>());
+            Assert.IsNotNull(armature.GetComponent<AvatarVcsTrackedReference>());
+            Assert.IsNull(root.GetComponent<AvatarVcsTrackedReference>(), "[AvatarVCS] itself must never be tracked");
+        }
+
+        [Test]
+        public void EnsureRootWithDefaultTracking_OnExistingRoot_DoesNotReTrackAfterManualUntrack()
+        {
+            var body = new GameObject("Body");
+            body.transform.SetParent(avatarRoot.transform, false);
+            ContainerManager.EnsureRootWithDefaultTracking(avatarRoot);
+            Object.DestroyImmediate(body.GetComponent<AvatarVcsTrackedReference>());
+            Assert.IsNull(body.GetComponent<AvatarVcsTrackedReference>());
+
+            // Rerunning against the now-existing root must not silently
+            // bring the manually removed tracking back.
+            ContainerManager.EnsureRootWithDefaultTracking(avatarRoot);
+
+            Assert.IsNull(body.GetComponent<AvatarVcsTrackedReference>());
+        }
+
+        [Test]
+        public void EnsureRootWithDefaultTracking_DoesNotDuplicateTrackingOnAlreadyTrackedObject()
+        {
+            var body = new GameObject("Body");
+            body.transform.SetParent(avatarRoot.transform, false);
+            body.AddComponent<AvatarVcsTrackedReference>(); // pre-existing, manual
+
+            Assert.DoesNotThrow(() => ContainerManager.EnsureRootWithDefaultTracking(avatarRoot));
+            Assert.AreEqual(1, body.GetComponents<AvatarVcsTrackedReference>().Length);
+        }
+
+        [Test]
         public void FindRoot_StillResolvesAfterManualRename()
         {
             var root = ContainerManager.EnsureRoot(avatarRoot);
