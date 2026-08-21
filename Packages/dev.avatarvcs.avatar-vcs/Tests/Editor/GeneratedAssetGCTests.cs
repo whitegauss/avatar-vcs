@@ -195,7 +195,12 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsFalse(AssetStillLoads(firstGuid));
             Assert.IsNull(CommitStore.LoadCommit(avatarGuid, first.commitId));
             Assert.IsNull(CommitStore.LoadCommit(avatarGuid, second.commitId));
-            Assert.IsEmpty(CommitStore.LoadIndex(avatarGuid).entries);
+            // Not asserting the index is fully empty: CheckoutOperation.Checkout
+            // above took its own "[auto] before checkout" safety-net commit,
+            // which isn't in the delete request and correctly survives.
+            var remainingIds = CommitStore.LoadIndex(avatarGuid).entries.Select(e => e.commitId).ToList();
+            CollectionAssert.DoesNotContain(remainingIds, first.commitId);
+            CollectionAssert.DoesNotContain(remainingIds, second.commitId);
         }
 
         [Test]
