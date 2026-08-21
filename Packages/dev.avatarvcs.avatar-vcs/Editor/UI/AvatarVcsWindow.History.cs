@@ -190,9 +190,12 @@ namespace AvatarVcs.Editor.UI
         }
 
         // Bulk counterpart to DeleteCommit: one confirmation up front, then
-        // best-effort per commit -- a mix of deletable and head-blocked
-        // commits in the same selection shouldn't abort the whole batch,
-        // it should delete what it can and report what it couldn't.
+        // best-effort -- a mix of deletable and head-blocked commits in the
+        // same selection shouldn't abort the whole batch, it should delete
+        // what it can and report what it couldn't. Goes through
+        // CommitStore.DeleteCommits (one shared-asset scan for the whole
+        // batch) rather than calling CommitStore.DeleteCommit in a loop
+        // (which reloads every other commit from disk per call).
         private void DeleteCommits(List<string> commitIds)
         {
             if (commitIds.Count == 0) return;
@@ -202,26 +205,23 @@ namespace AvatarVcs.Editor.UI
                     "Delete", "Cancel"))
                 return;
 
-            var failures = new List<string>();
+            // Commit messages for any blocked ids are only available before
+            // Reload() replaces `commits` with the post-delete state.
+            var blocked = CommitStore.DeleteCommits(avatarGuid, commitIds);
+            var blockedMessages = blocked.Select(id => $"{CommitMessage(id)}: is the head of its branch.").ToList();
+
             foreach (var commitId in commitIds)
             {
-                try
-                {
-                    CommitStore.DeleteCommit(avatarGuid, commitId);
-                    selectedForBulkDelete.Remove(commitId);
-                    if (selectedCommitId == commitId) selectedCommitId = null;
-                }
-                catch (InvalidOperationException e)
-                {
-                    failures.Add($"{CommitMessage(commitId)}: {e.Message}");
-                }
+                if (blocked.Contains(commitId)) continue;
+                selectedForBulkDelete.Remove(commitId);
+                if (selectedCommitId == commitId) selectedCommitId = null;
             }
 
             Reload();
 
-            if (failures.Count > 0)
+            if (blockedMessages.Count > 0)
                 EditorUtility.DisplayDialog("Some Commits Could Not Be Deleted",
-                    string.Join("\n\n", failures)
+                    string.Join("\n\n", blockedMessages)
                         + "\n\nSwitch to the relevant branch, checkout a different commit on it, then come back and delete it.",
                     "OK");
         }

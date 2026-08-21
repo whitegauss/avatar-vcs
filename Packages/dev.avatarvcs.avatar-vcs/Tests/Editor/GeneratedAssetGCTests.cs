@@ -168,5 +168,80 @@ namespace AvatarVcs.Tests.Editor
             Assert.Throws<System.InvalidOperationException>(() => CommitStore.DeleteCommit(avatarGuid, commit.commitId));
             Assert.DoesNotThrow(() => CommitStore.DeleteCommit(avatarGuid, commit.commitId, force: true));
         }
+
+        [Test]
+        public void DeleteCommits_RemovesEachCommitAndItsOwnGeneratedAsset()
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = CommitWithMaterialSetting("first", null);
+            CheckoutOperation.Checkout(first, avatarRoot, "main", null);
+            var firstGuid = CommitStore.LoadCommit(avatarGuid, first.commitId).materialSettings[0].generatedGuid;
+
+            var second = CommitBuilder.CreateCommit(avatarRoot, "second", "main", first.commitId);
+            second.materialSettings.Add(new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = sourceMaterialGuid,
+                shader = "lilToon",
+                generatedGuid = "unused_guid_for_second",
+            });
+            second.generatedAssets.Add("unused_guid_for_second");
+            CommitStore.SaveCommit(avatarGuid, second);
+
+            var blocked = CommitStore.DeleteCommits(avatarGuid, new[] { first.commitId, second.commitId });
+
+            Assert.IsEmpty(blocked);
+            Assert.IsFalse(AssetStillLoads(firstGuid));
+            Assert.IsNull(CommitStore.LoadCommit(avatarGuid, first.commitId));
+            Assert.IsNull(CommitStore.LoadCommit(avatarGuid, second.commitId));
+            Assert.IsEmpty(CommitStore.LoadIndex(avatarGuid).entries);
+        }
+
+        [Test]
+        public void DeleteCommits_SharedAssetBetweenTwoCommitsInTheSameBatch_IsDeletedOnceBothGone()
+        {
+            // The scenario the batch API exists for: DeleteCommit's
+            // per-call "still referenced elsewhere" scan would see the
+            // OTHER commit in this pair as a survivor (since it hasn't been
+            // deleted yet at the time of that individual call), leaving the
+            // asset orphaned. Deleting both together in one DeleteCommits
+            // call must correctly recognize neither survives.
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = CommitWithMaterialSetting("first", null);
+            CheckoutOperation.Checkout(first, avatarRoot, "main", null);
+            var sharedGuid = CommitStore.LoadCommit(avatarGuid, first.commitId).materialSettings[0].generatedGuid;
+
+            var second = CommitBuilder.CreateCommit(avatarRoot, "second", "main", first.commitId);
+            second.materialSettings.Add(new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = sourceMaterialGuid,
+                shader = "lilToon",
+                generatedGuid = sharedGuid,
+            });
+            second.generatedAssets.Add(sharedGuid);
+            CommitStore.SaveCommit(avatarGuid, second);
+
+            var blocked = CommitStore.DeleteCommits(avatarGuid, new[] { first.commitId, second.commitId });
+
+            Assert.IsEmpty(blocked);
+            Assert.IsFalse(AssetStillLoads(sharedGuid), "neither commit referencing this guid survives the batch, so it must be cleaned up");
+        }
+
+        [Test]
+        public void DeleteCommits_SkipsHeadBlockedCommit_ButDeletesTheRest()
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "first");
+            var head = BranchManager.Commit(avatarRoot, "head"); // current branch head
+
+            var blocked = CommitStore.DeleteCommits(avatarGuid, new[] { first.commitId, head.commitId });
+
+            CollectionAssert.AreEqual(new[] { head.commitId }, blocked);
+            Assert.IsNull(CommitStore.LoadCommit(avatarGuid, first.commitId));
+            Assert.IsNotNull(CommitStore.LoadCommit(avatarGuid, head.commitId), "head-blocked commit must survive");
+        }
     }
 }
