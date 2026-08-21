@@ -82,7 +82,15 @@ namespace AvatarVcs.Editor.MaterialSettings
             ApplyProperties(duplicate, state.properties);
 
             var directory = System.IO.Path.GetDirectoryName(sourcePath)?.Replace('\\', '/');
-            if (string.IsNullOrEmpty(directory)) directory = "Assets";
+            if (string.IsNullOrEmpty(directory) || directory.StartsWith("Packages/") || directory == "Packages")
+            {
+                // A source material inside an immutable/read-only UPM
+                // package (Packages/...) can't have a sibling asset written
+                // next to it -- AssetDatabase.CreateAsset would fail there.
+                directory = "Assets/AvatarVCS_Generated";
+                if (!AssetDatabase.IsValidFolder(directory))
+                    AssetDatabase.CreateFolder("Assets", "AvatarVCS_Generated");
+            }
             var assetPath = AssetDatabase.GenerateUniqueAssetPath($"{directory}/{duplicate.name}.mat");
             AssetDatabase.CreateAsset(duplicate, assetPath);
             AssetDatabase.SaveAssets();
