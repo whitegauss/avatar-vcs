@@ -139,6 +139,25 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void GuidRemapper_CyclicMapping_TerminatesSafelyWithoutInfiniteLoop()
+        {
+            // Simulate a circular mapping: A -> B -> A
+            GuidRemapper.AddMapping("cycle-a", "cycle-b");
+            GuidRemapper.AddMapping("cycle-b", "cycle-a");
+
+            // Must terminate without throwing or hanging, and resolve to one of the cycle nodes
+            var resolved = GuidRemapper.Resolve("cycle-a");
+            Assert.IsTrue(resolved == "cycle-a" || resolved == "cycle-b");
+        }
+
+        [Test]
+        public void GuidRemapper_NullOrEmptyGuid_ReturnsInputUnchanged()
+        {
+            Assert.IsNull(GuidRemapper.Resolve(null));
+            Assert.AreEqual("", GuidRemapper.Resolve(""));
+        }
+
+        [Test]
         public void CheckForChanges_ResolvesRecordedGuidThroughRemapping_BeforeWarningMissing()
         {
             // Record a version entry for a prefab, then simulate it having

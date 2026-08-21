@@ -51,6 +51,8 @@ namespace AvatarVcs.Editor.Operations
                 localRotation = container.localRotation,
                 localScale = container.localScale,
                 tag = container.gameObject.tag,
+                activeSelf = container.gameObject.activeSelf,
+                layer = container.gameObject.layer,
                 components = components,
             };
         }

@@ -258,7 +258,12 @@ namespace AvatarVcs.Editor.UI
 
                 var prevBg = GUI.backgroundColor;
                 if (selected) GUI.backgroundColor = new Color(0.6f, 0.8f, 1f);
-                if (GUILayout.Button(label) && !selected)
+                // A long commit message must not be allowed to expand past
+                // this panel's width -- without a bound here, IMGUI would
+                // widen this button to fit the text and push the delete
+                // button below out of the visible/scrollable area, which
+                // looks exactly like "there's no delete button".
+                if (GUILayout.Button(label, GUILayout.MaxWidth(180)) && !selected)
                 {
                     selectedCommitId = entry.commitId;
                     RecomputeSelectedDiff();

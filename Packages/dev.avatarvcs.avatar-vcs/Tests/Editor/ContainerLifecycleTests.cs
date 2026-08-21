@@ -175,6 +175,23 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void RestoreContainer_ReproducesActiveSelfAndLayer()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            container.gameObject.SetActive(false);
+            container.gameObject.layer = 3;
+
+            var snapshot = ContainerCapture.CaptureContainer(container.transform);
+            Assert.IsFalse(snapshot.activeSelf);
+            Assert.AreEqual(3, snapshot.layer);
+
+            var restored = ContainerRestore.InstantiateContainer(snapshot, root);
+            Assert.IsFalse(restored.activeSelf);
+            Assert.AreEqual(3, restored.layer);
+        }
+
+        [Test]
         public void FindEnclosingAvatarRoot_FromInsideAContainer_ResolvesToTheAvatar()
         {
             var root = ContainerManager.EnsureRoot(avatarRoot);
