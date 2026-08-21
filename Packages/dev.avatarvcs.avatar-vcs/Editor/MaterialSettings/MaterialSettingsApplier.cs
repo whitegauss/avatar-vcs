@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
@@ -57,13 +58,20 @@ namespace AvatarVcs.Editor.MaterialSettings
 
             // Reuse a previously-generated duplicate for this exact state if
             // it's still there, instead of creating another one on every
-            // checkout of the same commit.
+            // checkout of the same commit. Still re-applies state.properties
+            // onto it every time: a checkout is supposed to be a regenerate,
+            // not a one-time stamp -- if the duplicate was hand-edited (or
+            // came from a since-replaced commit that reused this guid), the
+            // recorded values must win, same as containers always destroying
+            // and rebuilding rather than trusting whatever's already there.
             if (!string.IsNullOrEmpty(state.generatedGuid))
             {
                 var existingPath = AssetDatabase.GUIDToAssetPath(state.generatedGuid);
                 var existing = string.IsNullOrEmpty(existingPath) ? null : AssetDatabase.LoadAssetAtPath<Material>(existingPath);
                 if (existing != null)
                 {
+                    ApplyProperties(existing, state.properties);
+                    AssetDatabase.SaveAssets();
                     PointRendererAt(renderer, state.slot, state.targetPath, existing);
                     return existing;
                 }
@@ -71,41 +79,7 @@ namespace AvatarVcs.Editor.MaterialSettings
 
             // Copy-constructing reads sourceMaterial but never writes to it.
             var duplicate = new Material(sourceMaterial) { name = sourceMaterial.name + "_avatarvcs" };
-
-            foreach (var property in state.properties)
-            {
-                if (!duplicate.HasProperty(property.name))
-                {
-                    Debug.LogWarning($"[AvatarVCS] Duplicate material has no property '{property.name}'; skipped.");
-                    continue;
-                }
-
-                // property.value ultimately comes from commit JSON on disk,
-                // which can be malformed independent of any deliberate
-                // tampering (crash mid-write, bad merge); a parse failure on
-                // one property must not abort duplicating/applying the rest
-                // of this material, let alone whatever destructive checkout
-                // is already underway around this call.
-                try
-                {
-                    switch (property.type)
-                    {
-                        case "color":
-                            duplicate.SetColor(property.name, ParseColor(property.value));
-                            break;
-                        case "float":
-                            duplicate.SetFloat(property.name, float.Parse(property.value, CultureInfo.InvariantCulture));
-                            break;
-                        default:
-                            Debug.LogWarning($"[AvatarVCS] Unsupported material property type '{property.type}' for '{property.name}' was skipped.");
-                            break;
-                    }
-                }
-                catch (Exception e) when (e is FormatException or OverflowException or IndexOutOfRangeException or ArgumentNullException)
-                {
-                    Debug.LogWarning($"[AvatarVCS] Could not parse material property '{property.name}' (type '{property.type}', value '{property.value}'): {e.Message}; skipped.");
-                }
-            }
+            ApplyProperties(duplicate, state.properties);
 
             var directory = System.IO.Path.GetDirectoryName(sourcePath)?.Replace('\\', '/');
             if (string.IsNullOrEmpty(directory)) directory = "Assets";
@@ -121,6 +95,44 @@ namespace AvatarVcs.Editor.MaterialSettings
             PointRendererAt(renderer, state.slot, state.targetPath, duplicate);
 
             return duplicate;
+        }
+
+        private static void ApplyProperties(Material material, List<MaterialPropertyValue> properties)
+        {
+            foreach (var property in properties)
+            {
+                if (!material.HasProperty(property.name))
+                {
+                    Debug.LogWarning($"[AvatarVCS] Duplicate material has no property '{property.name}'; skipped.");
+                    continue;
+                }
+
+                // property.value ultimately comes from commit JSON on disk,
+                // which can be malformed independent of any deliberate
+                // tampering (crash mid-write, bad merge); a parse failure on
+                // one property must not abort applying the rest of this
+                // material, let alone whatever destructive checkout is
+                // already underway around this call.
+                try
+                {
+                    switch (property.type)
+                    {
+                        case "color":
+                            material.SetColor(property.name, ParseColor(property.value));
+                            break;
+                        case "float":
+                            material.SetFloat(property.name, float.Parse(property.value, CultureInfo.InvariantCulture));
+                            break;
+                        default:
+                            Debug.LogWarning($"[AvatarVCS] Unsupported material property type '{property.type}' for '{property.name}' was skipped.");
+                            break;
+                    }
+                }
+                catch (Exception e) when (e is FormatException or OverflowException or IndexOutOfRangeException or ArgumentNullException)
+                {
+                    Debug.LogWarning($"[AvatarVCS] Could not parse material property '{property.name}' (type '{property.type}', value '{property.value}'): {e.Message}; skipped.");
+                }
+            }
         }
 
         private static void PointRendererAt(Renderer renderer, int slot, string targetPath, Material material)
