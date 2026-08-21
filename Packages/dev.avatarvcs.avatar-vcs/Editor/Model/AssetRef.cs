@@ -8,6 +8,5 @@ namespace AvatarVcs.Editor.Model
         public string key;
         public string guid;
         public long localId;
-        public bool sensitive;
     }
 }

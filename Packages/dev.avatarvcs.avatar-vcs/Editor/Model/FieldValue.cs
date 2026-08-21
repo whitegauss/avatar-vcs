@@ -8,6 +8,5 @@ namespace AvatarVcs.Editor.Model
         public string key;
         public string value;
         public string type;
-        public bool sensitive;
     }
 }
