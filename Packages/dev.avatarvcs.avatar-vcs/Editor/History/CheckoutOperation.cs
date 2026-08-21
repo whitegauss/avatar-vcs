@@ -120,8 +120,19 @@ namespace AvatarVcs.Editor.History
             foreach (var existing in ContainerManager.GetContainers(configRoot).ToList())
                 Undo.DestroyObjectImmediate(existing.gameObject);
 
-            foreach (var containerSnapshot in commit.containers)
-                ContainerRestore.InstantiateContainer(containerSnapshot, configRoot);
+            // Two passes across all containers, not one pass per container:
+            // a component on one container's root can reference an object
+            // inside a *different* container (design doc allows arbitrary
+            // component references there), which only resolves once every
+            // container's structure already exists -- instantiating and
+            // immediately applying one container's components before the
+            // next container is even created would fail to resolve such a
+            // reference depending on commit.containers' order.
+            var restoredContainers = commit.containers
+                .Select(snapshot => (snapshot, go: ContainerRestore.InstantiateContainerStructure(snapshot, configRoot)))
+                .ToList();
+            foreach (var (snapshot, go) in restoredContainers)
+                ContainerRestore.ApplyContainerComponents(snapshot, go, avatarRoot);
 
             foreach (var reference in commit.avatarReferences)
                 AvatarReferenceApplier.Apply(reference, avatarRoot.transform);

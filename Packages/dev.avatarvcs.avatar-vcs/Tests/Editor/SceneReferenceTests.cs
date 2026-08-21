@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.History;
+using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.Operations;
 using NUnit.Framework;
 using UnityEngine;
@@ -104,6 +106,39 @@ namespace AvatarVcs.Tests.Editor
             var state = ComponentCapturer.Capture(renderer, container.transform, avatarRoot.transform);
 
             Assert.IsFalse(state.sceneRefs.Any(s => s.key == "m_RootBone"));
+        }
+
+        [Test]
+        public void Checkout_ComponentReferencingAnotherContainer_ResolvesRegardlessOfContainerOrder()
+        {
+            // A component on one container's root can reference an object
+            // inside a *different* container (design doc allows arbitrary
+            // component references on a container root). Restoring
+            // container-by-container (instantiate structure, then
+            // immediately apply that container's components, then move to
+            // the next container) would fail to resolve this if the
+            // referencing container happens to come first in commit.containers
+            // -- the referenced container wouldn't exist yet. Deliberately
+            // ordering the referencer first below reproduces exactly that.
+            var avatarRoot = Spawn("Avatar");
+            var configRoot = ContainerManager.EnsureRoot(avatarRoot);
+            var containerA = ContainerManager.CreateContainer(configRoot, "container_a");
+            var containerB = ContainerManager.CreateContainer(configRoot, "container_b");
+
+            var renderer = containerA.AddComponent<SkinnedMeshRenderer>();
+            renderer.rootBone = containerB.transform; // cross-container scene reference
+
+            var snapshotA = ContainerCapture.CaptureContainer(containerA.transform, avatarRoot.transform);
+            var snapshotB = ContainerCapture.CaptureContainer(containerB.transform, avatarRoot.transform);
+            var commit = new Commit { containers = { snapshotA, snapshotB } }; // referencer (A) listed before referenced (B)
+
+            var result = CheckoutOperation.CheckoutWithoutAutoCommit(commit, avatarRoot);
+
+            Assert.IsTrue(result.IsSuccess);
+            var restoredA = configRoot.transform.Find("container_a");
+            var restoredB = configRoot.transform.Find("container_b");
+            var restoredRenderer = restoredA.GetComponent<SkinnedMeshRenderer>();
+            Assert.AreSame(restoredB, restoredRenderer.rootBone);
         }
     }
 }

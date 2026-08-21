@@ -22,13 +22,37 @@ namespace AvatarVcs.Editor.Operations
         /// its parent is used to resolve scene-reference fields that may
         /// point outside the container, per the EnsureRoot invariant that
         /// root is always parented directly under the avatar.
+        ///
+        /// Convenience wrapper for restoring a single container in
+        /// isolation (existing single-container callers, tests). A full
+        /// checkout instead calls InstantiateContainerStructure for every
+        /// container first, then ApplyContainerComponents for every
+        /// container second (see CheckoutOperation.ApplyCommitToScene) --
+        /// doing both passes per-container here would mean a component on
+        /// one container's root that references an object inside a
+        /// *different* container (not yet instantiated when this container's
+        /// components are applied) fails to resolve, even though both
+        /// containers exist by the end of the full checkout.
         /// </summary>
         public static GameObject InstantiateContainer(ContainerSnapshot snapshot, GameObject root)
         {
+            var containerGo = InstantiateContainerStructure(snapshot, root);
+            var avatarRoot = root.transform.parent != null ? root.transform.parent.gameObject : root;
+            ApplyContainerComponents(snapshot, containerGo, avatarRoot);
+            return containerGo;
+        }
+
+        /// <summary>
+        /// First pass: destroys any existing same-id container and rebuilds
+        /// its GameObject, transform, tag/layer/active state, marker, and
+        /// prefab instances -- everything except snapshot.components, which
+        /// ApplyContainerComponents applies as a separate second pass (see
+        /// InstantiateContainer's doc comment for why the split matters).
+        /// </summary>
+        public static GameObject InstantiateContainerStructure(ContainerSnapshot snapshot, GameObject root)
+        {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (root == null) throw new ArgumentNullException(nameof(root));
-
-            var avatarRoot = root.transform.parent != null ? root.transform.parent.gameObject : root;
 
             var existing = root.transform.Find(snapshot.containerId);
             if (existing != null)
@@ -61,14 +85,27 @@ namespace AvatarVcs.Editor.Operations
                 instance.transform.localScale = Vector3.one;
             }
 
+            return containerGo;
+        }
+
+        /// <summary>
+        /// Second pass: applies snapshot.components onto an already-built
+        /// containerGo (see InstantiateContainerStructure). Split out so a
+        /// full checkout can instantiate every container's structure before
+        /// applying any container's components -- see InstantiateContainer's
+        /// doc comment.
+        /// </summary>
+        public static void ApplyContainerComponents(ContainerSnapshot snapshot, GameObject containerGo, GameObject avatarRoot)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            if (containerGo == null) throw new ArgumentNullException(nameof(containerGo));
+
             foreach (var componentState in snapshot.components)
             {
                 var result = ComponentApplier.Apply(componentState, containerGo, avatarRoot, createIfMissing: true);
                 if (!result.IsSuccess)
                     Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{snapshot.containerId}': {result.Message}");
             }
-
-            return containerGo;
         }
 
         /// <summary>
