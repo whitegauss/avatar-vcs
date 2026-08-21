@@ -79,6 +79,7 @@ TestProject/                          # ローカル/CI 用の検証用 Unity �
 
 ## ドキュメント
 
+- [USAGE.md](USAGE.md) — 使い方ガイド(元の状態に戻す方法、コミット削除、比較モードなど)
 - [DesignDoc_avatar-vcs.md](DesignDoc_avatar-vcs.md) — 詳細設計書（v2、現行）
 - [PRD_avatar-vcs.md](PRD_avatar-vcs.md) — プロダクト要求仕様
 - [DesignDoc_v1_superseded.md](DesignDoc_v1_superseded.md) — 旧設計（参考、廃止済み）

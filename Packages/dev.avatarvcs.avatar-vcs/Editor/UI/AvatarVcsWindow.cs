@@ -214,6 +214,7 @@ namespace AvatarVcs.Editor.UI
         {
             EditorGUILayout.BeginVertical(GUILayout.Width(220));
             EditorGUILayout.LabelField("History", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("* = current branch head (can't be deleted)", EditorStyles.miniLabel);
 
             historyScroll = EditorGUILayout.BeginScrollView(historyScroll);
             var headId = CurrentHeadId();
@@ -233,9 +234,16 @@ namespace AvatarVcs.Editor.UI
                 }
                 GUI.backgroundColor = prevBg;
 
+                // Deleting a branch head would leave that branch pointing at
+                // nothing. Checking out a different commit first moves the
+                // head away, which is what the tooltip below points users at
+                // instead of a silently-disabled button.
                 var isHead = entry.commitId == headId;
+                var deleteContent = isHead
+                    ? new GUIContent("x", "Can't delete: this is the current branch's head. Checkout a different commit first to move the head away, then delete it.")
+                    : new GUIContent("x", "Delete this commit (and any duplicate assets generated only for it).");
                 GUI.enabled = !isHead;
-                if (GUILayout.Button("x", GUILayout.Width(20)))
+                if (GUILayout.Button(deleteContent, GUILayout.Width(20)))
                     DeleteCommit(entry.commitId);
                 GUI.enabled = true;
 
@@ -564,7 +572,12 @@ namespace AvatarVcs.Editor.UI
             }
             catch (InvalidOperationException e)
             {
-                EditorUtility.DisplayDialog("Delete Failed", e.Message, "OK");
+                // The underlying message mentions a "force" escape hatch
+                // that only exists in the C# API, not this window; steer
+                // the user at the one path actually available here.
+                EditorUtility.DisplayDialog("Delete Failed",
+                    e.Message + "\n\nSwitch to that branch, checkout a different commit on it, then come back and delete this one.",
+                    "OK");
                 return;
             }
 
