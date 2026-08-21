@@ -13,7 +13,12 @@ Thumbs.db
 obj/
 bin/
 
-# Local reviews and temporary docs
+# Internal-only docs -- kept locally, not published (README.md is the
+# only markdown file meant to be public)
+DesignDoc_avatar-vcs.md
+DesignDoc_v1_superseded.md
+PRD_avatar-vcs.md
+USAGE.md
 CODE_REVIEW.md
 TODO.md
 .agents/
