@@ -115,6 +115,49 @@ namespace AvatarVcs.Tests.Editor
             Assert.Throws<ArgumentException>(() => CommitStore.LoadIndex("../../../outside"));
         }
 
+        [Test]
+        public void CommitStore_CorruptCommitFile_ReturnsNullInsteadOfThrowing()
+        {
+            // Simulates a crash mid-write or a bad manual/merge edit leaving
+            // truncated/malformed JSON on disk.
+            var avatar = SpawnAvatar("Avatar");
+            var commit = BranchManager.Commit(avatar, "init");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            var commitPath = $"{CommitStore.GetAvatarDir(avatarGuid)}/commits/{commit.commitId}.json";
+            System.IO.File.WriteAllText(commitPath, "{ not valid json");
+
+            Commit loaded = null;
+            Assert.DoesNotThrow(() => loaded = CommitStore.LoadCommit(avatarGuid, commit.commitId));
+            Assert.IsNull(loaded);
+        }
+
+        [Test]
+        public void CommitStore_CorruptIndexFile_ReturnsEmptyIndexInsteadOfThrowing()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            BranchManager.Commit(avatar, "init");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            var indexPath = $"{CommitStore.GetAvatarDir(avatarGuid)}/index.json";
+            System.IO.File.WriteAllText(indexPath, "not json at all");
+
+            CommitIndex index = null;
+            Assert.DoesNotThrow(() => index = CommitStore.LoadIndex(avatarGuid));
+            Assert.IsNotNull(index);
+            Assert.IsEmpty(index.entries);
+        }
+
+        [Test]
+        public void CommitStore_SaveCommit_DoesNotLeaveTempFileBehind()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var commit = BranchManager.Commit(avatar, "init");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            var commitPath = $"{CommitStore.GetAvatarDir(avatarGuid)}/commits/{commit.commitId}.json";
+
+            Assert.IsTrue(System.IO.File.Exists(commitPath));
+            Assert.IsFalse(System.IO.File.Exists($"{commitPath}.tmp"), "the atomic-write temp file must be swapped away, not left behind");
+        }
+
         #endregion
 
         #region BranchManager Edge Cases

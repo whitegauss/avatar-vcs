@@ -55,6 +55,47 @@ namespace AvatarVcs.Editor.History
             return $"{AvatarsRoot}/{avatarGuid}";
         }
 
+        /// <summary>
+        /// Writes via a temp file in the same directory, then swaps it into
+        /// place -- a crash or disk-full partway through leaves either the
+        /// old content or the new content at path, never a truncated file.
+        /// File.WriteAllText directly to the final path had no such
+        /// guarantee, and a truncated JSON file permanently broke every
+        /// future load for that avatar (JsonUtility.FromJson throwing, see
+        /// TryLoadJson below).
+        /// </summary>
+        private static void WriteAtomically(string path, string content)
+        {
+            var tempPath = $"{path}.tmp";
+            File.WriteAllText(tempPath, content);
+            if (File.Exists(path))
+                File.Replace(tempPath, path, null);
+            else
+                File.Move(tempPath, path);
+        }
+
+        /// <summary>
+        /// JsonUtility.FromJson throws on malformed JSON (e.g. a file
+        /// truncated by a crash mid-write, or a bad manual/merge edit).
+        /// Returns default(T) and warns instead of propagating -- every
+        /// caller already treats "file doesn't exist" as a recoverable,
+        /// often totally normal case (a fresh avatar's history), so a
+        /// corrupt-but-present file should degrade the same way rather than
+        /// permanently breaking the window for that avatar.
+        /// </summary>
+        private static T TryLoadJson<T>(string path)
+        {
+            try
+            {
+                return JsonUtility.FromJson<T>(File.ReadAllText(path));
+            }
+            catch (Exception e) when (e is ArgumentException or IOException)
+            {
+                Debug.LogWarning($"[AvatarVCS] Could not parse '{path}' as {typeof(T).Name}; treating as missing. {e.Message}");
+                return default;
+            }
+        }
+
         public static void SaveCommit(string avatarGuid, Commit commit)
         {
             if (commit == null) throw new ArgumentNullException(nameof(commit));
@@ -62,7 +103,7 @@ namespace AvatarVcs.Editor.History
 
             var commitsDir = $"{GetAvatarDir(avatarGuid)}/commits";
             Directory.CreateDirectory(commitsDir);
-            File.WriteAllText($"{commitsDir}/{commit.commitId}.json", JsonUtility.ToJson(commit, true));
+            WriteAtomically($"{commitsDir}/{commit.commitId}.json", JsonUtility.ToJson(commit, true));
 
             var index = LoadIndex(avatarGuid);
             index.entries.RemoveAll(e => e.commitId == commit.commitId);
@@ -91,33 +132,33 @@ namespace AvatarVcs.Editor.History
         {
             if (!IsValidIdentifierShape(commitId)) return null;
             var path = $"{GetAvatarDir(avatarGuid)}/commits/{commitId}.json";
-            return File.Exists(path) ? JsonUtility.FromJson<Commit>(File.ReadAllText(path)) : null;
+            return File.Exists(path) ? TryLoadJson<Commit>(path) : null;
         }
 
         public static CommitIndex LoadIndex(string avatarGuid)
         {
             var path = $"{GetAvatarDir(avatarGuid)}/index.json";
-            return File.Exists(path) ? JsonUtility.FromJson<CommitIndex>(File.ReadAllText(path)) : new CommitIndex();
+            return (File.Exists(path) ? TryLoadJson<CommitIndex>(path) : null) ?? new CommitIndex();
         }
 
         private static void SaveIndex(string avatarGuid, CommitIndex index)
         {
             var dir = GetAvatarDir(avatarGuid);
             Directory.CreateDirectory(dir);
-            File.WriteAllText($"{dir}/index.json", JsonUtility.ToJson(index, true));
+            WriteAtomically($"{dir}/index.json", JsonUtility.ToJson(index, true));
         }
 
         public static BranchConfig LoadConfig(string avatarGuid)
         {
             var path = $"{GetAvatarDir(avatarGuid)}/config.json";
-            return File.Exists(path) ? JsonUtility.FromJson<BranchConfig>(File.ReadAllText(path)) : new BranchConfig();
+            return (File.Exists(path) ? TryLoadJson<BranchConfig>(path) : null) ?? new BranchConfig();
         }
 
         public static void SaveConfig(string avatarGuid, BranchConfig config)
         {
             var dir = GetAvatarDir(avatarGuid);
             Directory.CreateDirectory(dir);
-            File.WriteAllText($"{dir}/config.json", JsonUtility.ToJson(config, true));
+            WriteAtomically($"{dir}/config.json", JsonUtility.ToJson(config, true));
         }
 
         /// <summary>
