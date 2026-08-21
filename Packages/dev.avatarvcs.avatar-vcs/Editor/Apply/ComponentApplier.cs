@@ -76,6 +76,12 @@ namespace AvatarVcs.Editor.Apply
 
             foreach (var field in state.fields)
             {
+                if (ReservedPropertyNames.Names.Contains(field.key))
+                {
+                    Debug.LogWarning($"[AvatarVCS] Refusing to write reserved property '{field.key}' on {state.type} at '{state.path}'; skipped.");
+                    continue;
+                }
+
                 var prop = so.FindProperty(field.key);
                 if (prop == null)
                 {
@@ -88,6 +94,18 @@ namespace AvatarVcs.Editor.Apply
 
             foreach (var assetRef in state.assetRefs)
             {
+                // ComponentCapturer never captures these (identity/linkage
+                // fields, not configuration), so a value for one here can
+                // only come from somewhere other than this tool's own
+                // capture -- a hand-edited or corrupted commit file. Writing
+                // e.g. m_Script would silently change which script drives
+                // this component.
+                if (ReservedPropertyNames.Names.Contains(assetRef.key))
+                {
+                    Debug.LogWarning($"[AvatarVCS] Refusing to write reserved property '{assetRef.key}' on {state.type} at '{state.path}'; skipped.");
+                    continue;
+                }
+
                 var prop = so.FindProperty(assetRef.key);
                 if (prop == null)
                 {
@@ -102,6 +120,12 @@ namespace AvatarVcs.Editor.Apply
 
             foreach (var sceneRef in state.sceneRefs)
             {
+                if (ReservedPropertyNames.Names.Contains(sceneRef.key))
+                {
+                    Debug.LogWarning($"[AvatarVCS] Refusing to write reserved property '{sceneRef.key}' on {state.type} at '{state.path}'; skipped.");
+                    continue;
+                }
+
                 var prop = so.FindProperty(sceneRef.key);
                 if (prop == null)
                 {
