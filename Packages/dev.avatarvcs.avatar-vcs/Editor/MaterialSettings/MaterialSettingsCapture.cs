@@ -35,10 +35,8 @@ namespace AvatarVcs.Editor.MaterialSettings
                 shader = shaderName,
             };
 
-            foreach (var (name, type) in ShaderPropertyMap.GetProperties(shaderName))
+            foreach (var (name, type) in ShaderPropertyMap.GetProperties(material.shader))
             {
-                if (!material.HasProperty(name)) continue; // shader may not declare every mapped property
-
                 var value = type switch
                 {
                     "color" => ColorToString(material.GetColor(name)),
