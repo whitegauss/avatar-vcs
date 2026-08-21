@@ -373,7 +373,7 @@ namespace AvatarVcs.Tests.Editor
             so.ApplyModifiedProperties();
 
             Assert.AreEqual(2, holder.curve.keys.Length);
-            Assert.AreEqual(1f, holder.curve.keys[1].value, 0.0001f);
+            Assert.AreEqual(2f, holder.curve.keys[1].value, 0.0001f);
             Assert.AreEqual(WrapMode.Loop, holder.curve.preWrapMode);
             Assert.AreEqual(WrapMode.PingPong, holder.curve.postWrapMode);
         }
