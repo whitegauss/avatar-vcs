@@ -37,6 +37,47 @@ namespace AvatarVcs.Editor.Core
             return rootGo;
         }
 
+        /// <summary>
+        /// EnsureRoot, plus (only on the root's actual first creation)
+        /// AvatarVcsTrackedReference on the avatar root itself and on every
+        /// top-level child that already exists -- issue #46: most users
+        /// want their avatar body/armature/accessories tracked by default
+        /// (e.g. toggling a default accessory on/off), rather than having
+        /// to remember to opt each one in via Track Properties Here, and
+        /// some assets (bone-attached colliders/accessories) can only be
+        /// placed directly under Armature, bypassing container management
+        /// entirely -- untracked, their changes wouldn't be recorded at
+        /// all. Kept out of EnsureRoot itself for the same reason
+        /// EnsureRootAndDefaultContainer is -- see that method's doc
+        /// comment.
+        /// </summary>
+        public static GameObject EnsureRootWithDefaultTracking(GameObject avatarRoot)
+        {
+            if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
+
+            var isNewRoot = FindRoot(avatarRoot) == null;
+            var root = EnsureRoot(avatarRoot);
+
+            if (isNewRoot)
+            {
+                TrackIfUntracked(avatarRoot);
+                for (var i = 0; i < avatarRoot.transform.childCount; i++)
+                {
+                    var child = avatarRoot.transform.GetChild(i).gameObject;
+                    if (child == root) continue; // [AvatarVCS] is container-managed, never tracked this way
+                    TrackIfUntracked(child);
+                }
+            }
+
+            return root;
+        }
+
+        private static void TrackIfUntracked(GameObject go)
+        {
+            if (go.GetComponent<AvatarVcsTrackedReference>() == null)
+                Undo.AddComponent<AvatarVcsTrackedReference>(go);
+        }
+
         public static GameObject FindRoot(GameObject avatarRoot)
         {
             if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
