@@ -2,7 +2,7 @@ using System;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
-using AvatarVcs.Editor.Serialization;
+using AvatarVcs.Editor.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -117,23 +117,11 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
-        public void TypeResolver_EmptyOrNull_ReturnsNotFound()
+        public void TypeResolver_EmptyOrNull_ReturnsNull()
         {
-            Assert.AreEqual(TypeResolutionResult.NotFound, TypeResolver.Resolve(""));
-            Assert.AreEqual(TypeResolutionResult.NotFound, TypeResolver.Resolve("   "));
-        }
-
-        [Test]
-        public void FieldCodec_Decode_NullOrInvalidString_ReturnsSafeDefault()
-        {
-            var strVal = FieldCodec.Decode(new FieldValue { key = "test", type = "string", value = null });
-            Assert.IsNull(strVal);
-
-            var intVal = FieldCodec.Decode(new FieldValue { key = "test", type = "int", value = "invalid_number" });
-            Assert.AreEqual(0, intVal);
-
-            var boolVal = FieldCodec.Decode(new FieldValue { key = "test", type = "bool", value = "invalid_bool" });
-            Assert.AreEqual(false, boolVal);
+            Assert.IsNull(TypeResolver.Resolve(null));
+            Assert.IsNull(TypeResolver.Resolve(""));
+            Assert.IsNull(TypeResolver.Resolve("   "));
         }
     }
 }
