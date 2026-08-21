@@ -6,6 +6,7 @@ using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace AvatarVcs.Tests.Editor
 {
@@ -192,6 +193,37 @@ namespace AvatarVcs.Tests.Editor
             var changed = diffs.Single(d => d.containerId == "to_be_changed");
             Assert.AreEqual(DiffKind.Changed, changed.kind);
             Assert.IsTrue(changed.changeNotes.Any(n => n.Contains("transform")));
+        }
+
+        #endregion
+
+        #region CheckoutOperation Edge Cases
+
+        [Test]
+        public void CheckoutOperation_MaterialApplyFailure_WarnsButDoesNotAbortCheckout()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var root = ContainerManager.EnsureRoot(avatar);
+            ContainerManager.CreateContainer(root, "outfit_a");
+            var commit = BranchManager.Commit(avatar, "init");
+
+            // Deliberately unresolvable target -- MaterialSettingsApplier
+            // throws for this instead of silently no-op'ing.
+            commit.materialSettings.Add(new MaterialSettingsState
+            {
+                targetPath = "NonExistentPath",
+                slot = 0,
+                sourceMaterialGuid = "deadbeef00000000000000000000000",
+                shader = "lilToon",
+            });
+
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex("Failed to apply material settings"));
+
+            var result = CheckoutOperation.CheckoutWithoutAutoCommit(commit, avatar);
+
+            Assert.IsTrue(result.IsSuccess,
+                "one bad material setting must not abort the whole checkout, leaving containers already destroyed/regenerated but nothing else applied");
         }
 
         #endregion
