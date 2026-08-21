@@ -51,7 +51,7 @@ Hierarchy でアバターのルート GameObject を選択し、`GameObject > Av
 
 ### 2. コミットする
 
-`GameObject > AvatarVCS > Commit Current State`、または `Window > AvatarVCS` から開く EditorWindow の Commit バーで、現在のコンテナ構成をコミットとして記録します。
+`Window > AvatarVCS` から開く EditorWindow の Commit バーで、現在のコンテナ構成をコミットとして記録します。コミット・checkout・ブランチ操作はすべてこの EditorWindow から行います(選択中のオブジェクトをそのまま「アバター」として扱ってしまう誤操作を防ぐため、GameObject メニューには置いていません)。
 
 ### 3. ブランチ・履歴を操作する
 

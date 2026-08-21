@@ -175,6 +175,36 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void FindEnclosingAvatarRoot_FromInsideAContainer_ResolvesToTheAvatar()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, container.transform);
+
+            Assert.AreSame(avatarRoot, ContainerManager.FindEnclosingAvatarRoot(instance),
+                "an object inside a container should resolve up to the avatar, not be mistaken for one itself");
+            Assert.AreSame(avatarRoot, ContainerManager.FindEnclosingAvatarRoot(container),
+                "the container itself should also resolve to the avatar");
+            Assert.AreSame(avatarRoot, ContainerManager.FindEnclosingAvatarRoot(root),
+                "the [AvatarVCS] root itself should resolve to the avatar (its parent)");
+        }
+
+        [Test]
+        public void FindEnclosingAvatarRoot_UnrelatedObject_ReturnsNull()
+        {
+            var unrelated = new GameObject("SomeOutfitPieceNotYetTracked");
+            try
+            {
+                Assert.IsNull(ContainerManager.FindEnclosingAvatarRoot(unrelated),
+                    "an object with no AvatarVCS structure anywhere in its ancestry has nothing to resolve to");
+            }
+            finally
+            {
+                Object.DestroyImmediate(unrelated);
+            }
+        }
+
+        [Test]
         public void HasMissingPrefabs_DetectsUnresolvableGuid()
         {
             // Uses its own private prefab (rather than the shared fixture one)

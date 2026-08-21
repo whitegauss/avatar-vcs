@@ -1,5 +1,4 @@
 using AvatarVcs.Editor.Core;
-using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.UI;
 using AvatarVcs.Runtime;
 using UnityEditor;
@@ -8,21 +7,21 @@ using UnityEngine;
 namespace AvatarVcs.Editor.Menu
 {
     /// <summary>
-    /// Manual smoke-test entry points. The automated coverage lives in
-    /// Tests/Editor/; this menu is for poking the tool by hand against a real
-    /// avatar in the Hierarchy.
+    /// GameObject context-menu entry points for initial container setup and
+    /// opening the main UI. Commit/checkout/branch history live only in
+    /// AvatarVcsWindow now -- they need the window's diff/branch context to
+    /// use safely, and duplicating them here as one-shot commands was also
+    /// how a raw Hierarchy selection (e.g. a single outfit item, not the
+    /// avatar) could silently become the tracked "avatar" for a whole new,
+    /// unrelated commit history.
     /// </summary>
     public static class AvatarVcsMenu
     {
         [MenuItem("GameObject/AvatarVCS/Ensure Root", false, 0)]
         private static void EnsureRootMenuItem()
         {
-            var target = Selection.activeGameObject;
-            if (target == null)
-            {
-                Debug.LogWarning("[AvatarVCS] Select the avatar root GameObject first.");
-                return;
-            }
+            var target = ResolveAvatarRootWithConfirmation(Selection.activeGameObject, "Ensure Root");
+            if (target == null) return;
 
             var root = ContainerManager.EnsureRoot(target);
             Selection.activeGameObject = root;
@@ -34,10 +33,11 @@ namespace AvatarVcs.Editor.Menu
         [MenuItem("GameObject/AvatarVCS/Create Container", false, 1)]
         private static void CreateContainerMenuItem()
         {
-            var root = Selection.activeGameObject;
-            if (root == null || root.GetComponent<AvatarVcsRoot>() == null)
+            var root = ResolveExistingRoot(Selection.activeGameObject);
+            if (root == null)
             {
-                Debug.LogWarning($"[AvatarVCS] Select the '{ContainerManager.RootName}' root GameObject first.");
+                Debug.LogWarning($"[AvatarVCS] Select the avatar root (or its '{ContainerManager.RootName}' child) first. "
+                    + "Run Ensure Root first if it doesn't exist yet.");
                 return;
             }
 
@@ -48,64 +48,60 @@ namespace AvatarVcs.Editor.Menu
 
         [MenuItem("GameObject/AvatarVCS/Create Container", true)]
         private static bool ValidateCreateContainerMenuItem() =>
-            Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<AvatarVcsRoot>() != null;
+            ResolveExistingRoot(Selection.activeGameObject) != null;
 
-        [MenuItem("GameObject/AvatarVCS/Commit Current State", false, 2)]
-        private static void CommitMenuItem()
-        {
-            var target = Selection.activeGameObject;
-            if (target == null)
-            {
-                Debug.LogWarning("[AvatarVCS] Select the avatar root GameObject first.");
-                return;
-            }
-
-            var commit = BranchManager.Commit(target, "Manual commit");
-            Debug.Log($"[AvatarVCS] Committed '{commit.commitId}' on branch '{commit.branch}' ({commit.containers.Count} container(s)).");
-        }
-
-        [MenuItem("GameObject/AvatarVCS/Commit Current State", true)]
-        private static bool ValidateCommitMenuItem() => Selection.activeGameObject != null;
-
-        [MenuItem("GameObject/AvatarVCS/List Commits", false, 3)]
-        private static void ListCommitsMenuItem()
-        {
-            var target = Selection.activeGameObject;
-            if (target == null)
-            {
-                Debug.LogWarning("[AvatarVCS] Select the avatar root GameObject first.");
-                return;
-            }
-
-            var avatarGuid = ContainerManager.GetAvatarGuid(target);
-            var index = CommitStore.LoadIndex(avatarGuid);
-            if (index.entries.Count == 0)
-            {
-                Debug.Log("[AvatarVCS] No commits yet.");
-                return;
-            }
-
-            foreach (var entry in index.entries)
-                Debug.Log($"[AvatarVCS] {entry.commitId} ({entry.branch}) {entry.timestamp}: {entry.message}");
-        }
-
-        [MenuItem("GameObject/AvatarVCS/List Commits", true)]
-        private static bool ValidateListCommitsMenuItem() => Selection.activeGameObject != null;
-
-        [MenuItem("GameObject/AvatarVCS/Open Window", false, 4)]
+        [MenuItem("GameObject/AvatarVCS/Open Window", false, 2)]
         private static void OpenWindowMenuItem()
         {
-            var target = Selection.activeGameObject;
-            if (target == null)
-            {
-                Debug.LogWarning("[AvatarVCS] Select the avatar root GameObject first.");
-                return;
-            }
+            var target = ResolveAvatarRootWithConfirmation(Selection.activeGameObject, "Open Window");
+            if (target == null) return;
 
             AvatarVcsWindow.OpenFor(target);
         }
 
         [MenuItem("GameObject/AvatarVCS/Open Window", true)]
         private static bool ValidateOpenWindowMenuItem() => Selection.activeGameObject != null;
+
+        /// <summary>
+        /// selection accepted as-is if it already IS the "[AvatarVCS]" root;
+        /// otherwise resolved from the avatar root that owns it, if any.
+        /// Returns null if neither exists yet.
+        /// </summary>
+        private static GameObject ResolveExistingRoot(GameObject selection)
+        {
+            if (selection == null) return null;
+            if (selection.GetComponent<AvatarVcsRoot>() != null) return selection;
+            return ContainerManager.FindRoot(selection);
+        }
+
+        /// <summary>
+        /// Resolves the avatar to operate on from a raw Hierarchy selection.
+        /// If selection is already inside an existing AvatarVCS structure (a
+        /// container, something inside one, or the "[AvatarVCS]" root
+        /// itself), walks up to the actual owning avatar automatically. If
+        /// selection has no existing structure at all, confirms with the
+        /// user before treating it as a brand new avatar root -- it could
+        /// just as easily be a single outfit item as the avatar itself.
+        /// </summary>
+        private static GameObject ResolveAvatarRootWithConfirmation(GameObject selection, string actionLabel)
+        {
+            if (selection == null)
+            {
+                Debug.LogWarning("[AvatarVCS] Select the avatar root GameObject first.");
+                return null;
+            }
+
+            var enclosing = ContainerManager.FindEnclosingAvatarRoot(selection);
+            if (enclosing != null) return enclosing;
+
+            if (ContainerManager.FindRoot(selection) != null) return selection;
+
+            return EditorUtility.DisplayDialog("Start Tracking This Object?",
+                    $"'{selection.name}' has no AvatarVCS history yet. {actionLabel} will start tracking IT as the avatar.\n\n"
+                    + "If you meant to select your actual avatar's root GameObject (or something inside its existing containers), cancel and select that instead.",
+                    "Start Tracking", "Cancel")
+                ? selection
+                : null;
+        }
     }
 }
