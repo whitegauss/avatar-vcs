@@ -22,12 +22,8 @@ namespace AvatarVcs.Editor.UI
             if (newIndex != currentIndex && newIndex >= 0)
             {
                 var target = branchNames[newIndex];
-                if (EditorUtility.DisplayDialog("Switch Branch",
-                        $"Switch from '{config.currentBranch}' to '{target}'? Current changes will be auto-committed first.",
-                        "Switch", "Cancel"))
-                {
+                if (ConfirmDiscardIfUncommitted("Switch Branch", $"Switch from '{config.currentBranch}' to '{target}'?"))
                     RunCheckout(() => BranchManager.SwitchBranch(avatarRoot, target));
-                }
             }
 
             if (GUILayout.Button("+ New Branch", GUILayout.Width(100)))
@@ -94,9 +90,25 @@ namespace AvatarVcs.Editor.UI
         private void DrawCheckoutBar()
         {
             GUI.enabled = selectedCommitId != null && selectedCommitId != CurrentHeadId();
-            if (GUILayout.Button("Checkout Selected Commit"))
+            if (GUILayout.Button("Checkout Selected Commit")
+                && ConfirmDiscardIfUncommitted("Checkout Commit", "Checkout the selected commit?"))
                 RunCheckout(() => BranchManager.RestoreToCommit(avatarRoot, selectedCommitId));
             GUI.enabled = true;
+        }
+
+        // Branch switch and checkout-selected-commit both overwrite the
+        // scene without taking a safety-net commit first (design choice:
+        // Ctrl+Z is the recovery path for uncommitted work, not another
+        // [auto] commit cluttering history), so an actual uncommitted edit
+        // gets an explicit heads-up instead of vanishing silently.
+        private bool ConfirmDiscardIfUncommitted(string title, string action)
+        {
+            if (!HasUncommittedChanges(CurrentHeadId()))
+                return EditorUtility.DisplayDialog(title, action, "OK", "Cancel");
+
+            return EditorUtility.DisplayDialog(title,
+                action + "\n\nUncommitted changes in the scene will be discarded (undo with Ctrl+Z if needed).",
+                "Discard and Continue", "Cancel");
         }
     }
 }

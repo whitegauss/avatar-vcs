@@ -66,9 +66,11 @@ namespace AvatarVcs.Editor.History
         }
 
         /// <summary>
-        /// Checks out targetBranch's head commit and makes it current. The
-        /// source branch's head is updated to the auto-commit taken before
-        /// switching, so in-progress work on it isn't lost.
+        /// Checks out targetBranch's head commit and makes it current.
+        /// Doesn't take a safety-net auto-commit first -- unlike a
+        /// container's destroy/regenerate, checkout only overwrites
+        /// GameObjects/values Unity's own Undo already tracks, so Ctrl+Z is
+        /// the recovery path for uncommitted work, not another commit.
         /// </summary>
         public static CheckoutResult SwitchBranch(GameObject avatarRoot, string targetBranch)
         {
@@ -85,13 +87,9 @@ namespace AvatarVcs.Editor.History
             if (targetCommit == null)
                 throw new InvalidOperationException($"Commit '{targetEntry.commitId}' for branch '{targetBranch}' could not be loaded.");
 
-            var sourceBranch = config.currentBranch;
-            var currentHead = FindEntry(config, sourceBranch)?.commitId;
-
-            var result = CheckoutOperation.Checkout(targetCommit, avatarRoot, sourceBranch, currentHead);
+            var result = CheckoutOperation.CheckoutWithoutAutoCommit(targetCommit, avatarRoot);
             if (!result.IsSuccess) return result;
 
-            SetBranchHead(config, sourceBranch, result.AutoCommitId);
             config.currentBranch = targetBranch;
             CommitStore.SaveConfig(avatarGuid, config);
 
@@ -102,8 +100,7 @@ namespace AvatarVcs.Editor.History
         /// Restores the current branch to an arbitrary past commit (not
         /// necessarily its current head) -- e.g. picking an older checkpoint
         /// from history in the UI. The current branch's head moves to
-        /// commitId; the auto-commit taken beforehand is preserved but left
-        /// orphaned (design doc 4: orphan commit GC is out of MVP scope).
+        /// commitId. No safety-net auto-commit first; see SwitchBranch.
         /// </summary>
         public static CheckoutResult RestoreToCommit(GameObject avatarRoot, string commitId)
         {
@@ -114,8 +111,7 @@ namespace AvatarVcs.Editor.History
             if (targetCommit == null)
                 throw new InvalidOperationException($"Commit '{commitId}' could not be loaded.");
 
-            var currentHead = FindEntry(config, config.currentBranch)?.commitId;
-            var result = CheckoutOperation.Checkout(targetCommit, avatarRoot, config.currentBranch, currentHead);
+            var result = CheckoutOperation.CheckoutWithoutAutoCommit(targetCommit, avatarRoot);
             if (!result.IsSuccess) return result;
 
             SetBranchHead(config, config.currentBranch, commitId);
