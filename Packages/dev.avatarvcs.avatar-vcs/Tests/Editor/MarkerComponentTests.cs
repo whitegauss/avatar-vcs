@@ -40,6 +40,19 @@ namespace AvatarVcs.Tests.Editor
                 .Invoke(c, null);
 
         [Test]
+        public void AvatarVcsRoot_AssignGuid_RejectsNonGuidShapedValue()
+        {
+            // avatarGuid keys CommitStore's on-disk paths; catching a
+            // malformed value here (this tool's own generation path) is
+            // defense-in-depth on top of CommitStore's own validation at the
+            // point avatarGuid actually becomes a path.
+            var root = Spawn("Root").AddComponent<AvatarVcsRoot>();
+
+            Assert.Throws<System.ArgumentException>(() => root.AssignGuid("../../../outside"));
+            Assert.Throws<System.ArgumentException>(() => root.AssignGuid("too-short"));
+        }
+
+        [Test]
         public void AvatarVcsContainer_AssignGuid_IsImmutable()
         {
             var container = Spawn("Container").AddComponent<AvatarVcsContainer>();
@@ -85,17 +98,18 @@ namespace AvatarVcs.Tests.Editor
         {
             var parent = Spawn("Scene");
             var avatarA = Spawn("Avatar", parent.transform);
+            const string sharedGuid = "0123456789abcdef0123456789abcdef"; // valid shape: AssignGuid now enforces 32-char lowercase hex
             var rootA = Spawn(ContainerManager.RootName, avatarA.transform).AddComponent<AvatarVcsRoot>();
-            rootA.AssignGuid("shared-avatar-guid");
+            rootA.AssignGuid(sharedGuid);
 
             var avatarB = Spawn("Avatar (1)", parent.transform); // simulates duplicating the whole avatar
             var rootB = Spawn(ContainerManager.RootName, avatarB.transform).AddComponent<AvatarVcsRoot>();
-            rootB.AssignGuid("shared-avatar-guid");
+            rootB.AssignGuid(sharedGuid);
 
             InvokeOnValidate(rootB);
 
-            Assert.AreEqual("shared-avatar-guid", rootA.AvatarGuid, "the original avatar keeps its guid");
-            Assert.AreNotEqual("shared-avatar-guid", rootB.AvatarGuid, "the duplicated avatar must regenerate");
+            Assert.AreEqual(sharedGuid, rootA.AvatarGuid, "the original avatar keeps its guid");
+            Assert.AreNotEqual(sharedGuid, rootB.AvatarGuid, "the duplicated avatar must regenerate");
         }
     }
 }

@@ -80,17 +80,30 @@ namespace AvatarVcs.Editor.MaterialSettings
                     continue;
                 }
 
-                switch (property.type)
+                // property.value ultimately comes from commit JSON on disk,
+                // which can be malformed independent of any deliberate
+                // tampering (crash mid-write, bad merge); a parse failure on
+                // one property must not abort duplicating/applying the rest
+                // of this material, let alone whatever destructive checkout
+                // is already underway around this call.
+                try
                 {
-                    case "color":
-                        duplicate.SetColor(property.name, ParseColor(property.value));
-                        break;
-                    case "float":
-                        duplicate.SetFloat(property.name, float.Parse(property.value, CultureInfo.InvariantCulture));
-                        break;
-                    default:
-                        Debug.LogWarning($"[AvatarVCS] Unsupported material property type '{property.type}' for '{property.name}' was skipped.");
-                        break;
+                    switch (property.type)
+                    {
+                        case "color":
+                            duplicate.SetColor(property.name, ParseColor(property.value));
+                            break;
+                        case "float":
+                            duplicate.SetFloat(property.name, float.Parse(property.value, CultureInfo.InvariantCulture));
+                            break;
+                        default:
+                            Debug.LogWarning($"[AvatarVCS] Unsupported material property type '{property.type}' for '{property.name}' was skipped.");
+                            break;
+                    }
+                }
+                catch (Exception e) when (e is FormatException or OverflowException or IndexOutOfRangeException or ArgumentNullException)
+                {
+                    Debug.LogWarning($"[AvatarVCS] Could not parse material property '{property.name}' (type '{property.type}', value '{property.value}'): {e.Message}; skipped.");
                 }
             }
 
