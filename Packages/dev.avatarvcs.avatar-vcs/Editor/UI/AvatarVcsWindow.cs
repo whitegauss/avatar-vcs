@@ -214,6 +214,7 @@ namespace AvatarVcs.Editor.UI
         {
             EditorGUILayout.BeginVertical(GUILayout.Width(220));
             EditorGUILayout.LabelField("History", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("* = current branch head (can't be deleted)", EditorStyles.miniLabel);
 
             historyScroll = EditorGUILayout.BeginScrollView(historyScroll);
             var headId = CurrentHeadId();
@@ -233,11 +234,24 @@ namespace AvatarVcs.Editor.UI
                 }
                 GUI.backgroundColor = prevBg;
 
+                // Deleting a branch head would leave that branch pointing at
+                // nothing. The button stays enabled rather than disabled --
+                // IMGUI doesn't reliably show tooltips on disabled controls
+                // -- so clicking it while it's the head always gets an
+                // explicit, actionable explanation instead of doing nothing.
                 var isHead = entry.commitId == headId;
-                GUI.enabled = !isHead;
-                if (GUILayout.Button("x", GUILayout.Width(20)))
-                    DeleteCommit(entry.commitId);
-                GUI.enabled = true;
+                var deleteContent = new GUIContent("x", isHead
+                    ? "This is the current branch's head. Checkout a different commit first to move the head away, then delete it."
+                    : "Delete this commit (and any duplicate assets generated only for it).");
+                if (GUILayout.Button(deleteContent, GUILayout.Width(20)))
+                {
+                    if (isHead)
+                        EditorUtility.DisplayDialog("Can't Delete",
+                            "This commit is the current branch's head. Checkout a different commit first to move the head away, then delete it.",
+                            "OK");
+                    else
+                        DeleteCommit(entry.commitId);
+                }
 
                 EditorGUILayout.EndHorizontal();
             }
@@ -564,7 +578,12 @@ namespace AvatarVcs.Editor.UI
             }
             catch (InvalidOperationException e)
             {
-                EditorUtility.DisplayDialog("Delete Failed", e.Message, "OK");
+                // The underlying message mentions a "force" escape hatch
+                // that only exists in the C# API, not this window; steer
+                // the user at the one path actually available here.
+                EditorUtility.DisplayDialog("Delete Failed",
+                    e.Message + "\n\nSwitch to that branch, checkout a different commit on it, then come back and delete this one.",
+                    "OK");
                 return;
             }
 
