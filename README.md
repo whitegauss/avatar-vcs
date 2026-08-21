@@ -27,6 +27,20 @@ CI (`.github/workflows/tests.yml`) で [game-ci/unity-test-runner](https://githu
 
 ## インストール
 
+### VCC (VRChat Creator Companion) 経由(公開後)
+
+> **注**: このリポジトリは現在 private のため、`index.json` は用意済みですが VCC からはまだ読み込めません。リポジトリを public にし、`index.json` を GitHub Pages 等で公開した後に以下が有効になります。
+
+VCC の Settings > Packages > Add Repository で以下の URL を追加してください:
+
+```
+https://whitegauss.github.io/avatar-vcs/index.json
+```
+
+追加後、プロジェクトの Manage Packages から "Avatar VCS (Phase 1 PoC)" を追加できます。
+
+### Git URL 経由(現在利用可能)
+
 Unity 2022.3 以降(VRChat 推奨環境、例: Unity 2022.3.22f1)のプロジェクトで、Package Manager から git URL を指定して追加します(このリポジトリは private のため、追加する側の Git 認証情報でアクセスできる必要があります)。
 
 ```
