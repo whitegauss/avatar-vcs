@@ -147,6 +147,29 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Apply_MalformedPropertyValue_SkipsThatPropertyInsteadOfThrowing()
+        {
+            // property.value ultimately comes from commit JSON on disk, which
+            // can be malformed independent of tampering (crash mid-write,
+            // bad merge). A parse failure on one property must not abort
+            // the whole Apply -- especially since CheckoutOperation only
+            // catches InvalidOperationException/NotSupportedException around
+            // this call, after containers have already been destroyed.
+            var state = new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = sourceMaterialGuid,
+                shader = "lilToon",
+            };
+            state.properties.Add(new MaterialPropertyValue { name = "_Color", type = "color", value = "not,a,valid,color" });
+
+            Material duplicate = null;
+            Assert.DoesNotThrow(() => duplicate = MaterialSettingsApplier.Apply(state, avatarRoot));
+            Assert.IsNotNull(duplicate, "the duplicate should still be created even though one property failed to parse");
+        }
+
+        [Test]
         public void Apply_UnsupportedShader_Throws()
         {
             var state = new MaterialSettingsState
