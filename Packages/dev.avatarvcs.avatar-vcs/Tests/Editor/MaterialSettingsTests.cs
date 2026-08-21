@@ -198,6 +198,43 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Apply_SourceMaterialInPackagesFolder_FallsBackToAssetsGenerated()
+        {
+            // A source material inside a UPM package (Packages/...) is
+            // immutable/read-only; writing a duplicate as a sibling asset
+            // there (the normal "next to the source" behavior) would fail.
+            const string packageMaterialPath = "Packages/dev.avatarvcs.avatar-vcs/Tests/Editor/_AvatarVcsTests_PackageSourceMaterial.mat";
+            var packageMaterial = new Material(Shader.Find("Standard"));
+            AssetDatabase.CreateAsset(packageMaterial, packageMaterialPath);
+            var packageMaterialGuid = AssetDatabase.AssetPathToGUID(packageMaterialPath);
+
+            try
+            {
+                var state = new MaterialSettingsState
+                {
+                    targetPath = "Body",
+                    slot = 0,
+                    sourceMaterialGuid = packageMaterialGuid,
+                    shader = "lilToon",
+                };
+                state.properties.Add(new MaterialPropertyValue { name = "_Color", type = "color", value = "0,1,0,1" });
+
+                var duplicate = MaterialSettingsApplier.Apply(state, avatarRoot);
+
+                Assert.IsNotNull(duplicate);
+                var duplicatePath = AssetDatabase.GetAssetPath(duplicate);
+                Assert.IsTrue(duplicatePath.StartsWith("Assets/AvatarVCS_Generated/"),
+                    $"duplicate of a Packages/-sourced material must fall back under Assets/, got '{duplicatePath}'");
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(packageMaterialPath);
+                if (AssetDatabase.IsValidFolder("Assets/AvatarVCS_Generated"))
+                    AssetDatabase.DeleteAsset("Assets/AvatarVCS_Generated");
+            }
+        }
+
+        [Test]
         public void Apply_UnsupportedShader_Throws()
         {
             var state = new MaterialSettingsState
