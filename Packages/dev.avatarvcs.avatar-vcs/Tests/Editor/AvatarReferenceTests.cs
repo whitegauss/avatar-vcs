@@ -30,6 +30,7 @@ namespace AvatarVcs.Tests.Editor
         private Material materialA;
         private Material materialB;
         private string materialAGuid;
+        private GameObject accessoryPrefab;
 
         [OneTimeSetUp]
         public void OneTimeSetUp()
@@ -50,6 +51,10 @@ namespace AvatarVcs.Tests.Editor
             AssetDatabase.CreateAsset(materialA, $"{TestAssetDir}/MatA.mat");
             AssetDatabase.CreateAsset(materialB, $"{TestAssetDir}/MatB.mat");
             materialAGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(materialA));
+
+            var accessorySource = new GameObject("Accessory");
+            accessoryPrefab = PrefabUtility.SaveAsPrefabAsset(accessorySource, $"{TestAssetDir}/Accessory.prefab");
+            Object.DestroyImmediate(accessorySource);
         }
 
         [OneTimeTearDown]
@@ -324,6 +329,78 @@ namespace AvatarVcs.Tests.Editor
             var captured = state.components.Single(c => c.type == typeof(ExtraComponent).FullName);
             Assert.AreEqual(string.Empty, captured.path); // on target itself
             Assert.AreEqual("9", captured.fields.Single(f => f.key == "value").value);
+        }
+
+        [Test]
+        public void Capture_TracksPositionOfPrefabInstanceDescendant_ButNotOfNonPrefabDescendant()
+        {
+            // Issue #53: an accessory placed directly under a tracked
+            // target (e.g. attached to an Armature bone, bypassing
+            // container management) is a real, GUID-recoverable prefab
+            // instance -- its position is worth restoring. A plain
+            // (non-prefab) child, standing in for a bone, must not have its
+            // Transform captured at all.
+            var avatarRoot = Spawn("Avatar");
+            var armature = Spawn("Armature", avatarRoot.transform);
+            var bone = Spawn("Hip", armature.transform); // stand-in for a bone: not a prefab instance
+            var accessory = (GameObject)PrefabUtility.InstantiatePrefab(accessoryPrefab, bone.transform);
+            spawned.Add(accessory);
+            accessory.transform.localPosition = new Vector3(0.1f, 0.2f, 0.3f);
+
+            var state = AvatarReferenceCapture.Capture(armature.transform, avatarRoot.transform);
+
+            var transformStates = state.components.Where(c => c.type == typeof(Transform).FullName).ToList();
+            Assert.AreEqual(1, transformStates.Count, "only the prefab instance's Transform should be captured");
+            var captured = transformStates.Single();
+            Assert.AreEqual("Hip/Accessory", captured.path);
+            var position = captured.fields.Single(f => f.key == "m_LocalPosition").value.Split(',').Select(float.Parse).ToArray();
+            Assert.Less(Vector3.Distance(new Vector3(0.1f, 0.2f, 0.3f), new Vector3(position[0], position[1], position[2])), 0.0001f);
+        }
+
+        [Test]
+        public void Capture_NeverCapturesTargetsOwnTransform_EvenIfTargetIsAPrefabInstance()
+        {
+            // target's own placement is out of scope here even when it
+            // happens to be a prefab instance itself -- only descendants'
+            // positions are tracked, not the deliberately-chosen tracking
+            // anchor's own scene placement.
+            var avatarRoot = Spawn("Avatar");
+            var target = (GameObject)PrefabUtility.InstantiatePrefab(accessoryPrefab, avatarRoot.transform);
+            spawned.Add(target);
+            target.transform.localPosition = new Vector3(1f, 2f, 3f);
+
+            var state = AvatarReferenceCapture.Capture(target.transform, avatarRoot.transform);
+
+            Assert.IsFalse(state.components.Any(c => c.type == typeof(Transform).FullName));
+        }
+
+        [Test]
+        public void BranchManagerCommit_And_RestoreToCommit_RoundTripsPrefabInstancePositionUnderArmature()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var armature = Spawn("Armature", avatarRoot.transform);
+            armature.AddComponent<AvatarVcsTrackedReference>();
+            var bone = Spawn("Hip", armature.transform);
+            var accessory = (GameObject)PrefabUtility.InstantiatePrefab(accessoryPrefab, bone.transform);
+            spawned.Add(accessory);
+            accessory.transform.localPosition = new Vector3(0.5f, 0f, 0f);
+
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            try
+            {
+                var commit = BranchManager.Commit(avatarRoot, "with accessory position");
+
+                accessory.transform.localPosition = Vector3.zero; // simulate drift
+
+                var result = BranchManager.RestoreToCommit(avatarRoot, commit.commitId);
+
+                Assert.IsTrue(result.IsSuccess);
+                Assert.Less(Vector3.Distance(new Vector3(0.5f, 0f, 0f), accessory.transform.localPosition), 0.0001f);
+            }
+            finally
+            {
+                CommitStore.DeleteAvatarHistory(avatarGuid);
+            }
         }
 
         [Test]
