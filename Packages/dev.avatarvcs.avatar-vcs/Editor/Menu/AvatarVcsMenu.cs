@@ -62,6 +62,34 @@ namespace AvatarVcs.Editor.Menu
         [MenuItem("GameObject/AvatarVCS/Open Window", true)]
         private static bool ValidateOpenWindowMenuItem() => Selection.activeGameObject != null;
 
+        // Design doc 1.4: the avatar body itself (e.g. "Body") stays outside
+        // container management, but its BlendShape weights and material
+        // references can still be tracked -- opt in per-target here rather
+        // than auto-tracking everything, since most of an avatar's hierarchy
+        // isn't meant to be captured this way.
+        [MenuItem("GameObject/AvatarVCS/Track Body Properties Here", false, 3)]
+        private static void TrackReferenceMenuItem()
+        {
+            var target = Selection.activeGameObject;
+            if (target == null || target.GetComponent<AvatarVcsTrackedReference>() != null) return;
+            Undo.AddComponent<AvatarVcsTrackedReference>(target);
+        }
+
+        [MenuItem("GameObject/AvatarVCS/Track Body Properties Here", true)]
+        private static bool ValidateTrackReferenceMenuItem() =>
+            Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<AvatarVcsTrackedReference>() == null;
+
+        [MenuItem("GameObject/AvatarVCS/Untrack Body Properties Here", false, 4)]
+        private static void UntrackReferenceMenuItem()
+        {
+            var marker = Selection.activeGameObject?.GetComponent<AvatarVcsTrackedReference>();
+            if (marker != null) Undo.DestroyObjectImmediate(marker);
+        }
+
+        [MenuItem("GameObject/AvatarVCS/Untrack Body Properties Here", true)]
+        private static bool ValidateUntrackReferenceMenuItem() =>
+            Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<AvatarVcsTrackedReference>() != null;
+
         /// <summary>
         /// selection accepted as-is if it already IS the "[AvatarVCS]" root;
         /// otherwise resolved from the avatar root that owns it, if any.

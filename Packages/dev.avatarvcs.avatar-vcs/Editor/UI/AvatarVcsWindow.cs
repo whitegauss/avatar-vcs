@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
@@ -312,7 +313,13 @@ namespace AvatarVcs.Editor.UI
             var liveContainers = ContainerManager.GetContainers(configRoot)
                 .Select(c => ContainerCapture.CaptureContainer(c, avatarRoot.transform))
                 .ToList();
-            return new Commit { containers = liveContainers };
+            var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
+            return new Commit
+            {
+                containers = liveContainers,
+                avatarReferences = avatarReferences,
+                materialSettings = materialSettings,
+            };
         }
     }
 }

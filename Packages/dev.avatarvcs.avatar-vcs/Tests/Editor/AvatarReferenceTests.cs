@@ -1,6 +1,10 @@
 using System.Collections.Generic;
+using System.Linq;
 using AvatarVcs.Editor.AvatarReferences;
+using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
+using AvatarVcs.Runtime;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -149,6 +153,118 @@ namespace AvatarVcs.Tests.Editor
 
             var appliedGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(renderer.sharedMaterials[0]));
             Assert.AreEqual(materialAGuid, appliedGuid);
+        }
+
+        // AvatarReferenceCollector is the piece that used to be entirely
+        // missing: capture/apply worked, but nothing ever called them for a
+        // real commit, so a tracked Body's BlendShapes were silently never
+        // recorded. These tests cover the marker-driven collection path
+        // BranchManager.Commit now uses.
+
+        [Test]
+        public void CollectFromTrackedTargets_FindsMarkedTarget_CapturesBlendShapesAndMaterials()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            body.AddComponent<AvatarVcsTrackedReference>();
+            var renderer = body.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = testMesh;
+            renderer.SetBlendShapeWeight(0, 33f);
+            renderer.sharedMaterials = new[] { materialA };
+
+            var (avatarReferences, _) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
+
+            Assert.AreEqual(1, avatarReferences.Count);
+            Assert.AreEqual("Body", avatarReferences[0].path);
+            Assert.AreEqual(33f, avatarReferences[0].blendShapes[0].weight, 0.0001f);
+            Assert.AreEqual(materialAGuid, avatarReferences[0].materials[0].guid);
+        }
+
+        [Test]
+        public void CollectFromTrackedTargets_IgnoresUntrackedTargets()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            var renderer = body.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = testMesh; // no AvatarVcsTrackedReference added
+
+            var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
+
+            Assert.AreEqual(0, avatarReferences.Count);
+            Assert.AreEqual(0, materialSettings.Count);
+        }
+
+        [Test]
+        public void CollectFromTrackedTargets_UnsupportedShader_SkipsMaterialSettingsButKeepsMaterialReference()
+        {
+            // materialA uses the built-in Standard shader (see OneTimeSetUp),
+            // which ShaderPropertyMap doesn't map (MVP: lilToon only).
+            // avatarReferences' material *reference* tracking is shader-
+            // agnostic and must still see it; only the shader-settings
+            // duplication bonus is skipped.
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            body.AddComponent<AvatarVcsTrackedReference>();
+            var renderer = body.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = new[] { materialA };
+
+            var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
+
+            Assert.AreEqual(1, avatarReferences[0].materials.Count);
+            Assert.AreEqual(0, materialSettings.Count);
+        }
+
+        [Test]
+        public void BranchManagerCommit_CapturesTrackedBlendShapeWeight()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            body.AddComponent<AvatarVcsTrackedReference>();
+            var renderer = body.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = testMesh;
+            renderer.SetBlendShapeWeight(0, 77f);
+
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            try
+            {
+                var commit = BranchManager.Commit(avatarRoot, "with tracked blend shape");
+
+                var loaded = CommitStore.LoadCommit(avatarGuid, commit.commitId);
+                var bodyRef = loaded.avatarReferences.Single(r => r.path == "Body");
+                Assert.AreEqual(77f, bodyRef.blendShapes.First(b => b.name == "Shape_A").weight, 0.0001f);
+            }
+            finally
+            {
+                CommitStore.DeleteAvatarHistory(avatarGuid);
+            }
+        }
+
+        [Test]
+        public void RestoreToCommit_RestoresTrackedBlendShapeWeight_AfterDrift()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            body.AddComponent<AvatarVcsTrackedReference>();
+            var renderer = body.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = testMesh;
+            renderer.SetBlendShapeWeight(0, 60f);
+
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            try
+            {
+                var commit = BranchManager.Commit(avatarRoot, "checkpoint");
+
+                renderer.SetBlendShapeWeight(0, 0f); // simulate drift after committing
+
+                var result = BranchManager.RestoreToCommit(avatarRoot, commit.commitId);
+
+                Assert.IsTrue(result.IsSuccess);
+                Assert.AreEqual(60f, renderer.GetBlendShapeWeight(0), 0.0001f);
+            }
+            finally
+            {
+                CommitStore.DeleteAvatarHistory(avatarGuid);
+            }
         }
     }
 }
