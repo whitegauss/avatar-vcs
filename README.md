@@ -27,7 +27,7 @@ CI (`.github/workflows/tests.yml`) で [game-ci/unity-test-runner](https://githu
 
 ## インストール
 
-Unity 2022.3 以降のプロジェクトで、Package Manager から git URL を指定して追加します（このリポジトリは private のため、追加する側の Git 認証情報でアクセスできる必要があります）。
+Unity 2022.3 以降(VRChat 推奨環境、例: Unity 2022.3.22f1)のプロジェクトで、Package Manager から git URL を指定して追加します(このリポジトリは private のため、追加する側の Git 認証情報でアクセスできる必要があります)。
 
 ```
 https://github.com/whitegauss/avatar-vcs.git?path=Packages/dev.avatarvcs.avatar-vcs
@@ -55,7 +55,7 @@ Hierarchy でアバターのルート GameObject を選択し、`GameObject > Av
 
 ### 3. ブランチ・履歴を操作する
 
-EditorWindow (`Window > AvatarVCS`) で以下が行えます。
+EditorWindow (`Window > AvatarVCS`、またはアバターの GameObject を選択した状態で `GameObject > AvatarVCS > Open Window` を使うとアバターが自動セットされた状態で開けます) で以下が行えます。
 
 - ブランチの作成・切り替え（切り替え前に現在の状態を自動コミット）
 - コミット履歴の閲覧、任意のコミットへの checkout
