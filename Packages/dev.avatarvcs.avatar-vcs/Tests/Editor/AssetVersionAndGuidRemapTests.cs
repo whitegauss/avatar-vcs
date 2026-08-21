@@ -160,6 +160,33 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual("", GuidRemapper.Resolve(""));
         }
 
+        private const string RemapConfigPath = "ProjectSettings/AvatarVcs/guid-remapping.json";
+
+        [Test]
+        public void GuidRemapper_CorruptConfigFile_ReturnsEmptyConfigInsteadOfThrowing()
+        {
+            // Simulates a crash mid-write or a bad manual edit leaving
+            // truncated/malformed JSON on disk, matching
+            // CommitStore_CorruptCommitFile_ReturnsNullInsteadOfThrowing.
+            System.IO.File.WriteAllText(RemapConfigPath, "{ not valid json");
+
+            GuidRemapConfig loaded = null;
+            Assert.DoesNotThrow(() => loaded = GuidRemapper.Load());
+            Assert.IsNotNull(loaded);
+            Assert.IsEmpty(loaded.mappings);
+
+            Assert.DoesNotThrow(() => GuidRemapper.Resolve("any-guid"));
+        }
+
+        [Test]
+        public void GuidRemapper_Save_DoesNotLeaveTempFileBehind()
+        {
+            GuidRemapper.AddMapping("temp-check-old", "temp-check-new");
+
+            Assert.IsTrue(System.IO.File.Exists(RemapConfigPath));
+            Assert.IsFalse(System.IO.File.Exists($"{RemapConfigPath}.tmp"), "the atomic-write temp file must be swapped away, not left behind");
+        }
+
         [Test]
         public void CheckForChanges_ResolvesRecordedGuidThroughRemapping_BeforeWarningMissing()
         {
