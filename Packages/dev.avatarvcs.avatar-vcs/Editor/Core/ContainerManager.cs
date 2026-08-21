@@ -61,19 +61,13 @@ namespace AvatarVcs.Editor.Core
         {
             if (from == null) return null;
 
-            for (var t = from.transform; t != null; t = t.parent)
-            {
-                if (t.GetComponent<AvatarVcsRoot>() != null)
-                    return t.parent != null ? t.parent.gameObject : null;
-
-                if (t.GetComponent<AvatarVcsContainer>() != null)
-                {
-                    var rootParent = t.parent; // the "[AvatarVCS]" root
-                    return rootParent != null && rootParent.parent != null ? rootParent.parent.gameObject : null;
-                }
-            }
-
-            return null;
+            // Searches from as well as every ancestor for the "[AvatarVCS]"
+            // root's marker component, so this resolves correctly no matter
+            // how deep from sits inside a container's own hierarchy.
+            // includeInactive: true because a container (or the whole
+            // "[AvatarVCS]" root) can legitimately be toggled off.
+            var root = from.GetComponentInParent<AvatarVcsRoot>(includeInactive: true);
+            return root != null && root.transform.parent != null ? root.transform.parent.gameObject : null;
         }
 
         /// <summary>

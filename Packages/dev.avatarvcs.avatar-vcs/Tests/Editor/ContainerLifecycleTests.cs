@@ -190,6 +190,20 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void FindEnclosingAvatarRoot_FromInsideAnInactiveContainer_StillResolves()
+        {
+            // GetComponentInParent defaults to active-only; a toggled-off
+            // container (now a legitimate state since PR #13 added
+            // activeSelf) must not become invisible to this resolution.
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, container.transform);
+            container.SetActive(false);
+
+            Assert.AreSame(avatarRoot, ContainerManager.FindEnclosingAvatarRoot(instance));
+        }
+
+        [Test]
         public void FindEnclosingAvatarRoot_UnrelatedObject_ReturnsNull()
         {
             var unrelated = new GameObject("SomeOutfitPieceNotYetTracked");
