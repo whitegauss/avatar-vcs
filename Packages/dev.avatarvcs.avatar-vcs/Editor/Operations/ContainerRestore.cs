@@ -40,6 +40,7 @@ namespace AvatarVcs.Editor.Operations
             containerGo.transform.localPosition = snapshot.localPosition;
             containerGo.transform.localRotation = snapshot.localRotation;
             containerGo.transform.localScale = snapshot.localScale;
+            ApplyTag(containerGo, snapshot);
 
             var marker = Undo.AddComponent<AvatarVcsContainer>(containerGo);
             marker.AssignGuid(snapshot.containerGuid);
@@ -66,6 +67,27 @@ namespace AvatarVcs.Editor.Operations
             }
 
             return containerGo;
+        }
+
+        /// <summary>
+        /// GameObject.tag throws if the tag isn't defined in this project's
+        /// Tag Manager (e.g. a custom tag recorded in a commit made in a
+        /// different project). Warn and leave the default "Untagged" rather
+        /// than aborting the whole restore over it.
+        /// </summary>
+        private static void ApplyTag(GameObject containerGo, ContainerSnapshot snapshot)
+        {
+            if (string.IsNullOrEmpty(snapshot.tag) || snapshot.tag == containerGo.tag) return;
+
+            try
+            {
+                containerGo.tag = snapshot.tag;
+            }
+            catch (UnityException)
+            {
+                Debug.LogWarning($"[AvatarVCS] Tag '{snapshot.tag}' recorded for container '{snapshot.containerId}' "
+                    + $"is not defined in this project's Tag Manager; left as '{containerGo.tag}'.");
+            }
         }
 
         /// <summary>

@@ -77,6 +77,9 @@ namespace AvatarVcs.Editor.History
                 || before.localScale != after.localScale)
                 notes.Add("transform changed");
 
+            if (before.tag != after.tag)
+                notes.Add($"tag: '{before.tag}' -> '{after.tag}'");
+
             var beforeFields = FlattenFields(before);
             var afterFields = FlattenFields(after);
             foreach (var key in beforeFields.Keys.Union(afterFields.Keys).OrderBy(k => k))
