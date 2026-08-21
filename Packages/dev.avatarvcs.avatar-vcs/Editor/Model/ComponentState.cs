@@ -13,6 +13,13 @@ namespace AvatarVcs.Editor.Model
     {
         public string path;
         public string type;
+        // Which same-type component on the target GameObject this is (0 =
+        // first), for GameObjects carrying more than one component of the
+        // same type (e.g. multiple VRCPhysBone/constraints). Defaults to 0,
+        // which also matches every commit written before this field existed
+        // -- "the first one" was the only thing GetComponent(type) could
+        // ever have meant.
+        public int componentIndex;
         public List<FieldValue> fields = new();
         public List<AssetRef> assetRefs = new();
         public List<SceneRef> sceneRefs = new();

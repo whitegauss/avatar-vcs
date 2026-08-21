@@ -63,12 +63,24 @@ namespace AvatarVcs.Editor.Apply
             if (type == null)
                 return ApplyResult.ComponentTypeUnresolved(state.type);
 
-            var component = target.GetComponent(type);
-            if (component == null)
+            // Multiple same-type components on one GameObject (e.g. several
+            // VRCPhysBone/constraints) are disambiguated by componentIndex
+            // (0 = first), not just "the first one GetComponent happens to
+            // find" -- otherwise every occurrence after the first would
+            // read/overwrite the same instance.
+            var existingOfType = target.GetComponents(type);
+            Component component;
+            if (state.componentIndex >= 0 && state.componentIndex < existingOfType.Length)
             {
-                if (!createIfMissing)
-                    return ApplyResult.ComponentMissing(state.type);
+                component = existingOfType[state.componentIndex];
+            }
+            else if (createIfMissing)
+            {
                 component = Undo.AddComponent(target.gameObject, type);
+            }
+            else
+            {
+                return ApplyResult.ComponentMissing(state.type);
             }
 
             Undo.RecordObject(component, "AvatarVCS Apply");
