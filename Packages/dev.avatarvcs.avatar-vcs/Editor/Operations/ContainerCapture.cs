@@ -27,10 +27,27 @@ namespace AvatarVcs.Editor.Operations
             if (marker == null)
                 throw new ArgumentException($"'{container.name}' is not an AvatarVCS container (missing AvatarVcsContainer).", nameof(container));
 
-            var prefabGuids = container.Cast<Transform>()
-                .Select(child => ContainerManager.GetPrefabGuid(child.gameObject))
+            var childGuids = container.Cast<Transform>()
+                .Select(child => (child, guid: ContainerManager.GetPrefabGuid(child.gameObject)))
+                .ToList();
+            var prefabGuids = childGuids
+                .Select(c => c.guid)
                 .Where(guid => !string.IsNullOrEmpty(guid))
                 .ToList();
+
+            // A container is destroyed and regenerated purely from
+            // prefabGuids on every checkout (design doc 1.2). A child that
+            // isn't a prefab instance has no guid to regenerate it from, so
+            // anything placed here directly (Create Empty, a raw light/
+            // camera/mesh, an unpacked prefab) is permanently lost the next
+            // time this container round-trips through a commit.
+            foreach (var (child, guid) in childGuids)
+            {
+                if (string.IsNullOrEmpty(guid))
+                    Debug.LogWarning($"[AvatarVCS] '{child.name}' inside container '{container.name}' is not a prefab "
+                        + "instance and will be permanently lost the next time this container is checked out. "
+                        + "Turn it into a prefab and place the instance in the container instead.");
+            }
 
             // Only components on the container root itself are captured (e.g. a
             // ModularAvatarMergeArmature placed to configure the container) --

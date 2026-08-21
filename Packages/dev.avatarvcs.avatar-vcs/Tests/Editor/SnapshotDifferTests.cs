@@ -117,6 +117,33 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Diff_DetectsSceneRefChange_WithNote()
+        {
+            var before = MakeContainer("hair", "guid_a");
+            before.components.Add(new ComponentState
+            {
+                path = "",
+                type = "Fake.Component",
+                sceneRefs = { new SceneRef { key = "target", path = "Armature/Hips", type = "UnityEngine.Transform" } },
+            });
+
+            var after = MakeContainer("hair", "guid_a");
+            after.components.Add(new ComponentState
+            {
+                path = "",
+                type = "Fake.Component",
+                sceneRefs = { new SceneRef { key = "target", path = "Armature/Chest", type = "UnityEngine.Transform" } },
+            });
+
+            var diffs = SnapshotDiffer.Diff(MakeCommit(before), MakeCommit(after));
+
+            var hairDiff = diffs.Single(d => d.containerId == "hair");
+            Assert.AreEqual(DiffKind.Changed, hairDiff.kind);
+            Assert.IsTrue(hairDiff.changeNotes.Any(n => n.Contains("target") && n.Contains("Hips") && n.Contains("Chest")),
+                "a scene reference (e.g. a bone target) changing must show up as a diff note, not be silently ignored");
+        }
+
+        [Test]
         public void Diff_DetectsTagChange_WithNote()
         {
             var before = MakeContainer("hair", "guid_a");

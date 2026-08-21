@@ -73,7 +73,7 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
-        public void Capture_OnlyRecordsNonZeroBlendShapes()
+        public void Capture_RecordsAllBlendShapes_IncludingZero()
         {
             var avatarRoot = Spawn("Avatar");
             var body = Spawn("Body", avatarRoot.transform);
@@ -83,9 +83,34 @@ namespace AvatarVcs.Tests.Editor
 
             var state = AvatarReferenceCapture.Capture(body.transform, avatarRoot.transform);
 
-            Assert.AreEqual(1, state.blendShapes.Count);
+            Assert.AreEqual(2, state.blendShapes.Count);
             Assert.AreEqual("Shape_A", state.blendShapes[0].name);
             Assert.AreEqual(80f, state.blendShapes[0].weight, 0.0001f);
+            Assert.AreEqual("Shape_B", state.blendShapes[1].name);
+            Assert.AreEqual(0f, state.blendShapes[1].weight, 0.0001f);
+        }
+
+        [Test]
+        public void CaptureThenApply_ExplicitZero_OverwritesNonZeroDrift()
+        {
+            // Simulates an outfit whose blend shape defaults to non-zero
+            // (e.g. a "penetration guard" shape baked in at 100) that the
+            // user explicitly turns down to 0. That choice must survive a
+            // commit round trip instead of silently reverting to whatever
+            // the mesh/prefab happens to default to.
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            var renderer = body.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = testMesh;
+            renderer.SetBlendShapeWeight(0, 0f); // Shape_A explicitly zeroed
+
+            var captured = AvatarReferenceCapture.Capture(body.transform, avatarRoot.transform);
+
+            renderer.SetBlendShapeWeight(0, 100f); // simulate drift back up
+
+            AvatarReferenceApplier.Apply(captured, avatarRoot.transform);
+
+            Assert.AreEqual(0f, renderer.GetBlendShapeWeight(0), 0.0001f);
         }
 
         [Test]
