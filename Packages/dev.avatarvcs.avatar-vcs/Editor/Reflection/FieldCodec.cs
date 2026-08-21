@@ -16,6 +16,16 @@ namespace AvatarVcs.Editor.Reflection
     {
         private static readonly CultureInfo Culture = CultureInfo.InvariantCulture;
 
+        // Sane upper bound for an array-size write. Without this, a crafted
+        // or corrupted FieldValue targeting "someArray.Array.size" (a real,
+        // FindProperty-resolvable SerializedProperty path independent of
+        // whether it was ever legitimately captured that way) could set
+        // prop.intValue to e.g. 2,000,000,000 and have Unity attempt a huge
+        // array resize, hanging or OOM-ing the Editor. No legitimate capture
+        // from this tool's own ComponentCapturer produces anything remotely
+        // close to this.
+        private const int MaxArraySize = 100_000;
+
         public static bool TryEncode(SerializedProperty prop, out string value, out string type)
         {
             switch (prop.propertyType)
@@ -133,8 +143,13 @@ namespace AvatarVcs.Editor.Reflection
                 case "layerMask":
                 case "enum":
                 case "character":
-                    prop.intValue = int.Parse(value, Culture);
+                {
+                    var intValue = int.Parse(value, Culture);
+                    if (prop.propertyType == SerializedPropertyType.ArraySize && (intValue < 0 || intValue > MaxArraySize))
+                        return false;
+                    prop.intValue = intValue;
                     return true;
+                }
                 case "long":
                     prop.longValue = long.Parse(value, Culture);
                     return true;
