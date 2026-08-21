@@ -134,6 +134,23 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Apply_NonComponentType_ReturnsFailureInsteadOfThrowing()
+        {
+            var targetRoot = Spawn("TargetRoot");
+            Spawn("Source", targetRoot.transform);
+
+            var state = new ComponentState
+            {
+                path = "Source",
+                type = typeof(string).FullName, // resolvable type, but not a Component
+            };
+
+            var result = ComponentApplier.Apply(state, targetRoot, createIfMissing: true);
+
+            Assert.AreEqual(ApplyResultKind.ComponentTypeUnresolved, result.Kind);
+        }
+
+        [Test]
         public void Capture_UsesRelativePathFromGivenRoot()
         {
             var containerRoot = Spawn("Container");

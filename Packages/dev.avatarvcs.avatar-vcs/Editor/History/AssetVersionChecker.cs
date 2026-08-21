@@ -43,6 +43,7 @@ namespace AvatarVcs.Editor.History
         public static List<string> CheckForChanges(List<AssetVersionEntry> recorded)
         {
             var warnings = new List<string>();
+            if (recorded == null) return warnings;
 
             foreach (var entry in recorded)
             {

@@ -19,6 +19,10 @@ namespace AvatarVcs.Runtime
         {
             if (string.IsNullOrEmpty(guid))
                 throw new ArgumentException("guid must not be empty.", nameof(guid));
+            if (!GuidShape.IsValid(guid))
+                throw new ArgumentException(
+                    $"guid must be a 32-character lowercase hex string (as produced by Guid.NewGuid().ToString(\"N\")); got '{guid}'.",
+                    nameof(guid));
             if (!string.IsNullOrEmpty(containerGuid))
                 throw new InvalidOperationException("containerGuid is already assigned and is immutable.");
 

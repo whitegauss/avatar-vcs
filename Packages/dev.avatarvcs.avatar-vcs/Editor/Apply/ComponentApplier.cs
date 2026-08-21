@@ -60,7 +60,7 @@ namespace AvatarVcs.Editor.Apply
                 return ApplyResult.PathUnresolved(state.path);
 
             var type = TypeResolver.Resolve(state.type);
-            if (type == null)
+            if (type == null || !typeof(Component).IsAssignableFrom(type))
                 return ApplyResult.ComponentTypeUnresolved(state.type);
 
             // Multiple same-type components on one GameObject (e.g. several
