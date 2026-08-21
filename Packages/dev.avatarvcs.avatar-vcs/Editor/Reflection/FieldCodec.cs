@@ -125,7 +125,28 @@ namespace AvatarVcs.Editor.Reflection
             }
         }
 
+        /// <summary>
+        /// Never throws, regardless of how malformed value is (truncated,
+        /// wrong component count, non-numeric, ...) -- value ultimately comes
+        /// from commit JSON on disk, which can be corrupted (crash mid-write,
+        /// bad merge) independent of any deliberate tampering. Callers rely
+        /// on a false return to warn-and-skip a field rather than aborting
+        /// whatever destructive operation (e.g. checkout) is already
+        /// underway.
+        /// </summary>
         public static bool TryDecode(SerializedProperty prop, string type, string value)
+        {
+            try
+            {
+                return TryDecodeCore(prop, type, value);
+            }
+            catch (Exception e) when (e is FormatException or OverflowException or IndexOutOfRangeException or ArgumentNullException)
+            {
+                return false;
+            }
+        }
+
+        private static bool TryDecodeCore(SerializedProperty prop, string type, string value)
         {
             switch (type)
             {
