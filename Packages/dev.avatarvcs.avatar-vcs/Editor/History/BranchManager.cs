@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.Model;
 using UnityEngine;
@@ -21,7 +22,9 @@ namespace AvatarVcs.Editor.History
             var config = CommitStore.LoadConfig(avatarGuid);
 
             var currentHead = FindEntry(config, config.currentBranch)?.commitId;
-            var commit = CommitBuilder.CreateCommit(avatarRoot, message, config.currentBranch, currentHead);
+            var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
+            var commit = CommitBuilder.CreateCommit(
+                avatarRoot, message, config.currentBranch, currentHead, avatarReferences, materialSettings);
             CommitStore.SaveCommit(avatarGuid, commit);
 
             SetBranchHead(config, config.currentBranch, commit.commitId);

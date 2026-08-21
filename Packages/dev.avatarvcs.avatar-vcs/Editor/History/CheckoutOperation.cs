@@ -60,11 +60,17 @@ namespace AvatarVcs.Editor.History
             var configRoot = ContainerManager.EnsureRoot(avatarRoot);
             var avatarGuid = configRoot.GetComponent<AvatarVcsRoot>().AvatarGuid;
 
+            // Same capture BranchManager.Commit uses -- this safety-net
+            // commit must preserve tracked BlendShape/material state too, or
+            // it's silently lost the moment the checkout below overwrites it.
+            var (autoAvatarReferences, autoMaterialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
             var autoCommit = CommitBuilder.CreateCommit(
                 avatarRoot,
                 $"[auto] before checkout to {commit.commitId}",
                 sourceBranch,
-                autoCommitParentId);
+                autoCommitParentId,
+                autoAvatarReferences,
+                autoMaterialSettings);
             CommitStore.SaveCommit(avatarGuid, autoCommit);
 
             var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid);
