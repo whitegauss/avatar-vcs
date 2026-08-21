@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
@@ -25,6 +26,19 @@ namespace AvatarVcs.Editor.UI
 
                 EditorGUILayout.BeginHorizontal();
 
+                // Checkbox for bulk delete. Left enabled even on the current
+                // head for the same reason the "x" button below is -- a
+                // checked-then-blocked head just surfaces in the bulk
+                // delete's failure summary instead of silently refusing to
+                // check, which would look like a UI glitch.
+                var checkedForDeletion = selectedForBulkDelete.Contains(entry.commitId);
+                var newChecked = EditorGUILayout.Toggle(checkedForDeletion, GUILayout.Width(16));
+                if (newChecked != checkedForDeletion)
+                {
+                    if (newChecked) selectedForBulkDelete.Add(entry.commitId);
+                    else selectedForBulkDelete.Remove(entry.commitId);
+                }
+
                 var prevBg = GUI.backgroundColor;
                 if (selected) GUI.backgroundColor = new Color(0.6f, 0.8f, 1f);
                 // A long commit message must not be allowed to expand past
@@ -32,7 +46,7 @@ namespace AvatarVcs.Editor.UI
                 // widen this button to fit the text and push the delete
                 // button below out of the visible/scrollable area, which
                 // looks exactly like "there's no delete button".
-                if (GUILayout.Button(label, GUILayout.MaxWidth(180)) && !selected)
+                if (GUILayout.Button(label, GUILayout.MaxWidth(164)) && !selected)
                 {
                     selectedCommitId = entry.commitId;
                     RecomputeSelectedDiff();
@@ -61,6 +75,16 @@ namespace AvatarVcs.Editor.UI
                 EditorGUILayout.EndHorizontal();
             }
             EditorGUILayout.EndScrollView();
+
+            EditorGUILayout.BeginHorizontal();
+            GUI.enabled = selectedForBulkDelete.Count > 0;
+            if (GUILayout.Button($"Delete Selected ({selectedForBulkDelete.Count})"))
+                DeleteCommits(selectedForBulkDelete.ToList());
+            GUI.enabled = true;
+            if (selectedForBulkDelete.Count > 0 && GUILayout.Button("Clear", GUILayout.Width(50)))
+                selectedForBulkDelete.Clear();
+            EditorGUILayout.EndHorizontal();
+
             EditorGUILayout.EndVertical();
         }
 
@@ -163,6 +187,43 @@ namespace AvatarVcs.Editor.UI
 
             if (selectedCommitId == commitId) selectedCommitId = null;
             Reload();
+        }
+
+        // Bulk counterpart to DeleteCommit: one confirmation up front, then
+        // best-effort per commit -- a mix of deletable and head-blocked
+        // commits in the same selection shouldn't abort the whole batch,
+        // it should delete what it can and report what it couldn't.
+        private void DeleteCommits(List<string> commitIds)
+        {
+            if (commitIds.Count == 0) return;
+
+            if (!EditorUtility.DisplayDialog("Delete Selected Commits",
+                    $"Delete {commitIds.Count} commit(s) and their generated assets (e.g. duplicate materials)? This cannot be undone.",
+                    "Delete", "Cancel"))
+                return;
+
+            var failures = new List<string>();
+            foreach (var commitId in commitIds)
+            {
+                try
+                {
+                    CommitStore.DeleteCommit(avatarGuid, commitId);
+                    selectedForBulkDelete.Remove(commitId);
+                    if (selectedCommitId == commitId) selectedCommitId = null;
+                }
+                catch (InvalidOperationException e)
+                {
+                    failures.Add($"{CommitMessage(commitId)}: {e.Message}");
+                }
+            }
+
+            Reload();
+
+            if (failures.Count > 0)
+                EditorUtility.DisplayDialog("Some Commits Could Not Be Deleted",
+                    string.Join("\n\n", failures)
+                        + "\n\nSwitch to the relevant branch, checkout a different commit on it, then come back and delete it.",
+                    "OK");
         }
     }
 }
