@@ -26,10 +26,13 @@ namespace AvatarVcs.Editor.Capture
             if (containerRoot == null) throw new ArgumentNullException(nameof(containerRoot));
             avatarRoot ??= containerRoot;
 
+            var componentType = component.GetType();
+            var siblings = component.GetComponents(componentType);
             var state = new ComponentState
             {
                 path = ReferenceResolver.GetRelativePath(component.transform, containerRoot),
-                type = component.GetType().FullName,
+                type = componentType.FullName,
+                componentIndex = Array.IndexOf(siblings, component),
             };
 
             var so = new SerializedObject(component);

@@ -103,6 +103,37 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Capture_ThenApply_DisambiguatesMultipleSameTypeComponents_ByIndex()
+        {
+            var sourceRoot = Spawn("SourceRoot");
+            var sourceChild = Spawn("Source", sourceRoot.transform);
+            var firstSourceAudio = sourceChild.AddComponent<AudioSource>();
+            firstSourceAudio.volume = 0.25f;
+            var secondSourceAudio = sourceChild.AddComponent<AudioSource>();
+            secondSourceAudio.volume = 0.75f;
+
+            var firstState = ComponentCapturer.Capture(firstSourceAudio, sourceRoot.transform);
+            var secondState = ComponentCapturer.Capture(secondSourceAudio, sourceRoot.transform);
+            Assert.AreEqual(0, firstState.componentIndex);
+            Assert.AreEqual(1, secondState.componentIndex);
+
+            var targetRoot = Spawn("TargetRoot");
+            var targetChild = Spawn("Source", targetRoot.transform);
+            targetChild.AddComponent<AudioSource>();
+            targetChild.AddComponent<AudioSource>();
+
+            var firstResult = ComponentApplier.Apply(firstState, targetRoot, createIfMissing: false);
+            var secondResult = ComponentApplier.Apply(secondState, targetRoot, createIfMissing: false);
+
+            Assert.IsTrue(firstResult.IsSuccess, firstResult.Message);
+            Assert.IsTrue(secondResult.IsSuccess, secondResult.Message);
+
+            var targetAudios = targetChild.GetComponents<AudioSource>();
+            Assert.AreEqual(0.25f, targetAudios[0].volume, 0.0001f, "the first captured instance must apply onto the first target instance, not overwrite the same one twice");
+            Assert.AreEqual(0.75f, targetAudios[1].volume, 0.0001f);
+        }
+
+        [Test]
         public void Apply_NonComponentType_ReturnsFailureInsteadOfThrowing()
         {
             var targetRoot = Spawn("TargetRoot");
