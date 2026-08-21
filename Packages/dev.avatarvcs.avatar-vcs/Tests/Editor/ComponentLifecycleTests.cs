@@ -157,7 +157,7 @@ namespace AvatarVcs.Tests.Editor
             var otherGo = new GameObject("Other");
             var otherBehaviour = otherGo.AddComponent<OtherReservedPropertyTestBehaviour>();
             var otherScript = MonoScript.FromMonoBehaviour(otherBehaviour);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(otherScript, out var otherScriptGuid, out var otherLocalId);
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(otherScript, out var otherScriptGuid, out long otherLocalId);
             Object.DestroyImmediate(otherGo);
 
             var maliciousState = new ComponentState
