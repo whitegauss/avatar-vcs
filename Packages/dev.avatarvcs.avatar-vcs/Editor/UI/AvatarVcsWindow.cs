@@ -235,17 +235,23 @@ namespace AvatarVcs.Editor.UI
                 GUI.backgroundColor = prevBg;
 
                 // Deleting a branch head would leave that branch pointing at
-                // nothing. Checking out a different commit first moves the
-                // head away, which is what the tooltip below points users at
-                // instead of a silently-disabled button.
+                // nothing. The button stays enabled rather than disabled --
+                // IMGUI doesn't reliably show tooltips on disabled controls
+                // -- so clicking it while it's the head always gets an
+                // explicit, actionable explanation instead of doing nothing.
                 var isHead = entry.commitId == headId;
-                var deleteContent = isHead
-                    ? new GUIContent("x", "Can't delete: this is the current branch's head. Checkout a different commit first to move the head away, then delete it.")
-                    : new GUIContent("x", "Delete this commit (and any duplicate assets generated only for it).");
-                GUI.enabled = !isHead;
+                var deleteContent = new GUIContent("x", isHead
+                    ? "This is the current branch's head. Checkout a different commit first to move the head away, then delete it."
+                    : "Delete this commit (and any duplicate assets generated only for it).");
                 if (GUILayout.Button(deleteContent, GUILayout.Width(20)))
-                    DeleteCommit(entry.commitId);
-                GUI.enabled = true;
+                {
+                    if (isHead)
+                        EditorUtility.DisplayDialog("Can't Delete",
+                            "This commit is the current branch's head. Checkout a different commit first to move the head away, then delete it.",
+                            "OK");
+                    else
+                        DeleteCommit(entry.commitId);
+                }
 
                 EditorGUILayout.EndHorizontal();
             }
