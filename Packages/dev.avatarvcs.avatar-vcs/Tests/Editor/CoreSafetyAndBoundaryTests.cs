@@ -3,6 +3,8 @@ using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.Reflection;
+using AvatarVcs.Editor.UI;
+using AvatarVcs.Runtime;
 using NUnit.Framework;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -122,6 +124,16 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsNull(TypeResolver.Resolve(null));
             Assert.IsNull(TypeResolver.Resolve(""));
             Assert.IsNull(TypeResolver.Resolve("   "));
+        }
+
+        [Test]
+        public void TrackedReferenceHierarchyIcon_ShouldShowMarker_OnlyForTrackedGameObjects()
+        {
+            Assert.IsFalse(TrackedReferenceHierarchyIcon.ShouldShowMarker(null));
+            Assert.IsFalse(TrackedReferenceHierarchyIcon.ShouldShowMarker(avatarRoot));
+
+            avatarRoot.AddComponent<AvatarVcsTrackedReference>();
+            Assert.IsTrue(TrackedReferenceHierarchyIcon.ShouldShowMarker(avatarRoot));
         }
     }
 }

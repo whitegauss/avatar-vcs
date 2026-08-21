@@ -337,5 +337,129 @@ namespace AvatarVcs.Tests.Editor
         }
 
         #endregion
+
+        #region FieldCodec AnimationCurve/Gradient Tests
+
+        private class CurveAndGradientFieldHolder : MonoBehaviour
+        {
+            public AnimationCurve curve = new();
+            public Gradient gradient = new();
+        }
+
+        [Test]
+        public void FieldCodec_AnimationCurve_RoundTripsKeysAndWrapModes()
+        {
+            var go = Spawn("CurveHolder");
+            var holder = go.AddComponent<CurveAndGradientFieldHolder>();
+            var original = new AnimationCurve(
+                new Keyframe(0f, 0f, 0f, 1f, 0f, 0.5f),
+                new Keyframe(1f, 2f, 1f, 0f, 0.5f, 0f))
+            {
+                preWrapMode = WrapMode.Loop,
+                postWrapMode = WrapMode.PingPong,
+            };
+            holder.curve = original;
+
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(CurveAndGradientFieldHolder.curve));
+
+            Assert.IsTrue(FieldCodec.TryEncode(prop, out var encoded, out var type));
+            Assert.AreEqual("animationCurve", type);
+
+            holder.curve = new AnimationCurve();
+            so.Update();
+            prop = so.FindProperty(nameof(CurveAndGradientFieldHolder.curve));
+            Assert.IsTrue(FieldCodec.TryDecode(prop, type, encoded));
+            so.ApplyModifiedProperties();
+
+            Assert.AreEqual(2, holder.curve.keys.Length);
+            Assert.AreEqual(1f, holder.curve.keys[1].value, 0.0001f);
+            Assert.AreEqual(WrapMode.Loop, holder.curve.preWrapMode);
+            Assert.AreEqual(WrapMode.PingPong, holder.curve.postWrapMode);
+        }
+
+        [Test]
+        public void FieldCodec_AnimationCurve_EmptyCurve_RoundTrips()
+        {
+            var go = Spawn("EmptyCurveHolder");
+            var holder = go.AddComponent<CurveAndGradientFieldHolder>();
+            holder.curve = new AnimationCurve();
+
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(CurveAndGradientFieldHolder.curve));
+
+            Assert.IsTrue(FieldCodec.TryEncode(prop, out var encoded, out var type));
+            Assert.IsTrue(FieldCodec.TryDecode(prop, type, encoded));
+            so.ApplyModifiedProperties();
+
+            Assert.AreEqual(0, holder.curve.keys.Length);
+        }
+
+        [Test]
+        public void FieldCodec_Gradient_RoundTripsColorAndAlphaKeysAndMode()
+        {
+            var go = Spawn("GradientHolder");
+            var holder = go.AddComponent<CurveAndGradientFieldHolder>();
+            var original = new Gradient();
+            original.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(Color.red, 0f),
+                    new GradientColorKey(Color.blue, 1f),
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0f, 0f),
+                    new GradientAlphaKey(1f, 1f),
+                });
+            original.mode = GradientMode.Fixed;
+            holder.gradient = original;
+
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(CurveAndGradientFieldHolder.gradient));
+
+            Assert.IsTrue(FieldCodec.TryEncode(prop, out var encoded, out var type));
+            Assert.AreEqual("gradient", type);
+
+            holder.gradient = new Gradient();
+            so.Update();
+            prop = so.FindProperty(nameof(CurveAndGradientFieldHolder.gradient));
+            Assert.IsTrue(FieldCodec.TryDecode(prop, type, encoded));
+            so.ApplyModifiedProperties();
+
+            Assert.AreEqual(2, holder.gradient.colorKeys.Length);
+            Assert.AreEqual(2, holder.gradient.alphaKeys.Length);
+            Assert.Less(Vector3.Distance(
+                new Vector3(Color.blue.r, Color.blue.g, Color.blue.b),
+                new Vector3(holder.gradient.colorKeys[1].color.r, holder.gradient.colorKeys[1].color.g, holder.gradient.colorKeys[1].color.b)), 0.001f);
+            Assert.AreEqual(1f, holder.gradient.alphaKeys[1].alpha, 0.0001f);
+            Assert.AreEqual(GradientMode.Fixed, holder.gradient.mode);
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_MalformedAnimationCurve_ReturnsFalseInsteadOfThrowing()
+        {
+            var go = Spawn("MalformedCurveHolder");
+            var holder = go.AddComponent<CurveAndGradientFieldHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(CurveAndGradientFieldHolder.curve));
+
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(prop, "animationCurve", "not-a-valid-curve"));
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "animationCurve", "not-a-valid-curve"));
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_MalformedGradient_ReturnsFalseInsteadOfThrowing()
+        {
+            var go = Spawn("MalformedGradientHolder");
+            var holder = go.AddComponent<CurveAndGradientFieldHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(CurveAndGradientFieldHolder.gradient));
+
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(prop, "gradient", "garbage"));
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "gradient", "garbage"));
+        }
+
+        #endregion
     }
 }

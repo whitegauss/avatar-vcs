@@ -223,7 +223,7 @@ namespace AvatarVcs.Tests.Editor
         public void CollectFromTrackedTargets_UnsupportedShader_SkipsMaterialSettingsButKeepsMaterialReference()
         {
             // materialA uses the built-in Standard shader (see OneTimeSetUp),
-            // which ShaderPropertyMap doesn't map (MVP: lilToon only).
+            // which ShaderPropertyMap doesn't map.
             // avatarReferences' material *reference* tracking is shader-
             // agnostic and must still see it; only the shader-settings
             // duplication bonus is skipped.

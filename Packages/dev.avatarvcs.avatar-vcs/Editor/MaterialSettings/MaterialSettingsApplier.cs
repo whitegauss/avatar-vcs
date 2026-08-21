@@ -29,7 +29,7 @@ namespace AvatarVcs.Editor.MaterialSettings
             if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
 
             if (!ShaderPropertyMap.IsSupported(state.shader))
-                throw new NotSupportedException($"Shader '{state.shader}' is not supported (MVP: lilToon only).");
+                throw new NotSupportedException($"Shader '{state.shader}' is not supported (see ShaderPropertyMap).");
 
             var target = ReferenceResolver.ResolvePath(state.targetPath, avatarRoot.transform);
             if (target == null)

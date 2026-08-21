@@ -20,7 +20,7 @@ namespace AvatarVcs.Editor.MaterialSettings
             if (material == null) throw new ArgumentNullException(nameof(material));
             if (string.IsNullOrEmpty(shaderName)) throw new ArgumentException("shaderName must not be empty.", nameof(shaderName));
             if (!ShaderPropertyMap.IsSupported(shaderName))
-                throw new NotSupportedException($"Shader '{shaderName}' is not supported (MVP: lilToon only).");
+                throw new NotSupportedException($"Shader '{shaderName}' is not supported (see ShaderPropertyMap).");
 
             var assetPath = AssetDatabase.GetAssetPath(material);
             var guid = string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.AssetPathToGUID(assetPath);
