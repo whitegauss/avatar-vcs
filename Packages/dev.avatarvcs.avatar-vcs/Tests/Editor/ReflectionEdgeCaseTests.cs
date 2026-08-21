@@ -246,6 +246,47 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual("42", encoded);
         }
 
+        // TryDecode's value ultimately comes from commit JSON on disk, which
+        // can be malformed independent of tampering (crash mid-write, bad
+        // merge). It must return false, never throw -- an uncaught exception
+        // here would abort a checkout mid-way, after containers are already
+        // destroyed (see CheckoutOperation.ApplyCommitToScene).
+
+        [Test]
+        public void FieldCodec_TryDecode_NonNumericIntValue_ReturnsFalseInsteadOfThrowing()
+        {
+            var go = Spawn("IntHolder");
+            var holder = go.AddComponent<LongFieldHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(LongFieldHolder.intField));
+
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(prop, "int", "not-a-number"));
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "int", "not-a-number"));
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_TooFewVectorComponents_ReturnsFalseInsteadOfThrowing()
+        {
+            var go = Spawn("VectorHolder");
+            var so = new SerializedObject(go.transform);
+            var prop = so.FindProperty("m_LocalPosition"); // Transform's Vector3 field
+
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(prop, "vector3", "1,2")); // needs 3 components
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "vector3", "1,2"));
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_NullValue_ReturnsFalseInsteadOfThrowing()
+        {
+            var go = Spawn("IntHolder2");
+            var holder = go.AddComponent<LongFieldHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(LongFieldHolder.intField));
+
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(prop, "int", null));
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "int", null));
+        }
+
         private class ArrayFieldHolder : MonoBehaviour
         {
             public int[] items = new int[3];
@@ -285,7 +326,7 @@ namespace AvatarVcs.Tests.Editor
         {
             // The cap is scoped to prop.propertyType == ArraySize; a huge
             // value for a genuinely plain int field must still round-trip.
-            var go = Spawn("IntHolder2");
+            var go = Spawn("IntHolder3");
             var holder = go.AddComponent<LongFieldHolder>();
             var so = new SerializedObject(holder);
             var prop = so.FindProperty(nameof(LongFieldHolder.intField));
