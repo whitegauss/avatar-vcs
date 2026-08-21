@@ -287,6 +287,55 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsFalse(FieldCodec.TryDecode(prop, "int", null));
         }
 
+        private class ArrayFieldHolder : MonoBehaviour
+        {
+            public int[] items = new int[3];
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_ArraySize_RejectsHugeValue()
+        {
+            // A crafted/corrupted FieldValue targeting "items.Array.size"
+            // could otherwise make Unity attempt a huge array resize (hang/
+            // OOM) -- this key is resolvable via FindProperty independent of
+            // whether it was ever legitimately captured.
+            var go = Spawn("ArrayHolder");
+            var holder = go.AddComponent<ArrayFieldHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty("items.Array.size");
+
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "int", "2000000000"));
+            Assert.AreEqual(3, holder.items.Length, "rejected write must leave the array untouched");
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_ArraySize_AcceptsReasonableValue()
+        {
+            var go = Spawn("ArrayHolder2");
+            var holder = go.AddComponent<ArrayFieldHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty("items.Array.size");
+
+            Assert.IsTrue(FieldCodec.TryDecode(prop, "int", "5"));
+            so.ApplyModifiedProperties();
+            Assert.AreEqual(5, holder.items.Length);
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_PlainIntField_UnaffectedByArraySizeCap()
+        {
+            // The cap is scoped to prop.propertyType == ArraySize; a huge
+            // value for a genuinely plain int field must still round-trip.
+            var go = Spawn("IntHolder3");
+            var holder = go.AddComponent<LongFieldHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(LongFieldHolder.intField));
+
+            Assert.IsTrue(FieldCodec.TryDecode(prop, "int", "2000000000"));
+            so.ApplyModifiedProperties();
+            Assert.AreEqual(2000000000, holder.intField);
+        }
+
         #endregion
     }
 }
