@@ -37,12 +37,15 @@ namespace AvatarVcs.Editor.History
             var current = guid;
             // Cap hops at the mapping count: a correct chain can be at most
             // this long, so hitting the cap means a cycle.
-            for (var i = 0; i < mappings.Count; i++)
+            var hops = 0;
+            for (; hops < mappings.Count; hops++)
             {
                 var entry = mappings.FirstOrDefault(m => m.oldGuid == current);
                 if (entry == null) break;
                 current = entry.newGuid;
             }
+            if (hops == mappings.Count && mappings.Any(m => m.oldGuid == current))
+                Debug.LogWarning($"[AvatarVCS] GUID remapping for '{guid}' hit a cycle; using '{current}' unresolved.");
             return current;
         }
 

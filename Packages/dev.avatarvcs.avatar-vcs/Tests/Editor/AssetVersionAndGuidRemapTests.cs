@@ -6,6 +6,7 @@ using AvatarVcs.Editor.Operations;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace AvatarVcs.Tests.Editor
 {
@@ -144,6 +145,8 @@ namespace AvatarVcs.Tests.Editor
             // Simulate a circular mapping: A -> B -> A
             GuidRemapper.AddMapping("cycle-a", "cycle-b");
             GuidRemapper.AddMapping("cycle-b", "cycle-a");
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("GUID remapping .* hit a cycle"));
 
             // Must terminate without throwing or hanging, and resolve to one of the cycle nodes
             var resolved = GuidRemapper.Resolve("cycle-a");
