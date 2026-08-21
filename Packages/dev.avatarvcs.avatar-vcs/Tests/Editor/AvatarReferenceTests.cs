@@ -8,6 +8,7 @@ using AvatarVcs.Runtime;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace AvatarVcs.Tests.Editor
 {
@@ -74,6 +75,11 @@ namespace AvatarVcs.Tests.Editor
             if (parent != null) go.transform.SetParent(parent);
             spawned.Add(go);
             return go;
+        }
+
+        private class ExtraComponent : MonoBehaviour
+        {
+            public float value;
         }
 
         [Test]
@@ -195,6 +201,25 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void CollectFromTrackedTargets_SkipsDescendantWhenAncestorAlreadyTracked()
+        {
+            // Tracking both an ancestor and one of its descendants would
+            // otherwise capture the descendant's fields twice (once via the
+            // ancestor's recursive walk, once as its own independent entry)
+            // -- duplicate data, duplicate diff rows, no new information.
+            var avatarRoot = Spawn("Avatar");
+            avatarRoot.AddComponent<AvatarVcsTrackedReference>();
+            var body = Spawn("Body", avatarRoot.transform);
+            body.AddComponent<AvatarVcsTrackedReference>();
+            body.AddComponent<SkinnedMeshRenderer>().sharedMesh = testMesh;
+
+            var (avatarReferences, _) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
+
+            Assert.AreEqual(1, avatarReferences.Count);
+            Assert.AreEqual(string.Empty, avatarReferences[0].path); // the avatar root itself, not Body
+        }
+
+        [Test]
         public void CollectFromTrackedTargets_UnsupportedShader_SkipsMaterialSettingsButKeepsMaterialReference()
         {
             // materialA uses the built-in Standard shader (see OneTimeSetUp),
@@ -260,6 +285,156 @@ namespace AvatarVcs.Tests.Editor
 
                 Assert.IsTrue(result.IsSuccess);
                 Assert.AreEqual(60f, renderer.GetBlendShapeWeight(0), 0.0001f);
+            }
+            finally
+            {
+                CommitStore.DeleteAvatarHistory(avatarGuid);
+            }
+        }
+
+        // Broadened tracking (design doc 1.4, revised): a marked target's
+        // whole subtree, not just its own BlendShape/material, is captured
+        // generically (same ComponentCapturer/ComponentApplier containers
+        // use), overwrite-only. These tests cover that recursive path.
+
+        [Test]
+        public void Capture_RecursivelyCapturesComponentFieldsOnDescendants()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            var child = Spawn("Extra", body.transform);
+            child.AddComponent<ExtraComponent>().value = 5f;
+
+            var state = AvatarReferenceCapture.Capture(body.transform, avatarRoot.transform);
+
+            var captured = state.components.Single(c => c.type == typeof(ExtraComponent).FullName);
+            Assert.AreEqual("Extra", captured.path);
+            Assert.AreEqual("5", captured.fields.Single(f => f.key == "value").value);
+        }
+
+        [Test]
+        public void Capture_IncludesTargetsOwnNonRendererComponents()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            body.AddComponent<ExtraComponent>().value = 9f;
+
+            var state = AvatarReferenceCapture.Capture(body.transform, avatarRoot.transform);
+
+            var captured = state.components.Single(c => c.type == typeof(ExtraComponent).FullName);
+            Assert.AreEqual(string.Empty, captured.path); // on target itself
+            Assert.AreEqual("9", captured.fields.Single(f => f.key == "value").value);
+        }
+
+        [Test]
+        public void Capture_ExcludesAvatarVcsRootSubtree_WhenTargetIsAvatarRoot()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            container.AddComponent<ExtraComponent>().value = 1f;
+
+            var state = AvatarReferenceCapture.Capture(avatarRoot.transform, avatarRoot.transform);
+
+            Assert.IsFalse(state.components.Any(c => c.type == typeof(ExtraComponent).FullName),
+                "components inside [AvatarVCS] must never be captured by the avatar-side path");
+        }
+
+        [Test]
+        public void Capture_ExcludesAvatarVcsRootSubtree_SurvivesRename()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            container.AddComponent<ExtraComponent>().value = 1f;
+            root.name = "Renamed_AvatarVCS_Root";
+
+            var state = AvatarReferenceCapture.Capture(avatarRoot.transform, avatarRoot.transform);
+
+            Assert.IsFalse(state.components.Any(c => c.type == typeof(ExtraComponent).FullName),
+                "exclusion must hold even after a manual rename of [AvatarVCS]");
+        }
+
+        [Test]
+        public void Capture_StripsBlendShapeAndMaterialFields_FromGenericRendererCapture()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            var renderer = body.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = testMesh;
+            renderer.sharedMaterials = new[] { materialA };
+
+            var state = AvatarReferenceCapture.Capture(body.transform, avatarRoot.transform);
+
+            var rendererState = state.components.SingleOrDefault(c => c.type == typeof(SkinnedMeshRenderer).FullName);
+            if (rendererState != null)
+            {
+                Assert.IsFalse(rendererState.fields.Any(f => f.key.StartsWith("m_BlendShapeWeights")));
+                Assert.IsFalse(rendererState.assetRefs.Any(a => a.key.StartsWith("m_Materials")));
+            }
+            // The narrow, robust path must still own these regardless:
+            Assert.AreEqual(2, state.blendShapes.Count);
+            Assert.AreEqual(1, state.materials.Count);
+        }
+
+        [Test]
+        public void Apply_RestoresGenericComponentField_OverwriteOnly()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            var child = Spawn("Extra", body.transform);
+            var extra = child.AddComponent<ExtraComponent>();
+            extra.value = 12f;
+
+            var captured = AvatarReferenceCapture.Capture(body.transform, avatarRoot.transform);
+
+            extra.value = 999f; // simulate drift
+
+            AvatarReferenceApplier.Apply(captured, avatarRoot.transform);
+
+            Assert.AreEqual(12f, extra.value, 0.0001f);
+        }
+
+        [Test]
+        public void Apply_ComponentMissingOnLiveTarget_WarnsAndDoesNotCreate()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+
+            var state = new AvatarReferenceState { path = "Body" };
+            state.components.Add(new ComponentState
+            {
+                path = string.Empty,
+                type = typeof(ExtraComponent).FullName,
+            });
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex(".*Failed to restore component.*"));
+            AvatarReferenceApplier.Apply(state, avatarRoot.transform);
+
+            Assert.IsNull(body.GetComponent<ExtraComponent>(), "createIfMissing is false for this path");
+        }
+
+        [Test]
+        public void BranchManagerCommit_And_RestoreToCommit_RoundTripsGenericComponentField_AfterDrift()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            body.AddComponent<AvatarVcsTrackedReference>();
+            var child = Spawn("Extra", body.transform);
+            var extra = child.AddComponent<ExtraComponent>();
+            extra.value = 21f;
+
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            try
+            {
+                var commit = BranchManager.Commit(avatarRoot, "with generic component");
+
+                extra.value = 0f; // simulate drift after committing
+
+                var result = BranchManager.RestoreToCommit(avatarRoot, commit.commitId);
+
+                Assert.IsTrue(result.IsSuccess);
+                Assert.AreEqual(21f, extra.value, 0.0001f);
             }
             finally
             {
