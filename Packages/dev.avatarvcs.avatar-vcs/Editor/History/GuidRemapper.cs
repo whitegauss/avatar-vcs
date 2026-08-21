@@ -64,13 +64,44 @@ namespace AvatarVcs.Editor.History
             Save(config);
         }
 
-        public static GuidRemapConfig Load() =>
-            File.Exists(ConfigPath) ? JsonUtility.FromJson<GuidRemapConfig>(File.ReadAllText(ConfigPath)) : new GuidRemapConfig();
+        /// <summary>
+        /// JsonUtility.FromJson throws on malformed JSON (e.g. a file
+        /// truncated by a crash mid-write, or a bad manual edit). Falls back
+        /// to an empty config and warns instead of propagating -- matching
+        /// CommitStore.TryLoadJson, since "no mappings recorded yet" is
+        /// already a normal, recoverable state every caller here handles.
+        /// </summary>
+        public static GuidRemapConfig Load()
+        {
+            if (!File.Exists(ConfigPath)) return new GuidRemapConfig();
 
+            try
+            {
+                return JsonUtility.FromJson<GuidRemapConfig>(File.ReadAllText(ConfigPath)) ?? new GuidRemapConfig();
+            }
+            catch (Exception e) when (e is ArgumentException or IOException)
+            {
+                Debug.LogWarning($"[AvatarVCS] Could not parse '{ConfigPath}' as {nameof(GuidRemapConfig)}; treating as empty. {e.Message}");
+                return new GuidRemapConfig();
+            }
+        }
+
+        /// <summary>
+        /// Writes via a temp file in the same directory, then swaps it into
+        /// place, matching CommitStore.WriteAtomically -- a crash or
+        /// disk-full partway through a direct File.WriteAllText would
+        /// otherwise leave a truncated file that permanently breaks every
+        /// future Load() for this config.
+        /// </summary>
         public static void Save(GuidRemapConfig config)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
-            File.WriteAllText(ConfigPath, JsonUtility.ToJson(config, true));
+            var tempPath = $"{ConfigPath}.tmp";
+            File.WriteAllText(tempPath, JsonUtility.ToJson(config, true));
+            if (File.Exists(ConfigPath))
+                File.Replace(tempPath, ConfigPath, null);
+            else
+                File.Move(tempPath, ConfigPath);
             resolveCache = null;
         }
     }
