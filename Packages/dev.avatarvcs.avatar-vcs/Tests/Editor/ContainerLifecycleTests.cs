@@ -5,6 +5,7 @@ using AvatarVcs.Runtime;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace AvatarVcs.Tests.Editor
 {
@@ -233,6 +234,21 @@ namespace AvatarVcs.Tests.Editor
             {
                 Object.DestroyImmediate(unrelated);
             }
+        }
+
+        [Test]
+        public void CaptureContainer_WarnsAboutNonPrefabChild()
+        {
+            // Not a prefab instance, so it has no guid to regenerate it from
+            // -- the container will silently lose it on the next checkout.
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            new GameObject("RawLight").transform.SetParent(container.transform, false);
+
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex("'RawLight' inside container 'outfit_a' is not a prefab instance"));
+
+            ContainerCapture.CaptureContainer(container.transform);
         }
 
         [Test]

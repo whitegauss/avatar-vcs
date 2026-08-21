@@ -108,6 +108,8 @@ namespace AvatarVcs.Editor.History
                     result[$"{component.type}@{component.path}.{field.key}"] = field.value;
                 foreach (var assetRef in component.assetRefs)
                     result[$"{component.type}@{component.path}.{assetRef.key}"] = assetRef.guid;
+                foreach (var sceneRef in component.sceneRefs)
+                    result[$"{component.type}@{component.path}.{sceneRef.key}"] = $"{sceneRef.path} ({sceneRef.type})";
             }
             return result;
         }

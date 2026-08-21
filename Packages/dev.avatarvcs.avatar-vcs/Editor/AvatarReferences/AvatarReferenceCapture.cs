@@ -27,17 +27,21 @@ namespace AvatarVcs.Editor.AvatarReferences
             if (skinnedRenderer != null && skinnedRenderer.sharedMesh != null)
             {
                 var mesh = skinnedRenderer.sharedMesh;
+                // Every blend shape on a tracked target is recorded, including
+                // ones currently at 0 -- a shape whose prefab/mesh default is
+                // non-zero (e.g. an outfit shipping a shape pre-set to 100)
+                // can legitimately be turned down to exactly 0 by the user,
+                // and that explicit choice must round-trip through a commit
+                // like any other value. (Design doc 1.4.2's "JSON absence
+                // means not tracked" is about targets/paths never added to
+                // avatarReferences at all, not about values within one that
+                // already is.)
                 for (var i = 0; i < mesh.blendShapeCount; i++)
                 {
-                    // Only non-default weights are recorded; JSON absence means
-                    // "not tracked", not "reset to zero" (design doc 1.4.2).
-                    var weight = skinnedRenderer.GetBlendShapeWeight(i);
-                    if (weight == 0f) continue;
-
                     state.blendShapes.Add(new BlendShapeRef
                     {
                         name = mesh.GetBlendShapeName(i),
-                        weight = weight,
+                        weight = skinnedRenderer.GetBlendShapeWeight(i),
                     });
                 }
             }
