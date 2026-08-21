@@ -46,6 +46,31 @@ namespace AvatarVcs.Editor.Core
         }
 
         /// <summary>
+        /// Walks up from a raw Hierarchy selection to find the avatar it
+        /// actually belongs to, so callers never mistake "a container, or
+        /// something inside one" for the avatar root itself -- e.g.
+        /// selecting an individual outfit prefab instance and hitting
+        /// Commit must not silently spin up a brand new, unrelated
+        /// "[AvatarVCS]" root nested inside that outfit.
+        ///
+        /// Returns null if no existing AvatarVCS structure is found
+        /// anywhere in the ancestor chain, meaning `from` (or nothing) is a
+        /// legitimate candidate for a brand new avatar root.
+        /// </summary>
+        public static GameObject FindEnclosingAvatarRoot(GameObject from)
+        {
+            if (from == null) return null;
+
+            // Searches from as well as every ancestor for the "[AvatarVCS]"
+            // root's marker component, so this resolves correctly no matter
+            // how deep from sits inside a container's own hierarchy.
+            // includeInactive: true because a container (or the whole
+            // "[AvatarVCS]" root) can legitimately be toggled off.
+            var root = from.GetComponentInParent<AvatarVcsRoot>(includeInactive: true);
+            return root != null && root.transform.parent != null ? root.transform.parent.gameObject : null;
+        }
+
+        /// <summary>
         /// The avatar's stable identity, used to key commit history storage.
         /// Calls EnsureRoot, so a guid is always available even before any
         /// container exists.

@@ -126,6 +126,14 @@ namespace AvatarVcs.Editor.UI
                 newRoot = Selection.activeGameObject;
             EditorGUILayout.EndHorizontal();
 
+            // Whether dragged into the field or picked via "Use Selected",
+            // an object with no existing AvatarVCS structure of its own
+            // (e.g. a single outfit item rather than the actual avatar)
+            // must not silently become the tracked avatar -- resolve up to
+            // the real owner if one exists, or confirm before adopting it.
+            if (newRoot != null && newRoot != avatarRoot)
+                newRoot = ResolveAvatarRoot(newRoot);
+
             if (newRoot != avatarRoot)
             {
                 // Leaving an avatar mid-compare would strand its scene
@@ -143,6 +151,29 @@ namespace AvatarVcs.Editor.UI
                 compareCommitAId = null;
                 compareCommitBId = null;
             }
+        }
+
+        /// <summary>
+        /// Mirrors AvatarVcsMenu's ResolveAvatarRootWithConfirmation: walks
+        /// up to the real avatar if selection is inside an existing
+        /// AvatarVCS structure, otherwise asks before adopting selection
+        /// itself as a brand new one. Returns avatarRoot (the previous
+        /// value, possibly null) on cancel, so the caller's != comparison
+        /// naturally becomes a no-op.
+        /// </summary>
+        private GameObject ResolveAvatarRoot(GameObject selection)
+        {
+            var enclosing = ContainerManager.FindEnclosingAvatarRoot(selection);
+            if (enclosing != null) return enclosing;
+
+            if (ContainerManager.FindRoot(selection) != null) return selection;
+
+            return EditorUtility.DisplayDialog("Start Tracking This Object?",
+                    $"'{selection.name}' has no AvatarVCS history yet. This window will treat it as the avatar to commit/checkout for.\n\n"
+                    + "If you meant to select your actual avatar's root GameObject (or something inside its existing containers), cancel and pick that instead.",
+                    "Use This Object", "Cancel")
+                ? selection
+                : avatarRoot;
         }
 
         private void Reload()

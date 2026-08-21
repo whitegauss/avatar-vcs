@@ -115,5 +115,50 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual(DiffKind.Changed, hairDiff.kind);
             Assert.IsTrue(hairDiff.changeNotes.Any(n => n.Contains("prefix") && n.Contains("'A'") && n.Contains("'B'")));
         }
+
+        [Test]
+        public void Diff_DetectsTagChange_WithNote()
+        {
+            var before = MakeContainer("hair", "guid_a");
+            before.tag = "Untagged";
+            var after = MakeContainer("hair", "guid_a");
+            after.tag = "EditorOnly";
+
+            var diffs = SnapshotDiffer.Diff(MakeCommit(before), MakeCommit(after));
+
+            var hairDiff = diffs.Single(d => d.containerId == "hair");
+            Assert.AreEqual(DiffKind.Changed, hairDiff.kind);
+            Assert.IsTrue(hairDiff.changeNotes.Any(n => n.Contains("tag") && n.Contains("EditorOnly")));
+        }
+
+        [Test]
+        public void Diff_DetectsActiveSelfChange_WithNote()
+        {
+            var before = MakeContainer("hair", "guid_a");
+            before.activeSelf = true;
+            var after = MakeContainer("hair", "guid_a");
+            after.activeSelf = false;
+
+            var diffs = SnapshotDiffer.Diff(MakeCommit(before), MakeCommit(after));
+
+            var hairDiff = diffs.Single(d => d.containerId == "hair");
+            Assert.AreEqual(DiffKind.Changed, hairDiff.kind);
+            Assert.IsTrue(hairDiff.changeNotes.Any(n => n.Contains("active") && n.Contains("False")));
+        }
+
+        [Test]
+        public void Diff_DetectsLayerChange_WithNote()
+        {
+            var before = MakeContainer("hair", "guid_a");
+            before.layer = 0;
+            var after = MakeContainer("hair", "guid_a");
+            after.layer = 5;
+
+            var diffs = SnapshotDiffer.Diff(MakeCommit(before), MakeCommit(after));
+
+            var hairDiff = diffs.Single(d => d.containerId == "hair");
+            Assert.AreEqual(DiffKind.Changed, hairDiff.kind);
+            Assert.IsTrue(hairDiff.changeNotes.Any(n => n.Contains("layer") && n.Contains("5")));
+        }
     }
 }
