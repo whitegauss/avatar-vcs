@@ -86,6 +86,37 @@ namespace AvatarVcs.Editor.Core
         }
 
         /// <summary>
+        /// Resolves the avatar to operate on from a raw Hierarchy selection,
+        /// for any entry point that turns "whatever's selected" into an
+        /// avatarRoot (the GameObject menu, the window's avatar picker). If
+        /// selection is already inside an existing AvatarVCS structure (a
+        /// container, something inside one, or the "[AvatarVCS]" root
+        /// itself), walks up to the actual owning avatar automatically via
+        /// FindEnclosingAvatarRoot. If selection has no existing structure
+        /// at all, confirms with the user before treating it as a brand new
+        /// avatar root -- it could just as easily be a single outfit item as
+        /// the avatar itself. Returns null if selection is null or the user
+        /// cancels; callers decide what "cancel" means for them (abort vs.
+        /// keep whatever was previously selected).
+        /// </summary>
+        public static GameObject ResolveAvatarRootWithConfirmation(GameObject selection, string actionDescription)
+        {
+            if (selection == null) return null;
+
+            var enclosing = FindEnclosingAvatarRoot(selection);
+            if (enclosing != null) return enclosing;
+
+            if (FindRoot(selection) != null) return selection;
+
+            return EditorUtility.DisplayDialog("Start Tracking This Object?",
+                    $"'{selection.name}' has no AvatarVCS history yet. {actionDescription}\n\n"
+                    + "If you meant to select your actual avatar's root GameObject (or something inside its existing containers), cancel and select that instead.",
+                    "Start Tracking", "Cancel")
+                ? selection
+                : null;
+        }
+
+        /// <summary>
         /// The avatar's stable identity, used to key commit history storage.
         /// Calls EnsureRoot, so a guid is always available even before any
         /// container exists.

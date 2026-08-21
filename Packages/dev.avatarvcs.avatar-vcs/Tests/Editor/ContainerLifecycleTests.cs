@@ -292,6 +292,37 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void ResolveAvatarRootWithConfirmation_FromInsideAContainer_ResolvesWithoutPrompting()
+        {
+            // Both early-return paths never touch the confirmation dialog,
+            // so they're safe to exercise headlessly; the "no existing
+            // structure -> confirm" path isn't (DisplayDialog blocks on
+            // user input), matching how AvatarVcsMenu/AvatarVcsWindow's use
+            // of this are UI-layer and not directly unit tested either.
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, container.transform);
+
+            Assert.AreSame(avatarRoot, ContainerManager.ResolveAvatarRootWithConfirmation(instance, "test"));
+            Assert.AreSame(avatarRoot, ContainerManager.ResolveAvatarRootWithConfirmation(container.gameObject, "test"));
+        }
+
+        [Test]
+        public void ResolveAvatarRootWithConfirmation_AlreadyTheAvatarRoot_ResolvesWithoutPrompting()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            Assert.AreSame(avatarRoot, ContainerManager.ResolveAvatarRootWithConfirmation(avatarRoot, "test"));
+            Assert.AreSame(avatarRoot, ContainerManager.ResolveAvatarRootWithConfirmation(root, "test"),
+                "the [AvatarVCS] root itself, not just the avatar, already has an existing structure to resolve to");
+        }
+
+        [Test]
+        public void ResolveAvatarRootWithConfirmation_NullSelection_ReturnsNull()
+        {
+            Assert.IsNull(ContainerManager.ResolveAvatarRootWithConfirmation(null, "test"));
+        }
+
+        [Test]
         public void CaptureContainer_WarnsAboutNonPrefabChild()
         {
             // Not a prefab instance, so it has no guid to regenerate it from
