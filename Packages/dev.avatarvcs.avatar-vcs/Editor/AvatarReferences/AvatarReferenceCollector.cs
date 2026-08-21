@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AvatarVcs.Editor.MaterialSettings;
 using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.Reflection;
@@ -28,7 +29,16 @@ namespace AvatarVcs.Editor.AvatarReferences
             var avatarReferences = new List<AvatarReferenceState>();
             var materialSettings = new List<MaterialSettingsState>();
 
-            var trackedTargets = avatarRoot.GetComponentsInChildren<AvatarVcsTrackedReference>(includeInactive: true);
+            // If a target's own ancestor is also tracked, the ancestor's
+            // recursive capture (AvatarReferenceCapture.CaptureDescendantComponents)
+            // already walks down into this target -- capturing it again as
+            // its own independent entry would just duplicate every field into
+            // two AvatarReferenceState rows with no new information. Only the
+            // outermost tracked marker in any tracked/tracked chain runs.
+            var trackedTargets = avatarRoot.GetComponentsInChildren<AvatarVcsTrackedReference>(includeInactive: true)
+                .Where(t => t.transform.parent == null
+                    || t.transform.parent.GetComponentInParent<AvatarVcsTrackedReference>(includeInactive: true) == null)
+                .ToList();
             foreach (var tracked in trackedTargets)
             {
                 var target = tracked.transform;

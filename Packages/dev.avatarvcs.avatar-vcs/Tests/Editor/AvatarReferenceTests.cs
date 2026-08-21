@@ -201,6 +201,25 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void CollectFromTrackedTargets_SkipsDescendantWhenAncestorAlreadyTracked()
+        {
+            // Tracking both an ancestor and one of its descendants would
+            // otherwise capture the descendant's fields twice (once via the
+            // ancestor's recursive walk, once as its own independent entry)
+            // -- duplicate data, duplicate diff rows, no new information.
+            var avatarRoot = Spawn("Avatar");
+            avatarRoot.AddComponent<AvatarVcsTrackedReference>();
+            var body = Spawn("Body", avatarRoot.transform);
+            body.AddComponent<AvatarVcsTrackedReference>();
+            body.AddComponent<SkinnedMeshRenderer>().sharedMesh = testMesh;
+
+            var (avatarReferences, _) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
+
+            Assert.AreEqual(1, avatarReferences.Count);
+            Assert.AreEqual(string.Empty, avatarReferences[0].path); // the avatar root itself, not Body
+        }
+
+        [Test]
         public void CollectFromTrackedTargets_UnsupportedShader_SkipsMaterialSettingsButKeepsMaterialReference()
         {
             // materialA uses the built-in Standard shader (see OneTimeSetUp),
