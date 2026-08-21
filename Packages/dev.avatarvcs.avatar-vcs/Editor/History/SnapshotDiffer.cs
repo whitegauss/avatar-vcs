@@ -80,6 +80,12 @@ namespace AvatarVcs.Editor.History
             if (before.tag != after.tag)
                 notes.Add($"tag: '{before.tag}' -> '{after.tag}'");
 
+            if (before.activeSelf != after.activeSelf)
+                notes.Add($"active: {before.activeSelf} -> {after.activeSelf}");
+
+            if (before.layer != after.layer)
+                notes.Add($"layer: {before.layer} -> {after.layer}");
+
             var beforeFields = FlattenFields(before);
             var afterFields = FlattenFields(after);
             foreach (var key in beforeFields.Keys.Union(afterFields.Keys).OrderBy(k => k))

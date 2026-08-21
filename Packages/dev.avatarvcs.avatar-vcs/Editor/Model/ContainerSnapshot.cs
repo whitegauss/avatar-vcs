@@ -23,6 +23,13 @@ namespace AvatarVcs.Editor.Model
         // created GameObject is always "Untagged", so this is also the
         // correct default for commits recorded before this field existed.
         public string tag = "Untagged";
+        // The Inspector's active checkbox and layer dropdown. Same
+        // backward-compatibility reasoning as tag: these default to a fresh
+        // GameObject's actual defaults (active, "Default" layer = 0), so
+        // commits recorded before these fields existed still restore
+        // correctly.
+        public bool activeSelf = true;
+        public int layer;
         public List<ComponentState> components = new();
     }
 }
