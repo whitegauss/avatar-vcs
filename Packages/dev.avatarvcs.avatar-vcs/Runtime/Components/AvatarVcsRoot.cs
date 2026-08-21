@@ -14,6 +14,13 @@ namespace AvatarVcs.Runtime
     [DisallowMultipleComponent]
     public class AvatarVcsRoot : MonoBehaviour
     {
+        // Must match AvatarVcs.Editor.Core.ContainerManager.RootName. Kept as
+        // a separate literal since Runtime can't reference the Editor
+        // assembly; ContainerManager.FindRoot no longer depends on this
+        // name matching (see its GetComponentInChildren fallback), but
+        // warning here still helps a user notice they've drifted from it.
+        private const string ExpectedRootName = "[AvatarVCS]";
+
         [SerializeField] private string avatarGuid;
 
         public string AvatarGuid => avatarGuid;
@@ -41,6 +48,10 @@ namespace AvatarVcs.Runtime
         private void OnValidate()
         {
             if (string.IsNullOrEmpty(avatarGuid)) return;
+
+            if (gameObject.name != ExpectedRootName)
+                Debug.LogWarning($"[AvatarVCS] This GameObject was renamed from '{ExpectedRootName}'. "
+                    + "It'll still be found and used correctly, but renaming it back is recommended to avoid confusion.");
 
             var avatarTransform = transform.parent; // EnsureRoot always parents this under the avatar
             if (avatarTransform == null) return;

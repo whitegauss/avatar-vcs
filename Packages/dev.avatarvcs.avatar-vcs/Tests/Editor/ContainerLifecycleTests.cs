@@ -75,6 +75,21 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void FindRoot_StillResolvesAfterManualRename()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            root.name = "Oops I Renamed This";
+
+            var found = ContainerManager.FindRoot(avatarRoot);
+            Assert.AreSame(root, found, "a renamed root must still be found by its marker component, not just by name");
+
+            // And EnsureRoot must reuse it rather than creating a duplicate.
+            var ensured = ContainerManager.EnsureRoot(avatarRoot);
+            Assert.AreSame(root, ensured);
+            Assert.AreEqual(1, avatarRoot.transform.childCount);
+        }
+
+        [Test]
         public void GetPrefabGuid_ResolvesGuidOfCorrespondingSourcePrefab()
         {
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource);

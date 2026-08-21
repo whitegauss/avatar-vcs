@@ -126,6 +126,40 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual(1, config.branches.Count(b => b.name == "feature"));
         }
 
+        [Test]
+        public void BranchManager_IsValidBranchName_RejectsUnsafeNames()
+        {
+            Assert.IsFalse(BranchManager.IsValidBranchName(null));
+            Assert.IsFalse(BranchManager.IsValidBranchName(""));
+            Assert.IsFalse(BranchManager.IsValidBranchName("  padded  "));
+            Assert.IsFalse(BranchManager.IsValidBranchName(".hidden"));
+            Assert.IsFalse(BranchManager.IsValidBranchName("-flag-like"));
+            Assert.IsFalse(BranchManager.IsValidBranchName("has/slash"));
+            Assert.IsFalse(BranchManager.IsValidBranchName("has\\backslash"));
+            Assert.IsFalse(BranchManager.IsValidBranchName("has:colon"));
+            Assert.IsFalse(BranchManager.IsValidBranchName("has*star"));
+            Assert.IsFalse(BranchManager.IsValidBranchName("has\"quote"));
+            Assert.IsFalse(BranchManager.IsValidBranchName("has\tcontrol"));
+        }
+
+        [Test]
+        public void BranchManager_IsValidBranchName_AcceptsSafeNames()
+        {
+            Assert.IsTrue(BranchManager.IsValidBranchName("main"));
+            Assert.IsTrue(BranchManager.IsValidBranchName("hair-long"));
+            Assert.IsTrue(BranchManager.IsValidBranchName("outfit_v2"));
+            Assert.IsTrue(BranchManager.IsValidBranchName("髪ロング")); // Japanese is fine
+        }
+
+        [Test]
+        public void BranchManager_CreateBranch_RejectsUnsafeName()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            BranchManager.Commit(avatar, "init");
+
+            Assert.Throws<ArgumentException>(() => BranchManager.CreateBranch(avatar, "has/slash"));
+        }
+
         #endregion
 
         #region SnapshotDiffer Edge Cases

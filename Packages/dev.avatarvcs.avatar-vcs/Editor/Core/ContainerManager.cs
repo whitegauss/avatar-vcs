@@ -42,7 +42,22 @@ namespace AvatarVcs.Editor.Core
             if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
 
             var child = avatarRoot.transform.Find(RootName);
-            return child != null && child.GetComponent<AvatarVcsRoot>() != null ? child.gameObject : null;
+            if (child != null && child.GetComponent<AvatarVcsRoot>() != null)
+                return child.gameObject;
+
+            // Fall back to the marker component if the fast name-based
+            // lookup above missed: a manual Hierarchy rename of "[AvatarVCS]"
+            // would otherwise make it permanently unfindable by this method,
+            // and the next EnsureRoot would spin up a duplicate root next to
+            // the (now orphaned) renamed one instead of reusing it.
+            for (var i = 0; i < avatarRoot.transform.childCount; i++)
+            {
+                var candidate = avatarRoot.transform.GetChild(i);
+                if (candidate.GetComponent<AvatarVcsRoot>() != null)
+                    return candidate.gameObject;
+            }
+
+            return null;
         }
 
         /// <summary>

@@ -40,6 +40,11 @@ namespace AvatarVcs.Editor.History
         public static void CreateBranch(GameObject avatarRoot, string branchName, string fromCommitId = null)
         {
             if (string.IsNullOrEmpty(branchName)) throw new ArgumentException("branchName must not be empty.", nameof(branchName));
+            if (!IsValidBranchName(branchName))
+                throw new ArgumentException(
+                    $"'{branchName}' is not a valid branch name. Avoid /, \\, :, *, ?, \", <, >, |, control "
+                    + "characters, leading/trailing whitespace, and a leading '.' or '-'.",
+                    nameof(branchName));
 
             var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
             var config = CommitStore.LoadConfig(avatarGuid);
@@ -114,6 +119,20 @@ namespace AvatarVcs.Editor.History
             CommitStore.SaveConfig(avatarGuid, config);
 
             return result;
+        }
+
+        // Branch names aren't currently used as filesystem paths anywhere
+        // (storage is keyed by avatarGuid/commitId), but restricting them
+        // now avoids painting into a corner if that ever changes, and rules
+        // out control characters and stray whitespace regardless.
+        private static readonly char[] ForbiddenChars = { '/', '\\', ':', '*', '?', '"', '<', '>', '|' };
+
+        public static bool IsValidBranchName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            if (name != name.Trim()) return false;
+            if (name.StartsWith(".") || name.StartsWith("-")) return false;
+            return name.All(c => !ForbiddenChars.Contains(c) && !char.IsControl(c));
         }
 
         private static BranchEntry FindEntry(BranchConfig config, string branchName) =>

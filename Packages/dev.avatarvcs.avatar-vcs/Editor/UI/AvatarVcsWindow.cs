@@ -35,6 +35,11 @@ namespace AvatarVcs.Editor.UI
         // picked here, to answer "what changed between these two commits".
         private string diffBaseCommitId;
 
+        // Set by hierarchyChanged/postprocessModifications, consumed once
+        // per OnGUI so a scene edit is reflected without the user having to
+        // remember to hit Refresh.
+        private bool diffPossiblyStale;
+
         private string commitMessage = "";
         private bool showNewBranchField;
         private string newBranchName = "";
@@ -69,12 +74,43 @@ namespace AvatarVcs.Editor.UI
             window.avatarGuid = null;
         }
 
+        private void OnEnable()
+        {
+            // Auto-refresh the "uncommitted changes" diff instead of relying
+            // on the user to remember to hit Refresh: hierarchyChanged
+            // covers structural edits (add/remove/reparent an object or
+            // component), postprocessModifications covers in-place value
+            // edits (most Inspector field changes go through Undo). Both
+            // just flag dirty + request a repaint rather than recomputing
+            // synchronously, since a diff recompute walks every component
+            // via SerializedObject and firing that on every keystroke of a
+            // drag would be wasteful.
+            EditorApplication.hierarchyChanged += OnSceneMaybeChanged;
+            Undo.postprocessModifications += OnPostprocessModifications;
+        }
+
         private void OnDisable()
         {
+            EditorApplication.hierarchyChanged -= OnSceneMaybeChanged;
+            Undo.postprocessModifications -= OnPostprocessModifications;
+
             // Closing the window mid-compare would otherwise strand the
             // scene showing whichever side was last toggled to.
             if (compareModeActive && avatarRoot != null)
                 ExitCompare(keepCurrent: false);
+        }
+
+        private void OnSceneMaybeChanged()
+        {
+            diffPossiblyStale = true;
+            Repaint();
+        }
+
+        private UndoPropertyModification[] OnPostprocessModifications(UndoPropertyModification[] modifications)
+        {
+            diffPossiblyStale = true;
+            Repaint();
+            return modifications;
         }
 
         private void OnGUI()
@@ -105,6 +141,15 @@ namespace AvatarVcs.Editor.UI
             DrawRemapSection();
             DrawCompareBar();
             if (compareModeActive) return;
+
+            if (diffPossiblyStale)
+            {
+                diffPossiblyStale = false;
+                // Only meaningful when diffing against the live scene; a
+                // commit-vs-commit diff isn't affected by a scene edit.
+                if (diffBaseCommitId == null)
+                    RecomputeSelectedDiff();
+            }
 
             DrawBranchBar();
             DrawUncommittedWarning();
@@ -217,7 +262,8 @@ namespace AvatarVcs.Editor.UI
             {
                 EditorGUILayout.BeginHorizontal();
                 newBranchName = EditorGUILayout.TextField(newBranchName);
-                GUI.enabled = !string.IsNullOrEmpty(newBranchName) && !config.branches.Any(b => b.name == newBranchName);
+                var isValid = BranchManager.IsValidBranchName(newBranchName) && !config.branches.Any(b => b.name == newBranchName);
+                GUI.enabled = isValid;
                 if (GUILayout.Button("Create", GUILayout.Width(80)))
                 {
                     BranchManager.CreateBranch(avatarRoot, newBranchName);
@@ -227,6 +273,10 @@ namespace AvatarVcs.Editor.UI
                 }
                 GUI.enabled = true;
                 EditorGUILayout.EndHorizontal();
+                if (!string.IsNullOrEmpty(newBranchName) && !isValid)
+                    EditorGUILayout.HelpBox(
+                        "Invalid or duplicate branch name. Avoid / \\ : * ? \" < > | and leading/trailing whitespace or a leading '.' or '-'.",
+                        MessageType.Warning);
             }
         }
 
