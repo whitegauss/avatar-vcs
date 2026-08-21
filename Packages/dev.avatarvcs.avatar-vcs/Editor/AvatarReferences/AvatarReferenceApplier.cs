@@ -1,4 +1,5 @@
 using System;
+using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.Reflection;
@@ -8,9 +9,10 @@ using UnityEngine;
 namespace AvatarVcs.Editor.AvatarReferences
 {
     /// <summary>
-    /// Applies whitelisted avatar-body properties. Overwrite-only: names absent
-    /// from the state are left untouched (design doc 1.4.2), unlike containers
-    /// which are destroyed and regenerated.
+    /// Applies tracked avatar-side state. Overwrite-only: structure (objects/
+    /// components absent from the state, or added since) is left untouched
+    /// (design doc 1.4.2), unlike containers which are destroyed and
+    /// regenerated.
     /// </summary>
     public static class AvatarReferenceApplier
     {
@@ -28,6 +30,7 @@ namespace AvatarVcs.Editor.AvatarReferences
 
             ApplyBlendShapes(state, target);
             ApplyMaterials(state, target);
+            ApplyComponents(state, target, avatarRoot);
         }
 
         private static void ApplyBlendShapes(AvatarReferenceState state, Transform target)
@@ -94,6 +97,22 @@ namespace AvatarVcs.Editor.AvatarReferences
             {
                 Undo.RecordObject(renderer, "AvatarVCS Apply Materials");
                 renderer.sharedMaterials = materials;
+            }
+        }
+
+        // createIfMissing: false -- this is the deliberate "overwrite-only,
+        // never create/destroy" zone (design doc 1.4.2). A component that
+        // existed at commit time but is gone from the live target now is a
+        // divergence the user made on purpose; re-adding it has no clean
+        // semantics here (unlike containers, which rebuild the whole
+        // subtree from scratch every checkout).
+        private static void ApplyComponents(AvatarReferenceState state, Transform target, Transform avatarRoot)
+        {
+            foreach (var componentState in state.components)
+            {
+                var result = ComponentApplier.Apply(componentState, target.gameObject, avatarRoot.gameObject, createIfMissing: false);
+                if (!result.IsSuccess)
+                    Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{state.path}': {result.Message}");
             }
         }
     }

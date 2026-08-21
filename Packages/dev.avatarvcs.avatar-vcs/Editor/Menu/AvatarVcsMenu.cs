@@ -62,12 +62,17 @@ namespace AvatarVcs.Editor.Menu
         [MenuItem("GameObject/AvatarVCS/Open Window", true)]
         private static bool ValidateOpenWindowMenuItem() => Selection.activeGameObject != null;
 
-        // Design doc 1.4: the avatar body itself (e.g. "Body") stays outside
-        // container management, but its BlendShape weights and material
-        // references can still be tracked -- opt in per-target here rather
-        // than auto-tracking everything, since most of an avatar's hierarchy
-        // isn't meant to be captured this way.
-        [MenuItem("GameObject/AvatarVCS/Track Body Properties Here", false, 3)]
+        // Design doc 1.4: the avatar body (e.g. "Body", "Armature", the
+        // avatar root's own components like VRCAvatarDescriptor) stays
+        // outside container management structurally -- no object/component
+        // add-or-remove is ever tracked, and bone Transform pose is never
+        // touched -- but the *existing values* of *existing components* on a
+        // marked subtree (BlendShape weights, material slots by name/GUID,
+        // and every other component's serialized fields, recursively) can
+        // still be tracked and overwritten on restore. Opt in per-subtree
+        // here rather than auto-tracking everything, since most of an
+        // avatar's hierarchy isn't meant to be captured this way.
+        [MenuItem("GameObject/AvatarVCS/Track Properties Here", false, 3)]
         private static void TrackReferenceMenuItem()
         {
             var target = Selection.activeGameObject;
@@ -75,18 +80,27 @@ namespace AvatarVcs.Editor.Menu
             Undo.AddComponent<AvatarVcsTrackedReference>(target);
         }
 
-        [MenuItem("GameObject/AvatarVCS/Track Body Properties Here", true)]
-        private static bool ValidateTrackReferenceMenuItem() =>
-            Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<AvatarVcsTrackedReference>() == null;
+        [MenuItem("GameObject/AvatarVCS/Track Properties Here", true)]
+        private static bool ValidateTrackReferenceMenuItem()
+        {
+            var selection = Selection.activeGameObject;
+            if (selection == null || selection.GetComponent<AvatarVcsTrackedReference>() != null) return false;
 
-        [MenuItem("GameObject/AvatarVCS/Untrack Body Properties Here", false, 4)]
+            // A container-managed subtree is destroyed and regenerated on
+            // every checkout, so tracking would just be silently wiped every
+            // time -- block it here rather than let the user discover that
+            // as "why did my tracking disappear".
+            return selection.GetComponentInParent<AvatarVcsRoot>(includeInactive: true) == null;
+        }
+
+        [MenuItem("GameObject/AvatarVCS/Untrack Properties Here", false, 4)]
         private static void UntrackReferenceMenuItem()
         {
             var marker = Selection.activeGameObject?.GetComponent<AvatarVcsTrackedReference>();
             if (marker != null) Undo.DestroyObjectImmediate(marker);
         }
 
-        [MenuItem("GameObject/AvatarVCS/Untrack Body Properties Here", true)]
+        [MenuItem("GameObject/AvatarVCS/Untrack Properties Here", true)]
         private static bool ValidateUntrackReferenceMenuItem() =>
             Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<AvatarVcsTrackedReference>() != null;
 

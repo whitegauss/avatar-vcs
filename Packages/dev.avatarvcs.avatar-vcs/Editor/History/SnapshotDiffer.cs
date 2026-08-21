@@ -140,7 +140,7 @@ namespace AvatarVcs.Editor.History
             if (before.layer != after.layer)
                 notes.Add($"layer: {before.layer} -> {after.layer}");
 
-            notes.AddRange(DiffMap(FlattenFields(before), FlattenFields(after),
+            notes.AddRange(DiffMap(FlattenFields(before.components), FlattenFields(after.components),
                 (key, b, a) => $"{key}: '{b}' -> '{a}'"));
 
             return notes;
@@ -159,6 +159,9 @@ namespace AvatarVcs.Editor.History
                 before.materials.ToDictionary(m => m.slot, m => m.guid),
                 after.materials.ToDictionary(m => m.slot, m => m.guid),
                 (slot, b, a) => $"material slot {slot}: '{b}' -> '{a}'"));
+
+            notes.AddRange(DiffMap(FlattenFields(before.components), FlattenFields(after.components),
+                (key, b, a) => $"{key}: '{b}' -> '{a}'"));
 
             return notes;
         }
@@ -180,10 +183,10 @@ namespace AvatarVcs.Editor.History
             return notes;
         }
 
-        private static Dictionary<string, string> FlattenFields(ContainerSnapshot snapshot)
+        private static Dictionary<string, string> FlattenFields(List<ComponentState> components)
         {
             var result = new Dictionary<string, string>();
-            foreach (var component in snapshot.components)
+            foreach (var component in components)
             {
                 foreach (var field in component.fields)
                     result[$"{component.type}@{component.path}.{field.key}"] = field.value;

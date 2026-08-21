@@ -180,6 +180,81 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Diff_DetectsChangedGenericComponentField_InAvatarReferences()
+        {
+            var before = new Commit
+            {
+                avatarReferences =
+                {
+                    new AvatarReferenceState
+                    {
+                        path = "Body",
+                        components =
+                        {
+                            new ComponentState
+                            {
+                                path = "Extra",
+                                type = "Fake.Component",
+                                fields = { new FieldValue { key = "value", value = "1", type = "float" } },
+                            },
+                        },
+                    },
+                },
+            };
+            var after = new Commit
+            {
+                avatarReferences =
+                {
+                    new AvatarReferenceState
+                    {
+                        path = "Body",
+                        components =
+                        {
+                            new ComponentState
+                            {
+                                path = "Extra",
+                                type = "Fake.Component",
+                                fields = { new FieldValue { key = "value", value = "2", type = "float" } },
+                            },
+                        },
+                    },
+                },
+            };
+
+            var diffs = SnapshotDiffer.Diff(before, after);
+
+            var bodyDiff = diffs.Single(d => d.containerId == "avatarRef:Body");
+            Assert.AreEqual(DiffKind.Changed, bodyDiff.kind);
+            Assert.IsTrue(bodyDiff.changeNotes.Any(n => n.Contains("value") && n.Contains("'1'") && n.Contains("'2'")));
+        }
+
+        [Test]
+        public void Diff_UnchangedWhenAvatarReferenceComponentsIdentical()
+        {
+            AvatarReferenceState MakeState() => new()
+            {
+                path = "Body",
+                components =
+                {
+                    new ComponentState
+                    {
+                        path = "Extra",
+                        type = "Fake.Component",
+                        fields = { new FieldValue { key = "value", value = "1", type = "float" } },
+                    },
+                },
+            };
+
+            var before = new Commit { avatarReferences = { MakeState() } };
+            var after = new Commit { avatarReferences = { MakeState() } };
+
+            var diffs = SnapshotDiffer.Diff(before, after);
+
+            var bodyDiff = diffs.Single(d => d.containerId == "avatarRef:Body");
+            Assert.AreEqual(DiffKind.Unchanged, bodyDiff.kind);
+        }
+
+        [Test]
         public void Diff_DetectsAddedAvatarReferencePath()
         {
             var before = new Commit();
