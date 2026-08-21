@@ -163,6 +163,11 @@ namespace AvatarVcs.Editor.History
             notes.AddRange(DiffMap(FlattenFields(before.components), FlattenFields(after.components),
                 (key, b, a) => $"{key}: '{b}' -> '{a}'"));
 
+            notes.AddRange(DiffMap(
+                before.activeStates.ToDictionary(s => s.path, s => s.activeSelf),
+                after.activeStates.ToDictionary(s => s.path, s => s.activeSelf),
+                (path, b, a) => $"active '{path}': {b} -> {a}"));
+
             return notes;
         }
 

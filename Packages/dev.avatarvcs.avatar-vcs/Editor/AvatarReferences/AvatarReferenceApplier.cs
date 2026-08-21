@@ -31,6 +31,7 @@ namespace AvatarVcs.Editor.AvatarReferences
             ApplyBlendShapes(state, target);
             ApplyMaterials(state, target);
             ApplyComponents(state, target, avatarRoot);
+            ApplyActiveStates(state, target);
         }
 
         private static void ApplyBlendShapes(AvatarReferenceState state, Transform target)
@@ -113,6 +114,24 @@ namespace AvatarVcs.Editor.AvatarReferences
                 var result = ComponentApplier.Apply(componentState, target.gameObject, avatarRoot.gameObject, createIfMissing: false);
                 if (!result.IsSuccess)
                     Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{state.path}': {result.Message}");
+            }
+        }
+
+        private static void ApplyActiveStates(AvatarReferenceState state, Transform target)
+        {
+            foreach (var activeState in state.activeStates)
+            {
+                var descendant = ReferenceResolver.ResolvePath(activeState.path, target);
+                if (descendant == null)
+                {
+                    Debug.LogWarning($"[AvatarVCS] avatarReferences activeState path '{activeState.path}' under '{state.path}' could not be resolved; skipped.");
+                    continue;
+                }
+
+                if (descendant.gameObject.activeSelf == activeState.activeSelf) continue;
+
+                Undo.RecordObject(descendant.gameObject, "AvatarVCS Apply Active State");
+                descendant.gameObject.SetActive(activeState.activeSelf);
             }
         }
     }

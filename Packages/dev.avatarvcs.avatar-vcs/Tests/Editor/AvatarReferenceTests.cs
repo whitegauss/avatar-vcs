@@ -552,5 +552,68 @@ namespace AvatarVcs.Tests.Editor
                 CommitStore.DeleteAvatarHistory(avatarGuid);
             }
         }
+
+        [Test]
+        public void Capture_RecordsActiveSelfOfTargetAndDescendants()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            var child = Spawn("Toggle", body.transform);
+            child.SetActive(false);
+
+            var state = AvatarReferenceCapture.Capture(body.transform, avatarRoot.transform);
+
+            var bodyState = state.activeStates.Single(s => s.path == "");
+            var childState = state.activeStates.Single(s => s.path == "Toggle");
+            Assert.IsTrue(bodyState.activeSelf);
+            Assert.IsFalse(childState.activeSelf);
+        }
+
+        [Test]
+        public void Apply_RestoresActiveSelf_ForTargetAndDescendants()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            var child = Spawn("Toggle", body.transform);
+
+            var state = new AvatarReferenceState { path = "Body" };
+            state.activeStates.Add(new ActiveStateRef { path = "", activeSelf = false });
+            state.activeStates.Add(new ActiveStateRef { path = "Toggle", activeSelf = false });
+
+            AvatarReferenceApplier.Apply(state, avatarRoot.transform);
+
+            Assert.IsFalse(body.activeSelf);
+            Assert.IsFalse(child.activeSelf);
+        }
+
+        [Test]
+        public void BranchManagerCommit_And_RestoreToCommit_RoundTripsActiveSelf_AfterDrift()
+        {
+            // Reported: toggling a tracked descendant's Hierarchy show/hide
+            // checkbox wasn't restored on checkout -- Track Properties only
+            // captured component field values, never GameObject.activeSelf.
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            body.AddComponent<AvatarVcsTrackedReference>();
+            var child = Spawn("Toggle", body.transform);
+            child.SetActive(false);
+
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            try
+            {
+                var commit = BranchManager.Commit(avatarRoot, "with hidden child");
+
+                child.SetActive(true); // simulate drift after committing
+
+                var result = BranchManager.RestoreToCommit(avatarRoot, commit.commitId);
+
+                Assert.IsTrue(result.IsSuccess);
+                Assert.IsFalse(child.activeSelf);
+            }
+            finally
+            {
+                CommitStore.DeleteAvatarHistory(avatarGuid);
+            }
+        }
     }
 }
