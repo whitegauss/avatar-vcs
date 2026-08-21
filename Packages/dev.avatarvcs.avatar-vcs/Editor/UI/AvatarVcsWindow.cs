@@ -56,6 +56,11 @@ namespace AvatarVcs.Editor.UI
         private Vector2 diffScroll;
         private readonly Dictionary<string, bool> expandedContainers = new();
 
+        // History panel's checkbox-driven bulk delete. Pruned in Reload so a
+        // stale id (deleted elsewhere, or from a since-switched-away avatar)
+        // never lingers as "selected".
+        private readonly HashSet<string> selectedForBulkDelete = new();
+
         // GUID remapping (design doc 6.4): populated when a checkout fails
         // with missing prefabs, so the user can point each one at its
         // re-imported replacement and retry.
@@ -229,6 +234,7 @@ namespace AvatarVcs.Editor.UI
             selectedCommitId = commits.Any(c => c.commitId == head) ? head : commits.FirstOrDefault()?.commitId;
             if (diffBaseCommitId != null && commits.All(c => c.commitId != diffBaseCommitId))
                 diffBaseCommitId = null;
+            selectedForBulkDelete.RemoveWhere(id => commits.All(c => c.commitId != id));
             RecomputeSelectedDiff();
         }
 
