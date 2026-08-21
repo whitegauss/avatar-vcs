@@ -15,6 +15,7 @@ bin/
 
 # Local reviews and temporary docs
 CODE_REVIEW.md
+TODO.md
 .agents/
 
 # Commit history the TestProject writes to ProjectSettings while running tests
