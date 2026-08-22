@@ -146,24 +146,25 @@ namespace AvatarVcs.Editor.AvatarReferences
         }
 
         /// <summary>
-        /// GameObject.tag throws if the tag isn't defined in this project's
-        /// Tag Manager (e.g. a custom tag recorded in a commit made in a
-        /// different project) -- same guard ContainerRestore.ApplyTag uses.
+        /// GameObject.tag doesn't throw for an undefined tag (e.g. a custom
+        /// tag recorded in a commit made in a different project) -- it logs
+        /// an engine-level Debug.LogError and silently no-ops, which a
+        /// try/catch around the setter can't intercept. Must validate
+        /// against the project's actual defined tags first instead.
         /// </summary>
         private static void ApplyTag(GameObject go, ObjectStateRef objectState, string avatarReferencePath)
         {
             if (string.IsNullOrEmpty(objectState.tag) || objectState.tag == go.tag) return;
 
-            try
-            {
-                Undo.RecordObject(go, "AvatarVCS Apply Object State");
-                go.tag = objectState.tag;
-            }
-            catch (UnityException)
+            if (Array.IndexOf(UnityEditorInternal.InternalEditorUtility.tags, objectState.tag) < 0)
             {
                 Debug.LogWarning($"[AvatarVCS] Tag '{objectState.tag}' recorded for '{avatarReferencePath}/{objectState.path}' "
                     + $"is not defined in this project's Tag Manager; left as '{go.tag}'.");
+                return;
             }
+
+            Undo.RecordObject(go, "AvatarVCS Apply Object State");
+            go.tag = objectState.tag;
         }
     }
 }
