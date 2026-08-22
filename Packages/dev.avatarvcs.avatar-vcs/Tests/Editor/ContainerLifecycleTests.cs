@@ -1,5 +1,6 @@
 using System.Linq;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.Operations;
 using AvatarVcs.Runtime;
 using NUnit.Framework;

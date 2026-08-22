@@ -1,4 +1,5 @@
 using System;
+using AvatarVcs.Editor;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
