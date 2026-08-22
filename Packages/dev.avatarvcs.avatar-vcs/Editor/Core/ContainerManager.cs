@@ -351,16 +351,21 @@ namespace AvatarVcs.Editor.Core
                 if (child.GetComponent<AvatarVcsContainer>() != null) continue;
                 if (GetPrefabGuid(child.gameObject) == null) continue;
 
-                var containerId = MakeUniqueSiblingName(root.transform, child.name);
-
-                var wrapper = new GameObject(containerId);
+                var wrapper = new GameObject();
                 Undo.RegisterCreatedObjectUndo(wrapper, "Adopt Prefab As Container");
+
+                // Reparent the child into the wrapper BEFORE computing the
+                // wrapper's name -- child is still directly under root at
+                // this point, so checking for a name collision beforehand
+                // would find the child itself (about to move out) and
+                // needlessly disambiguate against its own name.
+                Undo.SetTransformParent(child, wrapper.transform, "Adopt Prefab As Container");
+
+                wrapper.name = MakeUniqueSiblingName(root.transform, child.name);
                 Undo.SetTransformParent(wrapper.transform, root.transform, "Adopt Prefab As Container");
                 wrapper.transform.localPosition = Vector3.zero;
                 wrapper.transform.localRotation = Quaternion.identity;
                 wrapper.transform.localScale = Vector3.one;
-
-                Undo.SetTransformParent(child, wrapper.transform, "Adopt Prefab As Container");
 
                 var marker = Undo.AddComponent<AvatarVcsContainer>(wrapper);
                 marker.AssignGuid(Guid.NewGuid().ToString("N"));
