@@ -179,7 +179,7 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
-        public void AdoptLoosePrefabInstancesAsContainers_TurnsALoosePrefabDirectlyUnderRootIntoItsOwnContainer()
+        public void AdoptLoosePrefabInstancesAsContainers_WrapsALoosePrefabDirectlyUnderRootInANewContainer()
         {
             var root = ContainerManager.EnsureRoot(avatarRoot);
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, root.transform);
@@ -187,10 +187,14 @@ namespace AvatarVcs.Tests.Editor
 
             ContainerManager.AdoptLoosePrefabInstancesAsContainers(root);
 
-            Assert.IsNotNull(instance.GetComponent<AvatarVcsContainer>());
-            Assert.AreEqual(originalName, instance.name, "no name collision, so the prefab's own name is kept as-is");
+            Assert.IsNull(instance.GetComponent<AvatarVcsContainer>(), "the prefab instance itself is never turned into a container");
+            Assert.AreSame(root.transform, instance.transform.parent.parent, "the prefab instance ends up nested one level deeper, under its new wrapper");
 
-            var snapshot = ContainerCapture.CaptureContainer(instance.transform);
+            var wrapper = instance.transform.parent;
+            Assert.IsNotNull(wrapper.GetComponent<AvatarVcsContainer>());
+            Assert.AreEqual(originalName, wrapper.name, "no name collision, so the wrapper takes the prefab's own name");
+
+            var snapshot = ContainerCapture.CaptureContainer(wrapper);
             CollectionAssert.Contains(snapshot.prefabGuids, testPrefabGuid);
         }
 
@@ -198,14 +202,13 @@ namespace AvatarVcs.Tests.Editor
         public void AdoptLoosePrefabInstancesAsContainers_NameCollisionWithExistingContainer_GetsDisambiguated()
         {
             var root = ContainerManager.EnsureRoot(avatarRoot);
-            var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, root.transform);
-            instance.name = "hair"; // collide on purpose
             ContainerManager.CreateContainer(root, "hair");
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, root.transform);
+            instance.name = "hair"; // collide with the container created above, on purpose
 
             ContainerManager.AdoptLoosePrefabInstancesAsContainers(root);
 
-            Assert.AreEqual("hair_1", instance.name);
-            Assert.IsNotNull(instance.GetComponent<AvatarVcsContainer>());
+            Assert.AreEqual("hair_1", instance.transform.parent.name);
         }
 
         [Test]

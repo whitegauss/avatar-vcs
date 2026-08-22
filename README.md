@@ -59,7 +59,7 @@ https://github.com/whitegauss/avatar-vcs.git?path=Packages/dev.avatarvcs.avatar-
 
 ### 1. コンテナを作る
 
-Hierarchy でアバターのルート GameObject を選択し、`GameObject > AvatarVCS > Ensure Root` で管理ルート `[AvatarVCS]` を作成します。1つの Prefab を管理したいだけなら、その Prefab インスタンスを `[AvatarVCS]` 直下に配置するだけで OK です(コミット時に自動でその Prefab 自身がコンテナ化されます)。複数の Prefab をまとめて1つの切り替え単位にしたい場合(例: `hair_long` としてまとめて2つの Prefab を切り替えたい)は、`Create Container` でコンテナを作り、その下に配置してください。
+Hierarchy でアバターのルート GameObject を選択し、`GameObject > AvatarVCS > Ensure Root` で管理ルート `[AvatarVCS]` を作成します。1つの Prefab を管理したいだけなら、その Prefab インスタンスを `[AvatarVCS]` 直下に配置するだけで OK です(コミット時に自動でコンテナに包まれます。`Create Container` を手動で呼ぶ必要はありません)。複数の Prefab をまとめて1つの切り替え単位にしたい場合(例: `hair_long` としてまとめて2つの Prefab を切り替えたい)は、`Create Container` でコンテナを作り、その下に配置してください。
 
 ### 2. コミットする
 

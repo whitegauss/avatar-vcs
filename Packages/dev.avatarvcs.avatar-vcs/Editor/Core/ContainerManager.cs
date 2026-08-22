@@ -300,33 +300,51 @@ namespace AvatarVcs.Editor.Core
 
         /// <summary>
         /// Issue #70: dropping a prefab instance directly under "[AvatarVCS]"
-        /// (skipping Create Container entirely) is meant to just work --
-        /// turns any such direct child into its own single-prefab container
-        /// by adding AvatarVcsContainer directly onto it, so the instance's
-        /// own root IS the container rather than needing a separate empty
-        /// wrapper folder. Meant to be called right before a commit is
-        /// taken, same as ValidateContainers. Idempotent: already-marked
-        /// children (real containers) and non-prefab-instance children
-        /// (nothing to regenerate them from, same restriction CaptureContainer
-        /// already warns about) are left untouched.
+        /// (skipping Create Container entirely) is meant to just work.
+        /// Auto-wraps any such loose direct child in a freshly-created
+        /// container GameObject (exactly what Create Container + manually
+        /// dragging the prefab inside would produce), rather than adding
+        /// AvatarVcsContainer directly onto the prefab instance itself --
+        /// ContainerRestore always regenerates a container as an empty
+        /// wrapper with the prefab(s) instantiated as its children (see
+        /// InstantiateContainerStructure), so a container that IS the
+        /// prefab instance itself has no children for CaptureContainer to
+        /// read a prefabGuid from, and can't be reproduced by that restore
+        /// path at all -- a real Unity prefab instance can only be created
+        /// via PrefabUtility.InstantiatePrefab, not retroactively turned an
+        /// existing GameObject into one. Wrapping keeps 100% compatibility
+        /// with the existing capture/restore model; only the user-facing
+        /// step (no manual Create Container needed) changes.
+        /// Meant to be called right before a commit is taken, same as
+        /// ValidateContainers. Idempotent: already-marked children (real
+        /// containers) and non-prefab-instance children (nothing to
+        /// regenerate them from, same restriction CaptureContainer already
+        /// warns about) are left untouched.
         /// </summary>
         public static void AdoptLoosePrefabInstancesAsContainers(GameObject root)
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
 
-            foreach (Transform child in root.transform)
+            // Snapshot with ToList first: this loop reparents children out
+            // from under root as it goes, which would otherwise disturb
+            // Transform's own live child enumeration mid-iteration.
+            foreach (var child in root.transform.Cast<Transform>().ToList())
             {
                 if (child.GetComponent<AvatarVcsContainer>() != null) continue;
                 if (GetPrefabGuid(child.gameObject) == null) continue;
 
                 var containerId = MakeUniqueSiblingName(root.transform, child.name);
-                if (containerId != child.name)
-                {
-                    Undo.RecordObject(child.gameObject, "Adopt Prefab As Container");
-                    child.gameObject.name = containerId;
-                }
 
-                var marker = Undo.AddComponent<AvatarVcsContainer>(child.gameObject);
+                var wrapper = new GameObject(containerId);
+                Undo.RegisterCreatedObjectUndo(wrapper, "Adopt Prefab As Container");
+                Undo.SetTransformParent(wrapper.transform, root.transform, "Adopt Prefab As Container");
+                wrapper.transform.localPosition = Vector3.zero;
+                wrapper.transform.localRotation = Quaternion.identity;
+                wrapper.transform.localScale = Vector3.one;
+
+                Undo.SetTransformParent(child, wrapper.transform, "Adopt Prefab As Container");
+
+                var marker = Undo.AddComponent<AvatarVcsContainer>(wrapper);
                 marker.AssignGuid(Guid.NewGuid().ToString("N"));
             }
         }
