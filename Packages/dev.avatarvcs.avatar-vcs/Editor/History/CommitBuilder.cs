@@ -30,6 +30,7 @@ namespace AvatarVcs.Editor.History
             var configRoot = ContainerManager.EnsureRoot(avatarRoot);
             var avatarGuid = configRoot.GetComponent<AvatarVcsRoot>().AvatarGuid;
 
+            ContainerManager.AdoptLoosePrefabInstancesAsContainers(configRoot);
             ContainerManager.ValidateContainers(configRoot);
 
             var containers = ContainerManager.GetContainers(configRoot)

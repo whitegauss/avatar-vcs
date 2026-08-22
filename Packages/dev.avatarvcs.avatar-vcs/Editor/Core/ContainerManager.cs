@@ -317,6 +317,77 @@ namespace AvatarVcs.Editor.Core
         }
 
         /// <summary>
+        /// Issue #70: dropping a prefab instance directly under "[AvatarVCS]"
+        /// (skipping Create Container entirely) is meant to just work.
+        /// Auto-wraps any such loose direct child in a freshly-created
+        /// container GameObject (exactly what Create Container + manually
+        /// dragging the prefab inside would produce), rather than adding
+        /// AvatarVcsContainer directly onto the prefab instance itself --
+        /// ContainerRestore always regenerates a container as an empty
+        /// wrapper with the prefab(s) instantiated as its children (see
+        /// InstantiateContainerStructure), so a container that IS the
+        /// prefab instance itself has no children for CaptureContainer to
+        /// read a prefabGuid from, and can't be reproduced by that restore
+        /// path at all -- a real Unity prefab instance can only be created
+        /// via PrefabUtility.InstantiatePrefab, not retroactively turned an
+        /// existing GameObject into one. Wrapping keeps 100% compatibility
+        /// with the existing capture/restore model; only the user-facing
+        /// step (no manual Create Container needed) changes.
+        /// Meant to be called right before a commit is taken, same as
+        /// ValidateContainers. Idempotent: already-marked children (real
+        /// containers) and non-prefab-instance children (nothing to
+        /// regenerate them from, same restriction CaptureContainer already
+        /// warns about) are left untouched.
+        /// </summary>
+        public static void AdoptLoosePrefabInstancesAsContainers(GameObject root)
+        {
+            if (root == null) throw new ArgumentNullException(nameof(root));
+
+            // Snapshot with ToList first: this loop reparents children out
+            // from under root as it goes, which would otherwise disturb
+            // Transform's own live child enumeration mid-iteration.
+            foreach (var child in root.transform.Cast<Transform>().ToList())
+            {
+                if (child.GetComponent<AvatarVcsContainer>() != null) continue;
+                if (GetPrefabGuid(child.gameObject) == null) continue;
+
+                var wrapper = new GameObject();
+                Undo.RegisterCreatedObjectUndo(wrapper, "Adopt Prefab As Container");
+
+                // Reparent the child into the wrapper BEFORE computing the
+                // wrapper's name -- child is still directly under root at
+                // this point, so checking for a name collision beforehand
+                // would find the child itself (about to move out) and
+                // needlessly disambiguate against its own name.
+                Undo.SetTransformParent(child, wrapper.transform, "Adopt Prefab As Container");
+
+                wrapper.name = MakeUniqueSiblingName(root.transform, child.name);
+                Undo.SetTransformParent(wrapper.transform, root.transform, "Adopt Prefab As Container");
+                wrapper.transform.localPosition = Vector3.zero;
+                wrapper.transform.localRotation = Quaternion.identity;
+                wrapper.transform.localScale = Vector3.one;
+
+                var marker = Undo.AddComponent<AvatarVcsContainer>(wrapper);
+                marker.AssignGuid(Guid.NewGuid().ToString("N"));
+            }
+        }
+
+        private static string MakeUniqueSiblingName(Transform root, string baseName)
+        {
+            if (root.Find(baseName) == null) return baseName;
+
+            var i = 1;
+            string candidate;
+            do
+            {
+                candidate = $"{baseName}_{i}";
+                i++;
+            } while (root.Find(candidate) != null);
+
+            return candidate;
+        }
+
+        /// <summary>
         /// Resolves the GUID of the prefab asset instance derives from, via
         /// GetCorrespondingObjectFromSource. Returns null if instance is not a
         /// prefab instance.

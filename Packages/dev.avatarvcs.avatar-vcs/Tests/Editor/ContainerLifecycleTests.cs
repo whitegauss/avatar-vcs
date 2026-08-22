@@ -1,5 +1,6 @@
 using System.Linq;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.Operations;
 using AvatarVcs.Runtime;
@@ -176,6 +177,76 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual(ContainerManager.DefaultContainerId, containers[0].name);
             Assert.IsNotNull(avatarRoot.GetComponent<AvatarVcsTrackedReference>());
             Assert.IsNotNull(body.GetComponent<AvatarVcsTrackedReference>());
+        }
+
+        [Test]
+        public void AdoptLoosePrefabInstancesAsContainers_WrapsALoosePrefabDirectlyUnderRootInANewContainer()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, root.transform);
+            var originalName = instance.name;
+
+            ContainerManager.AdoptLoosePrefabInstancesAsContainers(root);
+
+            Assert.IsNull(instance.GetComponent<AvatarVcsContainer>(), "the prefab instance itself is never turned into a container");
+            Assert.AreSame(root.transform, instance.transform.parent.parent, "the prefab instance ends up nested one level deeper, under its new wrapper");
+
+            var wrapper = instance.transform.parent;
+            Assert.IsNotNull(wrapper.GetComponent<AvatarVcsContainer>());
+            Assert.AreEqual(originalName, wrapper.name, "no name collision, so the wrapper takes the prefab's own name");
+
+            var snapshot = ContainerCapture.CaptureContainer(wrapper);
+            CollectionAssert.Contains(snapshot.prefabGuids, testPrefabGuid);
+        }
+
+        [Test]
+        public void AdoptLoosePrefabInstancesAsContainers_NameCollisionWithExistingContainer_GetsDisambiguated()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            ContainerManager.CreateContainer(root, "hair");
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, root.transform);
+            instance.name = "hair"; // collide with the container created above, on purpose
+
+            ContainerManager.AdoptLoosePrefabInstancesAsContainers(root);
+
+            Assert.AreEqual("hair_1", instance.transform.parent.name);
+        }
+
+        [Test]
+        public void AdoptLoosePrefabInstancesAsContainers_AlreadyAContainer_IsLeftUntouched()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            var existingGuid = container.GetComponent<AvatarVcsContainer>().ContainerGuid;
+
+            Assert.DoesNotThrow(() => ContainerManager.AdoptLoosePrefabInstancesAsContainers(root));
+
+            Assert.AreEqual(existingGuid, container.GetComponent<AvatarVcsContainer>().ContainerGuid,
+                "an existing container's guid must never be reassigned");
+        }
+
+        [Test]
+        public void AdoptLoosePrefabInstancesAsContainers_NonPrefabChild_IsLeftUntouched()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var plainChild = new GameObject("NotAPrefab");
+            plainChild.transform.SetParent(root.transform, false);
+
+            ContainerManager.AdoptLoosePrefabInstancesAsContainers(root);
+
+            Assert.IsNull(plainChild.GetComponent<AvatarVcsContainer>(),
+                "nothing to regenerate a non-prefab-instance child from, so it must be left alone (matches CaptureContainer's existing warning for this case)");
+        }
+
+        [Test]
+        public void CommitBuilderCreateCommit_LoosePrefabDirectlyUnderRoot_IsAutoAdoptedAndCaptured()
+        {
+            PrefabUtility.InstantiatePrefab(testPrefabSource, ContainerManager.EnsureRoot(avatarRoot).transform);
+
+            var commit = CommitBuilder.CreateCommit(avatarRoot, "auto-adopt test", "main", null);
+
+            Assert.AreEqual(1, commit.containers.Count);
+            CollectionAssert.Contains(commit.containers[0].prefabGuids, testPrefabGuid);
         }
 
         [Test]
