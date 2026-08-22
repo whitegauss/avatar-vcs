@@ -1,5 +1,6 @@
 using System.Linq;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.Model;
 using AvatarVcs.Editor.Operations;
 using AvatarVcs.Runtime;
 using NUnit.Framework;
@@ -380,6 +381,44 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void FindEnclosingAvatarRoot_FromDeepChildOutsideAnyContainer_ResolvesToTheAvatar()
+        {
+            // Reported bug: a child nested somewhere other than inside a
+            // container (e.g. under Body/Armature) has no AvatarVcsRoot
+            // ancestor -- AvatarVcsRoot lives on "[AvatarVCS]" itself, a
+            // SIBLING of Body/Armature, not their ancestor -- so this used
+            // to return null even though the avatar is already tracked,
+            // letting Ensure Root spin up a second, nested root right there.
+            ContainerManager.EnsureRoot(avatarRoot);
+            var body = new GameObject("Body");
+            body.transform.SetParent(avatarRoot.transform, false);
+            var deepChild = new GameObject("DeepChild");
+            deepChild.transform.SetParent(body.transform, false);
+
+            Assert.AreSame(avatarRoot, ContainerManager.FindEnclosingAvatarRoot(deepChild),
+                "a child nested anywhere under an already-tracked avatar, container or not, must resolve to that avatar");
+        }
+
+        [Test]
+        public void EnsureRootWithDefaults_OnDeepChildOfAnAlreadyTrackedAvatar_ReusesTheExistingRoot_DoesNotNestANewOne()
+        {
+            var existingRoot = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            var body = new GameObject("Body");
+            body.transform.SetParent(avatarRoot.transform, false);
+            var deepChild = new GameObject("DeepChild");
+            deepChild.transform.SetParent(body.transform, false);
+
+            var resolved = ContainerManager.ResolveAvatarRootWithConfirmation(deepChild, "test");
+            Assert.AreSame(avatarRoot, resolved,
+                "resolving from a deep, non-container child of an already-tracked avatar must find the real avatar, not treat the child as a brand new one");
+
+            var root = ContainerManager.EnsureRootWithDefaults(resolved);
+            Assert.AreSame(existingRoot, root, "must reuse the existing root instead of creating a nested duplicate");
+            Assert.IsNull(deepChild.transform.Find(ContainerManager.RootName),
+                "no second [AvatarVCS] should ever be created under the deep child");
+        }
+
+        [Test]
         public void FindEnclosingAvatarRoot_UnrelatedObject_ReturnsNull()
         {
             var unrelated = new GameObject("SomeOutfitPieceNotYetTracked");
@@ -466,6 +505,39 @@ namespace AvatarVcs.Tests.Editor
             var isMissing = ContainerRestore.HasMissingPrefabs(snapshot, out var missingGuids);
             Assert.IsTrue(isMissing);
             CollectionAssert.Contains(missingGuids, privateGuid);
+        }
+
+        [Test]
+        public void RestoreContainer_UndefinedTagInTagManager_LogsWarningAndLeavesUntagged()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var snapshot = new ContainerSnapshot
+            {
+                containerId = "tag_test",
+                containerGuid = "0123456789abcdef0123456789abcdef",
+                tag = "NonExistentTag_12345",
+            };
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Tag 'NonExistentTag_12345' .* is not defined in this project's Tag Manager"));
+            var restored = ContainerRestore.InstantiateContainer(snapshot, root);
+
+            Assert.IsNotNull(restored);
+            Assert.AreEqual("Untagged", restored.tag);
+        }
+
+        [Test]
+        public void RestoreContainer_MissingPrefabWithoutCheck_ThrowsInvalidOperationException()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var snapshot = new ContainerSnapshot
+            {
+                containerId = "missing_prefab_test",
+                containerGuid = "0123456789abcdef0123456789abcdef",
+                prefabGuids = { "unresolvable_prefab_guid_00000000" },
+            };
+
+            Assert.Throws<System.InvalidOperationException>(() =>
+                ContainerRestore.InstantiateContainerStructure(snapshot, root));
         }
     }
 }
