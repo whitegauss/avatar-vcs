@@ -25,6 +25,26 @@
           "vpmDependencies": {
             "com.vrchat.avatars": "^3.4.0"
           }
+        },
+        "0.2.0-poc": {
+          "name": "dev.avatarvcs.avatar-vcs",
+          "version": "0.2.0-poc",
+          "displayName": "Avatar VCS (Phase 1 PoC)",
+          "description": "Version control for VRChat avatar configurations: prefab-composition containers with destroy/regenerate idempotency, BlendShape/material/component-field tracking, commit history, branches, and diff.",
+          "unity": "2022.3",
+          "author": {
+            "name": "gaussian",
+            "url": "https://github.com/whitegauss"
+          },
+          "license": "MIT",
+          "licenseUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/LICENSE",
+          "documentationUrl": "",
+          "changelogUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/CHANGELOG.md",
+          "vpmDependencies": {
+            "com.vrchat.avatars": "^3.4.0"
+          },
+          "url": "https://github.com/whitegauss/avatar-vcs/releases/download/v0.2.0-poc/dev.avatarvcs.avatar-vcs-0.2.0-poc.zip",
+          "zipSHA256": "627917e4f47cf4e6ae602f7b7fdabd2422c207263d57b6d81d986d85d1c5e2bf"
         }
       }
     }
