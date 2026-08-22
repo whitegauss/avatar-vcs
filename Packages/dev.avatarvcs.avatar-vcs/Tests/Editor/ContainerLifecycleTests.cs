@@ -1,5 +1,6 @@
 using System.Linq;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Operations;
 using AvatarVcs.Runtime;
 using NUnit.Framework;
@@ -175,6 +176,73 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual(ContainerManager.DefaultContainerId, containers[0].name);
             Assert.IsNotNull(avatarRoot.GetComponent<AvatarVcsTrackedReference>());
             Assert.IsNotNull(body.GetComponent<AvatarVcsTrackedReference>());
+        }
+
+        [Test]
+        public void AdoptLoosePrefabInstancesAsContainers_TurnsALoosePrefabDirectlyUnderRootIntoItsOwnContainer()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, root.transform);
+            var originalName = instance.name;
+
+            ContainerManager.AdoptLoosePrefabInstancesAsContainers(root);
+
+            Assert.IsNotNull(instance.GetComponent<AvatarVcsContainer>());
+            Assert.AreEqual(originalName, instance.name, "no name collision, so the prefab's own name is kept as-is");
+
+            var snapshot = ContainerCapture.CaptureContainer(instance.transform);
+            CollectionAssert.Contains(snapshot.prefabGuids, testPrefabGuid);
+        }
+
+        [Test]
+        public void AdoptLoosePrefabInstancesAsContainers_NameCollisionWithExistingContainer_GetsDisambiguated()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, root.transform);
+            instance.name = "hair"; // collide on purpose
+            ContainerManager.CreateContainer(root, "hair");
+
+            ContainerManager.AdoptLoosePrefabInstancesAsContainers(root);
+
+            Assert.AreEqual("hair_1", instance.name);
+            Assert.IsNotNull(instance.GetComponent<AvatarVcsContainer>());
+        }
+
+        [Test]
+        public void AdoptLoosePrefabInstancesAsContainers_AlreadyAContainer_IsLeftUntouched()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            var existingGuid = container.GetComponent<AvatarVcsContainer>().ContainerGuid;
+
+            Assert.DoesNotThrow(() => ContainerManager.AdoptLoosePrefabInstancesAsContainers(root));
+
+            Assert.AreEqual(existingGuid, container.GetComponent<AvatarVcsContainer>().ContainerGuid,
+                "an existing container's guid must never be reassigned");
+        }
+
+        [Test]
+        public void AdoptLoosePrefabInstancesAsContainers_NonPrefabChild_IsLeftUntouched()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var plainChild = new GameObject("NotAPrefab");
+            plainChild.transform.SetParent(root.transform, false);
+
+            ContainerManager.AdoptLoosePrefabInstancesAsContainers(root);
+
+            Assert.IsNull(plainChild.GetComponent<AvatarVcsContainer>(),
+                "nothing to regenerate a non-prefab-instance child from, so it must be left alone (matches CaptureContainer's existing warning for this case)");
+        }
+
+        [Test]
+        public void CommitBuilderCreateCommit_LoosePrefabDirectlyUnderRoot_IsAutoAdoptedAndCaptured()
+        {
+            PrefabUtility.InstantiatePrefab(testPrefabSource, ContainerManager.EnsureRoot(avatarRoot).transform);
+
+            var commit = CommitBuilder.CreateCommit(avatarRoot, "auto-adopt test", "main", null);
+
+            Assert.AreEqual(1, commit.containers.Count);
+            CollectionAssert.Contains(commit.containers[0].prefabGuids, testPrefabGuid);
         }
 
         [Test]

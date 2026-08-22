@@ -299,6 +299,54 @@ namespace AvatarVcs.Editor.Core
         }
 
         /// <summary>
+        /// Issue #70: dropping a prefab instance directly under "[AvatarVCS]"
+        /// (skipping Create Container entirely) is meant to just work --
+        /// turns any such direct child into its own single-prefab container
+        /// by adding AvatarVcsContainer directly onto it, so the instance's
+        /// own root IS the container rather than needing a separate empty
+        /// wrapper folder. Meant to be called right before a commit is
+        /// taken, same as ValidateContainers. Idempotent: already-marked
+        /// children (real containers) and non-prefab-instance children
+        /// (nothing to regenerate them from, same restriction CaptureContainer
+        /// already warns about) are left untouched.
+        /// </summary>
+        public static void AdoptLoosePrefabInstancesAsContainers(GameObject root)
+        {
+            if (root == null) throw new ArgumentNullException(nameof(root));
+
+            foreach (Transform child in root.transform)
+            {
+                if (child.GetComponent<AvatarVcsContainer>() != null) continue;
+                if (GetPrefabGuid(child.gameObject) == null) continue;
+
+                var containerId = MakeUniqueSiblingName(root.transform, child.name);
+                if (containerId != child.name)
+                {
+                    Undo.RecordObject(child.gameObject, "Adopt Prefab As Container");
+                    child.gameObject.name = containerId;
+                }
+
+                var marker = Undo.AddComponent<AvatarVcsContainer>(child.gameObject);
+                marker.AssignGuid(Guid.NewGuid().ToString("N"));
+            }
+        }
+
+        private static string MakeUniqueSiblingName(Transform root, string baseName)
+        {
+            if (root.Find(baseName) == null) return baseName;
+
+            var i = 1;
+            string candidate;
+            do
+            {
+                candidate = $"{baseName}_{i}";
+                i++;
+            } while (root.Find(candidate) != null);
+
+            return candidate;
+        }
+
+        /// <summary>
         /// Resolves the GUID of the prefab asset instance derives from, via
         /// GetCorrespondingObjectFromSource. Returns null if instance is not a
         /// prefab instance.
