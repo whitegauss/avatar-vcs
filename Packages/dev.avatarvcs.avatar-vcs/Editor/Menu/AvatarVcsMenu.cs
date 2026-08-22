@@ -173,8 +173,11 @@ namespace AvatarVcs.Editor.Menu
         }
 
         [MenuItem("GameObject/AvatarVCS/Import BlendShapes...", true)]
-        private static bool ValidateImportBlendShapesMenuItem() =>
-            Selection.activeGameObject?.GetComponent<SkinnedMeshRenderer>() != null;
+        private static bool ValidateImportBlendShapesMenuItem()
+        {
+            var renderer = Selection.activeGameObject?.GetComponent<SkinnedMeshRenderer>();
+            return renderer != null && renderer.sharedMesh != null;
+        }
 
         /// <summary>
         /// selection accepted as-is if it already IS the "[AvatarVCS]" root;

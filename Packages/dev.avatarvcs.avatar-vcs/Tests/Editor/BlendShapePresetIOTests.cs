@@ -128,6 +128,17 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Capture_RendererWithNullSharedMesh_ThrowsArgumentException()
+        {
+            var go = new GameObject("NoMesh");
+            spawned.Add(go);
+            var renderer = go.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = null;
+
+            Assert.Throws<System.ArgumentException>(() => BlendShapePresetIO.Capture(renderer));
+        }
+
+        [Test]
         public void Apply_NullPresetOrRenderer_ThrowsArgumentNullException()
         {
             var renderer = SpawnRenderer("Target", "Shape_A");
@@ -135,6 +146,45 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.Throws<System.ArgumentNullException>(() => BlendShapePresetIO.Apply(null, renderer));
             Assert.Throws<System.ArgumentNullException>(() => BlendShapePresetIO.Apply(preset, null));
+        }
+
+        [Test]
+        public void Apply_RendererWithNullSharedMesh_ThrowsArgumentException()
+        {
+            var go = new GameObject("NoMeshTarget");
+            spawned.Add(go);
+            var renderer = go.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = null;
+            var preset = new BlendShapePreset { meshName = "Source" };
+
+            Assert.Throws<System.ArgumentException>(() => BlendShapePresetIO.Apply(preset, renderer));
+        }
+
+        [Test]
+        public void Apply_EmptyBlendShapes_ReturnsEmptySkippedList()
+        {
+            var target = SpawnRenderer("Target", "Shape_A");
+            var preset = new BlendShapePreset { meshName = "EmptyPreset" };
+
+            var skipped = BlendShapePresetIO.Apply(preset, target);
+
+            Assert.IsNotNull(skipped);
+            Assert.IsEmpty(skipped);
+        }
+
+        [Test]
+        public void Apply_ExtremeBlendShapeWeights_AppliesWithoutThrowing()
+        {
+            var target = SpawnRenderer("Target", "Shape_A", "Shape_B");
+            var preset = new BlendShapePreset { meshName = "Extreme" };
+            preset.blendShapes.Add(new BlendShapeRef { name = "Shape_A", weight = -50f });
+            preset.blendShapes.Add(new BlendShapeRef { name = "Shape_B", weight = 200f });
+
+            var skipped = BlendShapePresetIO.Apply(preset, target);
+
+            Assert.IsEmpty(skipped);
+            Assert.AreEqual(-50f, target.GetBlendShapeWeight(0), 0.0001f);
+            Assert.AreEqual(200f, target.GetBlendShapeWeight(1), 0.0001f);
         }
 
         [Test]

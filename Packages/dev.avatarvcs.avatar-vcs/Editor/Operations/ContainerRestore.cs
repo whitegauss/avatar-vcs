@@ -109,24 +109,25 @@ namespace AvatarVcs.Editor.Operations
         }
 
         /// <summary>
-        /// GameObject.tag throws if the tag isn't defined in this project's
+        /// GameObject.tag logs an error if the tag isn't defined in this project's
         /// Tag Manager (e.g. a custom tag recorded in a commit made in a
-        /// different project). Warn and leave the default "Untagged" rather
-        /// than aborting the whole restore over it.
+        /// different project) without throwing a C# exception. Validate against
+        /// InternalEditorUtility.tags first, warn, and leave the default "Untagged"
+        /// rather than letting Unity log an error.
         /// </summary>
         private static void ApplyTag(GameObject containerGo, ContainerSnapshot snapshot)
         {
             if (string.IsNullOrEmpty(snapshot.tag) || snapshot.tag == containerGo.tag) return;
 
-            try
-            {
-                containerGo.tag = snapshot.tag;
-            }
-            catch (UnityException)
+            var definedTags = UnityEditorInternal.InternalEditorUtility.tags;
+            if (!Array.Exists(definedTags, t => t == snapshot.tag))
             {
                 Debug.LogWarning($"[AvatarVCS] Tag '{snapshot.tag}' recorded for container '{snapshot.containerId}' "
                     + $"is not defined in this project's Tag Manager; left as '{containerGo.tag}'.");
+                return;
             }
+
+            containerGo.tag = snapshot.tag;
         }
 
         /// <summary>
