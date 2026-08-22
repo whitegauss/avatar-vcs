@@ -164,9 +164,19 @@ namespace AvatarVcs.Editor.History
                 (key, b, a) => $"{key}: '{b}' -> '{a}'"));
 
             notes.AddRange(DiffMap(
-                SafeToDictionary(before.activeStates, s => s.path, s => s.activeSelf),
-                SafeToDictionary(after.activeStates, s => s.path, s => s.activeSelf),
+                SafeToDictionary(before.objectStates, s => s.path, s => s.activeSelf),
+                SafeToDictionary(after.objectStates, s => s.path, s => s.activeSelf),
                 (path, b, a) => $"active '{path}': {b} -> {a}"));
+
+            notes.AddRange(DiffMap(
+                SafeToDictionary(before.objectStates, s => s.path, s => s.tag),
+                SafeToDictionary(after.objectStates, s => s.path, s => s.tag),
+                (path, b, a) => $"tag '{path}': '{b}' -> '{a}'"));
+
+            notes.AddRange(DiffMap(
+                SafeToDictionary(before.objectStates, s => s.path, s => s.layer),
+                SafeToDictionary(after.objectStates, s => s.path, s => s.layer),
+                (path, b, a) => $"layer '{path}': {b} -> {a}"));
 
             return notes;
         }

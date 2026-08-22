@@ -181,6 +181,41 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Diff_DetectsActiveTagAndLayerChange_InAvatarReferences()
+        {
+            var before = new Commit
+            {
+                avatarReferences =
+                {
+                    new AvatarReferenceState
+                    {
+                        path = "Body",
+                        objectStates = { new ObjectStateRef { path = "Toggle", activeSelf = true, tag = "Untagged", layer = 0 } },
+                    },
+                },
+            };
+            var after = new Commit
+            {
+                avatarReferences =
+                {
+                    new AvatarReferenceState
+                    {
+                        path = "Body",
+                        objectStates = { new ObjectStateRef { path = "Toggle", activeSelf = false, tag = "Player", layer = 3 } },
+                    },
+                },
+            };
+
+            var diffs = SnapshotDiffer.Diff(before, after);
+
+            var bodyDiff = diffs.Single(d => d.containerId == "avatarRef:Body");
+            Assert.AreEqual(DiffKind.Changed, bodyDiff.kind);
+            Assert.IsTrue(bodyDiff.changeNotes.Any(n => n.Contains("active 'Toggle'") && n.Contains("False") && n.Contains("True")));
+            Assert.IsTrue(bodyDiff.changeNotes.Any(n => n.Contains("tag 'Toggle'") && n.Contains("Untagged") && n.Contains("Player")));
+            Assert.IsTrue(bodyDiff.changeNotes.Any(n => n.Contains("layer 'Toggle'") && n.Contains("0") && n.Contains("3")));
+        }
+
+        [Test]
         public void Diff_DetectsChangedGenericComponentField_InAvatarReferences()
         {
             var before = new Commit
@@ -370,7 +405,7 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
-        public void Diff_DoesNotThrow_OnDuplicateBlendShapeOrActiveStatePaths_InHandEditedCommit()
+        public void Diff_DoesNotThrow_OnDuplicateBlendShapeOrObjectStatePaths_InHandEditedCommit()
         {
             var before = new Commit
             {
@@ -391,10 +426,10 @@ namespace AvatarVcs.Tests.Editor
                             new BlendShapeRef { name = "Shape_A", weight = 10f },
                             new BlendShapeRef { name = "Shape_A", weight = 20f },
                         },
-                        activeStates =
+                        objectStates =
                         {
-                            new ActiveStateRef { path = "Toggle", activeSelf = true },
-                            new ActiveStateRef { path = "Toggle", activeSelf = false },
+                            new ObjectStateRef { path = "Toggle", activeSelf = true },
+                            new ObjectStateRef { path = "Toggle", activeSelf = false },
                         },
                     },
                 },

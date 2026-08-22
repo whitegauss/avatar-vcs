@@ -563,8 +563,8 @@ namespace AvatarVcs.Tests.Editor
 
             var state = AvatarReferenceCapture.Capture(body.transform, avatarRoot.transform);
 
-            var bodyState = state.activeStates.Single(s => s.path == "");
-            var childState = state.activeStates.Single(s => s.path == "Toggle");
+            var bodyState = state.objectStates.Single(s => s.path == "");
+            var childState = state.objectStates.Single(s => s.path == "Toggle");
             Assert.IsTrue(bodyState.activeSelf);
             Assert.IsFalse(childState.activeSelf);
         }
@@ -577,13 +577,95 @@ namespace AvatarVcs.Tests.Editor
             var child = Spawn("Toggle", body.transform);
 
             var state = new AvatarReferenceState { path = "Body" };
-            state.activeStates.Add(new ActiveStateRef { path = "", activeSelf = false });
-            state.activeStates.Add(new ActiveStateRef { path = "Toggle", activeSelf = false });
+            state.objectStates.Add(new ObjectStateRef { path = "", activeSelf = false });
+            state.objectStates.Add(new ObjectStateRef { path = "Toggle", activeSelf = false });
 
             AvatarReferenceApplier.Apply(state, avatarRoot.transform);
 
             Assert.IsFalse(body.activeSelf);
             Assert.IsFalse(child.activeSelf);
+        }
+
+        [Test]
+        public void Capture_RecordsTagAndLayerOfTargetAndDescendants()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            body.tag = "Player";
+            body.layer = 3;
+            var child = Spawn("Toggle", body.transform);
+            child.layer = 5;
+
+            var state = AvatarReferenceCapture.Capture(body.transform, avatarRoot.transform);
+
+            var bodyState = state.objectStates.Single(s => s.path == "");
+            var childState = state.objectStates.Single(s => s.path == "Toggle");
+            Assert.AreEqual("Player", bodyState.tag);
+            Assert.AreEqual(3, bodyState.layer);
+            Assert.AreEqual("Untagged", childState.tag);
+            Assert.AreEqual(5, childState.layer);
+        }
+
+        [Test]
+        public void Apply_RestoresTagAndLayer_ForTargetAndDescendants()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            var child = Spawn("Toggle", body.transform);
+
+            var state = new AvatarReferenceState { path = "Body" };
+            state.objectStates.Add(new ObjectStateRef { path = "", activeSelf = true, tag = "Player", layer = 3 });
+            state.objectStates.Add(new ObjectStateRef { path = "Toggle", activeSelf = true, tag = "Untagged", layer = 5 });
+
+            AvatarReferenceApplier.Apply(state, avatarRoot.transform);
+
+            Assert.AreEqual("Player", body.tag);
+            Assert.AreEqual(3, body.layer);
+            Assert.AreEqual(5, child.layer);
+        }
+
+        [Test]
+        public void Apply_UnknownTag_WarnsAndLeavesTagUnchanged_WithoutThrowing()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+
+            var state = new AvatarReferenceState { path = "Body" };
+            state.objectStates.Add(new ObjectStateRef { path = "", activeSelf = true, tag = "ThisTagDoesNotExist", layer = 0 });
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex(".*Tag 'ThisTagDoesNotExist'.*not defined.*"));
+            Assert.DoesNotThrow(() => AvatarReferenceApplier.Apply(state, avatarRoot.transform));
+
+            Assert.AreEqual("Untagged", body.tag);
+        }
+
+        [Test]
+        public void BranchManagerCommit_And_RestoreToCommit_RoundTripsTagAndLayer_AfterDrift()
+        {
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            body.AddComponent<AvatarVcsTrackedReference>();
+            body.tag = "Player";
+            body.layer = 3;
+
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            try
+            {
+                var commit = BranchManager.Commit(avatarRoot, "with tag and layer");
+
+                body.tag = "Untagged"; // simulate drift after committing
+                body.layer = 0;
+
+                var result = BranchManager.RestoreToCommit(avatarRoot, commit.commitId);
+
+                Assert.IsTrue(result.IsSuccess);
+                Assert.AreEqual("Player", body.tag);
+                Assert.AreEqual(3, body.layer);
+            }
+            finally
+            {
+                CommitStore.DeleteAvatarHistory(avatarGuid);
+            }
         }
 
         [Test]
