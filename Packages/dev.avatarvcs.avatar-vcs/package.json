@@ -2,9 +2,17 @@
   "name": "dev.avatarvcs.avatar-vcs",
   "version": "0.1.0-poc",
   "displayName": "Avatar VCS (Phase 1 PoC)",
-  "description": "Version control for VRChat avatar configurations. Phase 1 PoC scope: managed-container lifecycle, prefab GUID capture, destroy/regenerate idempotency, and Transform record/restore. See DesignDoc_avatar-vcs.md section 7.1.",
+  "description": "Version control for VRChat avatar configurations: prefab-composition containers with destroy/regenerate idempotency, BlendShape/material/component-field tracking, commit history, branches, and diff.",
   "unity": "2022.3",
+  "author": {
+    "name": "gaussian",
+    "url": "https://github.com/whitegauss"
+  },
+  "license": "MIT",
+  "licenseUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/LICENSE",
   "documentationUrl": "",
-  "changelogUrl": "",
-  "licensesUrl": ""
+  "changelogUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/CHANGELOG.md",
+  "vpmDependencies": {
+    "com.vrchat.avatars": "^3.4.0"
+  }
 }
