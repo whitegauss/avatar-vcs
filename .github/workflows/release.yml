@@ -1,0 +1,76 @@
+name: Release VPM Package
+
+# Cut a release by bumping "version" in Packages/dev.avatarvcs.avatar-vcs/package.json
+# on main, then: git tag v<version> && git push origin v<version>
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  PACKAGE_ID: dev.avatarvcs.avatar-vcs
+  PACKAGE_DIR: Packages/dev.avatarvcs.avatar-vcs
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Read package version
+        id: package
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('${{ env.PACKAGE_DIR }}/package.json'))['version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches package.json version on main
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$tag_version" != "${{ steps.package.outputs.version }}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${{ steps.package.outputs.version }} on main."
+            exit 1
+          fi
+
+      - name: Build package zip
+        id: zip
+        run: |
+          zip_name="${{ env.PACKAGE_ID }}-${{ steps.package.outputs.version }}.zip"
+          (cd Packages && zip -r "../${zip_name}" "${{ env.PACKAGE_ID }}")
+          sha256=$(sha256sum "${zip_name}" | cut -d ' ' -f1)
+          echo "zip_name=${zip_name}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
+
+      - name: Update index.json with this version's entry
+        run: |
+          python3 .github/scripts/update_index_json.py \
+            "${{ env.PACKAGE_DIR }}/package.json" \
+            "index.json" \
+            "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${{ steps.zip.outputs.zip_name }}" \
+            "${{ steps.zip.outputs.sha256 }}"
+
+      - name: Commit updated index.json to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.json
+          if git diff --cached --quiet; then
+            echo "index.json already up to date; nothing to commit."
+          else
+            git commit -m "chore: publish ${GITHUB_REF_NAME} to VPM repo [skip ci]"
+            git push origin HEAD:main
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: ${{ steps.zip.outputs.zip_name }}
+          generate_release_notes: true
