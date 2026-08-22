@@ -30,8 +30,7 @@ CI (`.github/workflows/tests.yml`) で [game-ci/unity-test-runner](https://githu
 ### VCC (VRChat Creator Companion) 経由
 
 以下のリンクをクリックすると VCC が起動し、リポジトリ追加ダイアログが自動で開きます（VCC インストール済みの環境で有効です）:
-
-**[Add to VCC](vcc://vpm/addRepo?url=https%3A%2F%2Fraw.githubusercontent.com%2Fwhitegauss%2Favatar-vcs%2Fmain%2Findex.json)**
+vcc://vpm/addRepo?url=https%3A%2F%2Fraw.githubusercontent.com%2Fwhitegauss%2Favatar-vcs%2Fmain%2Findex.json
 
 うまく開かない場合は、VCC の Settings > Packages > Add Repository で以下の URL を手動追加してください:
 
