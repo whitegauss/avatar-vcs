@@ -437,5 +437,89 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.DoesNotThrow(() => SnapshotDiffer.Diff(before, after));
         }
+
+        [Test]
+        public void Diff_DoesNotThrow_OnDuplicateOrNullMaterialSettings_InHandEditedCommit()
+        {
+            var before = new Commit
+            {
+                materialSettings =
+                {
+                    new MaterialSettingsState { targetPath = "Body", slot = 0, sourceMaterialGuid = "guid_a" },
+                    new MaterialSettingsState { targetPath = "Body", slot = 0, sourceMaterialGuid = "guid_b" }, // duplicate slot
+                },
+            };
+            var after = new Commit
+            {
+                materialSettings =
+                {
+                    new MaterialSettingsState { targetPath = null, slot = 0, sourceMaterialGuid = "guid_c" }, // null targetPath
+                    new MaterialSettingsState { targetPath = "Body", slot = 0, sourceMaterialGuid = "guid_d" },
+                },
+            };
+
+            List<ContainerDiff> diffs = null;
+            Assert.DoesNotThrow(() => diffs = SnapshotDiffer.Diff(before, after));
+            Assert.IsNotNull(diffs);
+        }
+
+        [Test]
+        public void Diff_DoesNotThrow_OnDuplicateOrNullProperties_InMaterialSettings()
+        {
+            var before = new Commit
+            {
+                materialSettings =
+                {
+                    new MaterialSettingsState
+                    {
+                        targetPath = "Body",
+                        slot = 0,
+                        properties =
+                        {
+                            new MaterialPropertyValue { name = "_Color", type = "color", value = "1,1,1,1" },
+                            new MaterialPropertyValue { name = "_Color", type = "color", value = "0,0,0,1" }, // duplicate
+                        },
+                    },
+                },
+            };
+            var after = new Commit
+            {
+                materialSettings =
+                {
+                    new MaterialSettingsState
+                    {
+                        targetPath = "Body",
+                        slot = 0,
+                        properties =
+                        {
+                            new MaterialPropertyValue { name = null, type = "float", value = "1.0" }, // null name
+                            new MaterialPropertyValue { name = "_Color", type = "color", value = "1,0,0,1" },
+                        },
+                    },
+                },
+            };
+
+            List<ContainerDiff> diffs = null;
+            Assert.DoesNotThrow(() => diffs = SnapshotDiffer.Diff(before, after));
+            Assert.IsNotNull(diffs);
+        }
+
+        [Test]
+        public void Diff_DoesNotThrow_OnComponentsWithNullOrEmptyFields_InHandEditedCommit()
+        {
+            var containerA = MakeContainer("hair", "guid_a");
+            containerA.components.Add(new ComponentState
+            {
+                path = "",
+                type = "Fake.Component",
+                fields = { new FieldValue { key = "duplicateKey", value = "1", type = "int" }, new FieldValue { key = "duplicateKey", value = "2", type = "int" } },
+                assetRefs = { new AssetRef { key = "duplicateAsset", guid = "guid1" }, new AssetRef { key = "duplicateAsset", guid = "guid2" } },
+                sceneRefs = { new SceneRef { key = "duplicateScene", path = "P1", type = "T" }, new SceneRef { key = "duplicateScene", path = "P2", type = "T" } },
+            });
+
+            var containerB = MakeContainer("hair", "guid_a");
+
+            Assert.DoesNotThrow(() => SnapshotDiffer.Diff(MakeCommit(containerA), MakeCommit(containerB)));
+        }
     }
 }

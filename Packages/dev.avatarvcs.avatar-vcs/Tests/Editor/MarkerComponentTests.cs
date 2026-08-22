@@ -124,5 +124,31 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual(sharedGuid, rootA.AvatarGuid, "the original avatar keeps its guid");
             Assert.AreNotEqual(sharedGuid, rootB.AvatarGuid, "the duplicated avatar must regenerate");
         }
+
+        [Test]
+        public void AvatarVcsRoot_AssignGuid_EmptyOrNull_ThrowsArgumentException()
+        {
+            var root = Spawn("Root").AddComponent<AvatarVcsRoot>();
+            Assert.Throws<System.ArgumentException>(() => root.AssignGuid(null));
+            Assert.Throws<System.ArgumentException>(() => root.AssignGuid(""));
+        }
+
+        [Test]
+        public void AvatarVcsRoot_AssignGuid_AlreadyAssigned_ThrowsInvalidOperationException()
+        {
+            var root = Spawn("Root").AddComponent<AvatarVcsRoot>();
+            const string guid = "0123456789abcdef0123456789abcdef";
+            root.AssignGuid(guid);
+            Assert.Throws<System.InvalidOperationException>(() => root.AssignGuid("fedcba9876543210fedcba9876543210"));
+            Assert.AreEqual(guid, root.AvatarGuid);
+        }
+
+        [Test]
+        public void AvatarVcsContainer_AssignGuid_EmptyOrNull_ThrowsArgumentException()
+        {
+            var container = Spawn("Container").AddComponent<AvatarVcsContainer>();
+            Assert.Throws<System.ArgumentException>(() => container.AssignGuid(null));
+            Assert.Throws<System.ArgumentException>(() => container.AssignGuid(""));
+        }
     }
 }

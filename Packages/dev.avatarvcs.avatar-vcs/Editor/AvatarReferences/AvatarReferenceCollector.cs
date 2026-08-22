@@ -26,6 +26,8 @@ namespace AvatarVcs.Editor.AvatarReferences
         public static (List<AvatarReferenceState> avatarReferences, List<MaterialSettingsState> materialSettings)
             CollectFromTrackedTargets(GameObject avatarRoot)
         {
+            if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
+
             var avatarReferences = new List<AvatarReferenceState>();
             var materialSettings = new List<MaterialSettingsState>();
 

@@ -312,6 +312,156 @@ namespace AvatarVcs.Tests.Editor
             Assert.Throws<InvalidOperationException>(() => MaterialSettingsApplier.Apply(state, root));
         }
 
+        [Test]
+        public void ComponentApplier_MalformedFieldValue_LogsWarningAndDoesNotCrash()
+        {
+            var root = Spawn("Root");
+            root.AddComponent<Light>();
+
+            var state = new ComponentState
+            {
+                path = "",
+                type = typeof(Light).FullName,
+                fields =
+                {
+                    new FieldValue { key = "m_Intensity", type = "float", value = "not-a-valid-float" },
+                },
+            };
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Could not decode field 'm_Intensity'"));
+            var result = ComponentApplier.Apply(state, root);
+            Assert.IsTrue(result.IsSuccess);
+        }
+
+        #endregion
+
+        #region AvatarReferenceApplier Robustness Continued
+
+        [Test]
+        public void AvatarReferenceApplier_TargetHasNoRenderer_LogsWarningAndDoesNotCrash()
+        {
+            var root = Spawn("Avatar");
+            Spawn("Body", root.transform); // No Renderer attached
+
+            var state = new AvatarReferenceState
+            {
+                path = "Body",
+                materials = { new MaterialRef { slot = 0, guid = testMatGuid } },
+            };
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("'Body' has no Renderer; material references skipped"));
+            Assert.DoesNotThrow(() => AvatarReferenceApplier.Apply(state, root.transform));
+        }
+
+        [Test]
+        public void AvatarReferenceApplier_TargetHasNoSkinnedMeshRenderer_LogsWarningAndDoesNotCrash()
+        {
+            var root = Spawn("Avatar");
+            Spawn("Body", root.transform); // No SkinnedMeshRenderer
+
+            var state = new AvatarReferenceState
+            {
+                path = "Body",
+                blendShapes = { new BlendShapeRef { name = "Shape", weight = 100f } },
+            };
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("'Body' has no SkinnedMeshRenderer with a mesh; blend shapes skipped"));
+            Assert.DoesNotThrow(() => AvatarReferenceApplier.Apply(state, root.transform));
+        }
+
+        [Test]
+        public void AvatarReferenceApplier_ActiveState_UnresolvableDescendant_LogsWarningAndDoesNotCrash()
+        {
+            var root = Spawn("Avatar");
+            Spawn("Body", root.transform);
+
+            var state = new AvatarReferenceState
+            {
+                path = "Body",
+                objectStates = { new ObjectStateRef { path = "NonExistentChild", activeSelf = false } },
+            };
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("avatarReferences objectState path 'NonExistentChild' under 'Body' could not be resolved"));
+            Assert.DoesNotThrow(() => AvatarReferenceApplier.Apply(state, root.transform));
+        }
+
+        #endregion
+
+        #region MaterialSettingsApplier Robustness Continued
+
+        [Test]
+        public void MaterialSettingsApplier_SourceAssetNotAMaterial_ThrowsInvalidOperationException()
+        {
+            // Point sourceMaterialGuid to a non-Material asset (e.g. this test file or a prefab)
+            var scriptPath = "Packages/dev.avatarvcs.avatar-vcs/Editor/AvatarVcs.Editor.asmdef";
+            var nonMaterialGuid = AssetDatabase.AssetPathToGUID(scriptPath);
+
+            var root = Spawn("Avatar");
+            var body = Spawn("Body", root.transform);
+            var mr = body.AddComponent<MeshRenderer>();
+            mr.sharedMaterials = new[] { testMat };
+
+            var state = new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = nonMaterialGuid,
+                shader = "lilToon",
+            };
+
+            Assert.Throws<InvalidOperationException>(() => MaterialSettingsApplier.Apply(state, root));
+        }
+
+        [Test]
+        public void MaterialSettingsApplier_DuplicateHasNoProperty_LogsWarningAndSkips()
+        {
+            var root = Spawn("Avatar");
+            var body = Spawn("Body", root.transform);
+            var mr = body.AddComponent<MeshRenderer>();
+            mr.sharedMaterials = new[] { testMat };
+
+            var state = new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = testMatGuid,
+                shader = "lilToon",
+                properties =
+                {
+                    new MaterialPropertyValue { name = "_NonExistentProperty12345", type = "float", value = "1.0" },
+                },
+            };
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Duplicate material has no property '_NonExistentProperty12345'"));
+            var duplicate = MaterialSettingsApplier.Apply(state, root);
+            Assert.IsNotNull(duplicate);
+        }
+
+        [Test]
+        public void MaterialSettingsApplier_UnsupportedPropertyType_LogsWarningAndSkips()
+        {
+            var root = Spawn("Avatar");
+            var body = Spawn("Body", root.transform);
+            var mr = body.AddComponent<MeshRenderer>();
+            mr.sharedMaterials = new[] { testMat };
+
+            var state = new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = testMatGuid,
+                shader = "lilToon",
+                properties =
+                {
+                    new MaterialPropertyValue { name = "_Color", type = "matrix4x4", value = "1,0,0,0" },
+                },
+            };
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Unsupported material property type 'matrix4x4'"));
+            var duplicate = MaterialSettingsApplier.Apply(state, root);
+            Assert.IsNotNull(duplicate);
+        }
+
         #endregion
     }
 }

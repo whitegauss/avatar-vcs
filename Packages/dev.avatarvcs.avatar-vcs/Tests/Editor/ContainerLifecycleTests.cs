@@ -467,5 +467,38 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsTrue(isMissing);
             CollectionAssert.Contains(missingGuids, privateGuid);
         }
+
+        [Test]
+        public void RestoreContainer_UndefinedTagInTagManager_LogsWarningAndLeavesUntagged()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var snapshot = new ContainerSnapshot
+            {
+                containerId = "tag_test",
+                containerGuid = "0123456789abcdef0123456789abcdef",
+                tag = "NonExistentTag_12345",
+            };
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Tag 'NonExistentTag_12345' .* is not defined in this project's Tag Manager"));
+            var restored = ContainerRestore.InstantiateContainer(snapshot, root);
+
+            Assert.IsNotNull(restored);
+            Assert.AreEqual("Untagged", restored.tag);
+        }
+
+        [Test]
+        public void RestoreContainer_MissingPrefabWithoutCheck_ThrowsInvalidOperationException()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var snapshot = new ContainerSnapshot
+            {
+                containerId = "missing_prefab_test",
+                containerGuid = "0123456789abcdef0123456789abcdef",
+                prefabGuids = { "unresolvable_prefab_guid_00000000" },
+            };
+
+            Assert.Throws<System.InvalidOperationException>(() =>
+                ContainerRestore.InstantiateContainerStructure(snapshot, root));
+        }
     }
 }
