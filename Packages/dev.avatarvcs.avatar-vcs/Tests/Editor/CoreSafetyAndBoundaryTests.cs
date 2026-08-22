@@ -1,8 +1,12 @@
 using System;
-using AvatarVcs.Editor;
+using AvatarVcs.Editor.Apply;
+using AvatarVcs.Editor.AvatarReferences;
+using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
+using AvatarVcs.Editor.MaterialSettings;
 using AvatarVcs.Editor.Model;
+using AvatarVcs.Editor.Operations;
 using AvatarVcs.Editor.Reflection;
 using AvatarVcs.Editor.UI;
 using AvatarVcs.Runtime;
@@ -156,7 +160,7 @@ namespace AvatarVcs.Tests.Editor
         [Test]
         public void ContainerCapture_CaptureContainer_NullContainer_ThrowsArgumentNullException()
         {
-            Assert.Throws<ArgumentNullException>(() => Operations.ContainerCapture.CaptureContainer(null));
+            Assert.Throws<ArgumentNullException>(() => ContainerCapture.CaptureContainer(null));
         }
 
         [Test]
@@ -165,7 +169,7 @@ namespace AvatarVcs.Tests.Editor
             var plainGo = new GameObject("PlainObject");
             try
             {
-                Assert.Throws<ArgumentException>(() => Operations.ContainerCapture.CaptureContainer(plainGo.transform));
+                Assert.Throws<ArgumentException>(() => ContainerCapture.CaptureContainer(plainGo.transform));
             }
             finally
             {
@@ -177,22 +181,22 @@ namespace AvatarVcs.Tests.Editor
         public void ContainerRestore_InstantiateContainerStructure_NullSnapshotOrRoot_ThrowsArgumentNullException()
         {
             var snapshot = new ContainerSnapshot { containerId = "c1", containerGuid = "g1" };
-            Assert.Throws<ArgumentNullException>(() => Operations.ContainerRestore.InstantiateContainerStructure(null, avatarRoot));
-            Assert.Throws<ArgumentNullException>(() => Operations.ContainerRestore.InstantiateContainerStructure(snapshot, null));
+            Assert.Throws<ArgumentNullException>(() => ContainerRestore.InstantiateContainerStructure(null, avatarRoot));
+            Assert.Throws<ArgumentNullException>(() => ContainerRestore.InstantiateContainerStructure(snapshot, null));
         }
 
         [Test]
         public void ContainerRestore_ApplyContainerComponents_NullArguments_ThrowsArgumentNullException()
         {
             var snapshot = new ContainerSnapshot { containerId = "c1", containerGuid = "g1" };
-            Assert.Throws<ArgumentNullException>(() => Operations.ContainerRestore.ApplyContainerComponents(null, avatarRoot, avatarRoot));
-            Assert.Throws<ArgumentNullException>(() => Operations.ContainerRestore.ApplyContainerComponents(snapshot, null, avatarRoot));
+            Assert.Throws<ArgumentNullException>(() => ContainerRestore.ApplyContainerComponents(null, avatarRoot, avatarRoot));
+            Assert.Throws<ArgumentNullException>(() => ContainerRestore.ApplyContainerComponents(snapshot, null, avatarRoot));
         }
 
         [Test]
         public void ContainerRestore_HasMissingPrefabs_NullSnapshot_ThrowsArgumentNullException()
         {
-            Assert.Throws<ArgumentNullException>(() => Operations.ContainerRestore.HasMissingPrefabs(null, out _));
+            Assert.Throws<ArgumentNullException>(() => ContainerRestore.HasMissingPrefabs(null, out _));
         }
 
         [Test]
@@ -204,35 +208,35 @@ namespace AvatarVcs.Tests.Editor
         [Test]
         public void AvatarReferenceCapture_NullArguments_ThrowsArgumentNullException()
         {
-            Assert.Throws<ArgumentNullException>(() => AvatarReferences.AvatarReferenceCapture.Capture(null, avatarRoot.transform));
-            Assert.Throws<ArgumentNullException>(() => AvatarReferences.AvatarReferenceCapture.Capture(avatarRoot.transform, null));
+            Assert.Throws<ArgumentNullException>(() => AvatarReferenceCapture.Capture(null, avatarRoot.transform));
+            Assert.Throws<ArgumentNullException>(() => AvatarReferenceCapture.Capture(avatarRoot.transform, null));
         }
 
         [Test]
         public void AvatarReferenceApplier_NullArguments_ThrowsArgumentNullException()
         {
             var state = new AvatarReferenceState { path = "Body" };
-            Assert.Throws<ArgumentNullException>(() => AvatarReferences.AvatarReferenceApplier.Apply(null, avatarRoot.transform));
-            Assert.Throws<ArgumentNullException>(() => AvatarReferences.AvatarReferenceApplier.Apply(state, null));
+            Assert.Throws<ArgumentNullException>(() => AvatarReferenceApplier.Apply(null, avatarRoot.transform));
+            Assert.Throws<ArgumentNullException>(() => AvatarReferenceApplier.Apply(state, null));
         }
 
         [Test]
         public void AvatarReferenceCollector_NullAvatarRoot_ThrowsArgumentNullException()
         {
-            Assert.Throws<ArgumentNullException>(() => AvatarReferences.AvatarReferenceCollector.CollectFromTrackedTargets(null));
+            Assert.Throws<ArgumentNullException>(() => AvatarReferenceCollector.CollectFromTrackedTargets(null));
         }
 
         [Test]
         public void MaterialSettingsCapture_NullOrInvalidArguments_ThrowsExpectedExceptions()
         {
-            Assert.Throws<ArgumentNullException>(() => MaterialSettings.MaterialSettingsCapture.Capture(null, "lilToon", "Body", 0));
+            Assert.Throws<ArgumentNullException>(() => MaterialSettingsCapture.Capture(null, "lilToon", "Body", 0));
             
             var mat = new Material(Shader.Find("Standard"));
             try
             {
-                Assert.Throws<ArgumentException>(() => MaterialSettings.MaterialSettingsCapture.Capture(mat, null, "Body", 0));
-                Assert.Throws<ArgumentException>(() => MaterialSettings.MaterialSettingsCapture.Capture(mat, "", "Body", 0));
-                Assert.Throws<NotSupportedException>(() => MaterialSettings.MaterialSettingsCapture.Capture(mat, "UnsupportedShader_12345", "Body", 0));
+                Assert.Throws<ArgumentException>(() => MaterialSettingsCapture.Capture(mat, null, "Body", 0));
+                Assert.Throws<ArgumentException>(() => MaterialSettingsCapture.Capture(mat, "", "Body", 0));
+                Assert.Throws<NotSupportedException>(() => MaterialSettingsCapture.Capture(mat, "UnsupportedShader_12345", "Body", 0));
             }
             finally
             {
@@ -244,24 +248,24 @@ namespace AvatarVcs.Tests.Editor
         public void MaterialSettingsApplier_NullArguments_ThrowsArgumentNullException()
         {
             var state = new MaterialSettingsState { targetPath = "Body", slot = 0, shader = "lilToon", sourceMaterialGuid = "guid" };
-            Assert.Throws<ArgumentNullException>(() => MaterialSettings.MaterialSettingsApplier.Apply(null, avatarRoot));
-            Assert.Throws<ArgumentNullException>(() => MaterialSettings.MaterialSettingsApplier.Apply(state, null));
+            Assert.Throws<ArgumentNullException>(() => MaterialSettingsApplier.Apply(null, avatarRoot));
+            Assert.Throws<ArgumentNullException>(() => MaterialSettingsApplier.Apply(state, null));
         }
 
         [Test]
         public void ComponentApplier_NullArguments_ThrowsArgumentNullException()
         {
             var state = new ComponentState { path = "", type = typeof(Light).FullName };
-            Assert.Throws<ArgumentNullException>(() => Apply.ComponentApplier.Apply(null, avatarRoot));
-            Assert.Throws<ArgumentNullException>(() => Apply.ComponentApplier.Apply(state, null));
+            Assert.Throws<ArgumentNullException>(() => ComponentApplier.Apply(null, avatarRoot));
+            Assert.Throws<ArgumentNullException>(() => ComponentApplier.Apply(state, null));
         }
 
         [Test]
         public void ComponentCapturer_NullArguments_ThrowsArgumentNullException()
         {
             var light = avatarRoot.AddComponent<Light>();
-            Assert.Throws<ArgumentNullException>(() => Capture.ComponentCapturer.Capture(null, avatarRoot.transform));
-            Assert.Throws<ArgumentNullException>(() => Capture.ComponentCapturer.Capture(light, null));
+            Assert.Throws<ArgumentNullException>(() => ComponentCapturer.Capture(null, avatarRoot.transform));
+            Assert.Throws<ArgumentNullException>(() => ComponentCapturer.Capture(light, null));
         }
 
         [Test]
