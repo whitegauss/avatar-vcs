@@ -31,7 +31,7 @@ namespace AvatarVcs.Editor.AvatarReferences
             ApplyBlendShapes(state, target);
             ApplyMaterials(state, target);
             ApplyComponents(state, target, avatarRoot);
-            ApplyActiveStates(state, target);
+            ApplyObjectStates(state, target);
         }
 
         private static void ApplyBlendShapes(AvatarReferenceState state, Transform target)
@@ -117,21 +117,52 @@ namespace AvatarVcs.Editor.AvatarReferences
             }
         }
 
-        private static void ApplyActiveStates(AvatarReferenceState state, Transform target)
+        private static void ApplyObjectStates(AvatarReferenceState state, Transform target)
         {
-            foreach (var activeState in state.activeStates)
+            foreach (var objectState in state.objectStates)
             {
-                var descendant = ReferenceResolver.ResolvePath(activeState.path, target);
+                var descendant = ReferenceResolver.ResolvePath(objectState.path, target);
                 if (descendant == null)
                 {
-                    Debug.LogWarning($"[AvatarVCS] avatarReferences activeState path '{activeState.path}' under '{state.path}' could not be resolved; skipped.");
+                    Debug.LogWarning($"[AvatarVCS] avatarReferences objectState path '{objectState.path}' under '{state.path}' could not be resolved; skipped.");
                     continue;
                 }
 
-                if (descendant.gameObject.activeSelf == activeState.activeSelf) continue;
+                var go = descendant.gameObject;
+                if (go.activeSelf != objectState.activeSelf)
+                {
+                    Undo.RecordObject(go, "AvatarVCS Apply Object State");
+                    go.SetActive(objectState.activeSelf);
+                }
 
-                Undo.RecordObject(descendant.gameObject, "AvatarVCS Apply Active State");
-                descendant.gameObject.SetActive(activeState.activeSelf);
+                if (go.layer != objectState.layer)
+                {
+                    Undo.RecordObject(go, "AvatarVCS Apply Object State");
+                    go.layer = objectState.layer;
+                }
+
+                ApplyTag(go, objectState, state.path);
+            }
+        }
+
+        /// <summary>
+        /// GameObject.tag throws if the tag isn't defined in this project's
+        /// Tag Manager (e.g. a custom tag recorded in a commit made in a
+        /// different project) -- same guard ContainerRestore.ApplyTag uses.
+        /// </summary>
+        private static void ApplyTag(GameObject go, ObjectStateRef objectState, string avatarReferencePath)
+        {
+            if (string.IsNullOrEmpty(objectState.tag) || objectState.tag == go.tag) return;
+
+            try
+            {
+                Undo.RecordObject(go, "AvatarVCS Apply Object State");
+                go.tag = objectState.tag;
+            }
+            catch (UnityException)
+            {
+                Debug.LogWarning($"[AvatarVCS] Tag '{objectState.tag}' recorded for '{avatarReferencePath}/{objectState.path}' "
+                    + $"is not defined in this project's Tag Manager; left as '{go.tag}'.");
             }
         }
     }

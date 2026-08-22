@@ -92,14 +92,17 @@ namespace AvatarVcs.Editor.AvatarReferences
                 // does.
                 if (vcsRoot != null && descendant.IsChildOf(vcsRoot)) continue;
 
-                // Hierarchy show/hide (GameObject.activeSelf) lives on the
-                // GameObject itself, not on any one Component's
-                // SerializedObject, so it needs its own capture step
-                // alongside the per-component walk below.
-                state.activeStates.Add(new ActiveStateRef
+                // activeSelf/tag/layer live on the GameObject itself, not on
+                // any one Component's SerializedObject, so they need their
+                // own capture step alongside the per-component walk below
+                // (same three fields ContainerCapture already records for a
+                // container's own root).
+                state.objectStates.Add(new ObjectStateRef
                 {
                     path = ReferenceResolver.GetRelativePath(descendant, target),
                     activeSelf = descendant.gameObject.activeSelf,
+                    tag = descendant.gameObject.tag,
+                    layer = descendant.gameObject.layer,
                 });
 
                 foreach (var component in descendant.GetComponents<Component>())
