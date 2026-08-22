@@ -1,3 +1,4 @@
+using AvatarVcs.Editor.Core;
 using AvatarVcs.Runtime;
 using UnityEditor;
 using UnityEngine;
@@ -12,19 +13,21 @@ namespace AvatarVcs.Editor.UI
     }
 
     /// <summary>
-    /// Draws a small marker next to every GameObject covered by either of
-    /// AvatarVCS's two tracking mechanisms, so what's captured on commit is
-    /// visible at a glance instead of requiring the Inspector to check each
-    /// one. A plain colored rect rather than a named built-in icon
-    /// (EditorGUIUtility.IconContent), since built-in icon names aren't
-    /// guaranteed stable across Unity versions and a missing one would
-    /// silently draw nothing.
+    /// Draws a small dim marker next to every GameObject covered by
+    /// NEITHER of AvatarVCS's two tracking mechanisms. Tracking is the
+    /// default now (Ensure Root auto-seeds it, design doc 1.4), so most of
+    /// an avatar's hierarchy is covered and marking every tracked object
+    /// would just be visual noise -- the useful signal is the exception:
+    /// which few objects are NOT covered and would silently not round-trip
+    /// through commit/checkout. A plain colored rect rather than a named
+    /// built-in icon (EditorGUIUtility.IconContent), since built-in icon
+    /// names aren't guaranteed stable across Unity versions and a missing
+    /// one would silently draw nothing.
     /// </summary>
     [InitializeOnLoad]
     public static class HierarchyTrackingStatusIcon
     {
-        private static readonly Color TrackedColor = new(0.2f, 0.6f, 1f, 0.9f);
-        private static readonly Color ContainerManagedColor = new(0.95f, 0.6f, 0.15f, 0.9f);
+        private static readonly Color UntrackedColor = new(0.4f, 0.4f, 0.4f, 0.6f);
 
         static HierarchyTrackingStatusIcon()
         {
@@ -56,15 +59,40 @@ namespace AvatarVcs.Editor.UI
             return HierarchyTrackingStatus.None;
         }
 
+        /// <summary>
+        /// True only for the exception worth flagging: go is part of an
+        /// avatar actually under AvatarVCS management (the avatar root
+        /// itself, or somewhere underneath it) AND isn't covered by either
+        /// tracking mechanism. Without the management-scope check, every
+        /// unrelated GameObject in the whole scene (lights, cameras, objects
+        /// with nothing to do with any avatar) would get flagged too,
+        /// drowning out the actual signal.
+        /// </summary>
+        public static bool ShouldShowUntrackedMarker(GameObject go) =>
+            go != null && GetTrackingStatus(go) == HierarchyTrackingStatus.None && IsPartOfManagedAvatar(go);
+
+        /// <summary>
+        /// True if go or any ancestor has "[AvatarVCS]" as a direct child --
+        /// i.e. go is the avatar root itself or sits somewhere underneath it.
+        /// </summary>
+        private static bool IsPartOfManagedAvatar(GameObject go)
+        {
+            for (var t = go.transform; t != null; t = t.parent)
+            {
+                if (ContainerManager.FindRoot(t.gameObject) != null)
+                    return true;
+            }
+
+            return false;
+        }
+
         private static void OnHierarchyItemGUI(int instanceId, Rect selectionRect)
         {
             var go = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
-            var status = GetTrackingStatus(go);
-            if (status == HierarchyTrackingStatus.None) return;
+            if (!ShouldShowUntrackedMarker(go)) return;
 
-            var color = status == HierarchyTrackingStatus.TrackedReference ? TrackedColor : ContainerManagedColor;
             var markerRect = new Rect(selectionRect.xMax - 16f, selectionRect.y + 2f, 10f, 10f);
-            EditorGUI.DrawRect(markerRect, color);
+            EditorGUI.DrawRect(markerRect, UntrackedColor);
         }
     }
 }

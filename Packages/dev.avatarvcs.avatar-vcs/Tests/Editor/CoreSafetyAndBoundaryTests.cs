@@ -156,5 +156,34 @@ namespace AvatarVcs.Tests.Editor
 
             Object.DestroyImmediate(containerRootGo);
         }
+
+        [Test]
+        public void HierarchyTrackingStatusIcon_ShouldShowUntrackedMarker_OnlyFlagsUncoveredObjectsInsideAManagedAvatar()
+        {
+            Assert.IsFalse(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarker(null));
+
+            // Unrelated object, not part of any AvatarVCS-managed avatar --
+            // must never be flagged, or every random object in the scene
+            // would light up.
+            var unrelated = new GameObject("UnrelatedSceneObject");
+            Assert.IsFalse(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarker(unrelated));
+            Object.DestroyImmediate(unrelated);
+
+            // avatarRoot has no AvatarVCS structure yet at all -- not managed,
+            // so still not flagged even though it's technically untracked.
+            Assert.IsFalse(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarker(avatarRoot));
+
+            ContainerManager.EnsureRoot(avatarRoot);
+            var untrackedChild = new GameObject("Untracked");
+            untrackedChild.transform.SetParent(avatarRoot.transform, false);
+
+            // Now avatarRoot has AvatarVCS structure -- an untracked child of
+            // it IS the exception worth flagging.
+            Assert.IsTrue(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarker(untrackedChild));
+
+            untrackedChild.AddComponent<AvatarVcsTrackedReference>();
+            Assert.IsFalse(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarker(untrackedChild),
+                "once tracked, no longer the exception");
+        }
     }
 }
