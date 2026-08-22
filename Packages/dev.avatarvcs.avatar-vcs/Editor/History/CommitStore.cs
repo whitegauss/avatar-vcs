@@ -254,9 +254,12 @@ namespace AvatarVcs.Editor.History
                 }
                 toDelete.Add(commitId);
             }
-            if (toDelete.Count == 0) return blocked;
-
-            var allCommits = index.entries.ToDictionary(e => e.commitId, e => LoadCommit(avatarGuid, e.commitId));
+            var allCommits = new Dictionary<string, Commit>();
+            foreach (var e in index.entries)
+            {
+                if (!string.IsNullOrEmpty(e.commitId) && !allCommits.ContainsKey(e.commitId))
+                    allCommits[e.commitId] = LoadCommit(avatarGuid, e.commitId);
+            }
             var toDeleteSet = new HashSet<string>(toDelete);
 
             // Every generated-asset guid still referenced by a commit that

@@ -332,5 +332,103 @@ namespace AvatarVcs.Tests.Editor
         }
 
         #endregion
+
+        #region CommitStore & BranchManager Additional Error Cases
+
+        [Test]
+        public void CommitStore_SaveCommit_NullCommit_ThrowsArgumentNullException()
+        {
+            Assert.Throws<ArgumentNullException>(() => CommitStore.SaveCommit(NonExistentAvatarGuid, null));
+        }
+
+        [Test]
+        public void CommitStore_SaveCommit_InvalidCommitIdShape_ThrowsArgumentException()
+        {
+            var commit = new Commit { commitId = "too_short_id" };
+            Assert.Throws<ArgumentException>(() => CommitStore.SaveCommit(NonExistentAvatarGuid, commit));
+        }
+
+        [Test]
+        public void CommitStore_DeleteCommit_BranchHeadWithoutForce_ThrowsInvalidOperationException()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var commit = BranchManager.Commit(avatar, "init");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+
+            Assert.Throws<InvalidOperationException>(() => CommitStore.DeleteCommit(avatarGuid, commit.commitId, force: false));
+        }
+
+        [Test]
+        public void CommitStore_DeleteCommits_DuplicateCommitIdsInIndex_DeletesSafelyWithoutCrashing()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var first = BranchManager.Commit(avatar, "first");
+            var second = BranchManager.Commit(avatar, "second");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+
+            // Corrupt index to contain duplicate entries
+            var index = CommitStore.LoadIndex(avatarGuid);
+            index.entries.Add(new CommitIndexEntry
+            {
+                commitId = first.commitId,
+                message = "duplicate entry",
+                timestamp = first.timestamp,
+            });
+            var dir = CommitStore.GetAvatarDir(avatarGuid);
+            System.IO.File.WriteAllText($"{dir}/index.json", JsonUtility.ToJson(index, true));
+
+            List<string> blocked = null;
+            Assert.DoesNotThrow(() => blocked = CommitStore.DeleteCommits(avatarGuid, new[] { first.commitId }, force: true));
+            Assert.IsNotNull(blocked);
+            Assert.IsEmpty(blocked);
+            Assert.IsNull(CommitStore.LoadCommit(avatarGuid, first.commitId));
+        }
+
+        [Test]
+        public void BranchManager_CreateBranch_NullOrEmptyName_ThrowsArgumentException()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            BranchManager.Commit(avatar, "init");
+
+            Assert.Throws<ArgumentException>(() => BranchManager.CreateBranch(avatar, null));
+            Assert.Throws<ArgumentException>(() => BranchManager.CreateBranch(avatar, ""));
+        }
+
+        [Test]
+        public void BranchManager_CreateBranch_ExistingBranchDifferentCommit_ThrowsInvalidOperationException()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var commit1 = BranchManager.Commit(avatar, "init 1");
+            var commit2 = BranchManager.Commit(avatar, "init 2");
+
+            BranchManager.CreateBranch(avatar, "feature", commit1.commitId);
+            Assert.Throws<InvalidOperationException>(() => BranchManager.CreateBranch(avatar, "feature", commit2.commitId));
+        }
+
+        [Test]
+        public void BranchManager_SwitchBranch_BranchHasNoCommits_ThrowsInvalidOperationException()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            var config = CommitStore.LoadConfig(avatarGuid);
+            config.branches.Add(new BranchEntry { name = "empty-branch", commitId = null });
+            CommitStore.SaveConfig(avatarGuid, config);
+
+            Assert.Throws<InvalidOperationException>(() => BranchManager.SwitchBranch(avatar, "empty-branch"));
+        }
+
+        [Test]
+        public void BranchManager_SwitchBranch_CommitCouldNotBeLoaded_ThrowsInvalidOperationException()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            var config = CommitStore.LoadConfig(avatarGuid);
+            config.branches.Add(new BranchEntry { name = "missing-commit-branch", commitId = new string('a', 32) });
+            CommitStore.SaveConfig(avatarGuid, config);
+
+            Assert.Throws<InvalidOperationException>(() => BranchManager.SwitchBranch(avatar, "missing-commit-branch"));
+        }
+
+        #endregion
     }
 }

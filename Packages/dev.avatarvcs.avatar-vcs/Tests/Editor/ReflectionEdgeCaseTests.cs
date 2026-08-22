@@ -461,5 +461,147 @@ namespace AvatarVcs.Tests.Editor
         }
 
         #endregion
+
+        #region FieldCodec Malformed Input Robustness Tests
+
+        private class AllTypesHolder : MonoBehaviour
+        {
+            public float floatField;
+            public Color colorField;
+            public Vector2 vector2Field;
+            public Vector3 vector3Field;
+            public Vector4 vector4Field;
+            public Vector2Int vector2IntField;
+            public Vector3Int vector3IntField;
+            public Rect rectField;
+            public RectInt rectIntField;
+            public Bounds boundsField;
+            public BoundsInt boundsIntField;
+            public Quaternion quaternionField;
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_MalformedLongAndUlong_ReturnsFalseInsteadOfThrowing()
+        {
+            var go = Spawn("LongUlongMalformed");
+            var holder = go.AddComponent<LongFieldHolder>();
+            var so = new SerializedObject(holder);
+
+            var longProp = so.FindProperty(nameof(LongFieldHolder.longField));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(longProp, "long", "not-a-long"));
+            Assert.IsFalse(FieldCodec.TryDecode(longProp, "long", "not-a-long"));
+            Assert.IsFalse(FieldCodec.TryDecode(longProp, "long", "999999999999999999999999999999999999")); // overflow
+
+            var ulongProp = so.FindProperty(nameof(LongFieldHolder.ulongField));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(ulongProp, "ulong", "not-a-ulong"));
+            Assert.IsFalse(FieldCodec.TryDecode(ulongProp, "ulong", "not-a-ulong"));
+            Assert.IsFalse(FieldCodec.TryDecode(ulongProp, "ulong", "-123")); // negative for unsigned
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_MalformedFloat_ReturnsFalseInsteadOfThrowing()
+        {
+            var go = Spawn("FloatMalformed");
+            var holder = go.AddComponent<AllTypesHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(AllTypesHolder.floatField));
+
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(prop, "float", "not_a_float"));
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "float", "not_a_float"));
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "float", "1.2.3.4"));
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_MalformedColor_ReturnsFalseInsteadOfThrowing()
+        {
+            var go = Spawn("ColorMalformed");
+            var holder = go.AddComponent<AllTypesHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(AllTypesHolder.colorField));
+
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(prop, "color", "1,0,0")); // only 3 parts, needs 4
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "color", "1,0,0"));
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "color", "a,b,c,d"));
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "color", ""));
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_MalformedVectors_ReturnsFalseInsteadOfThrowing()
+        {
+            var go = Spawn("VectorMalformed");
+            var holder = go.AddComponent<AllTypesHolder>();
+            var so = new SerializedObject(holder);
+
+            var v2Prop = so.FindProperty(nameof(AllTypesHolder.vector2Field));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(v2Prop, "vector2", "1"));
+            Assert.IsFalse(FieldCodec.TryDecode(v2Prop, "vector2", "1"));
+            Assert.IsFalse(FieldCodec.TryDecode(v2Prop, "vector2", "x,y"));
+
+            var v4Prop = so.FindProperty(nameof(AllTypesHolder.vector4Field));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(v4Prop, "vector4", "1,2,3"));
+            Assert.IsFalse(FieldCodec.TryDecode(v4Prop, "vector4", "1,2,3"));
+
+            var v2iProp = so.FindProperty(nameof(AllTypesHolder.vector2IntField));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(v2iProp, "vector2Int", "1"));
+            Assert.IsFalse(FieldCodec.TryDecode(v2iProp, "vector2Int", "1"));
+            Assert.IsFalse(FieldCodec.TryDecode(v2iProp, "vector2Int", "1.5,2.5")); // floats for Int vector
+
+            var v3iProp = so.FindProperty(nameof(AllTypesHolder.vector3IntField));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(v3iProp, "vector3Int", "1,2"));
+            Assert.IsFalse(FieldCodec.TryDecode(v3iProp, "vector3Int", "1,2"));
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_MalformedRectAndBounds_ReturnsFalseInsteadOfThrowing()
+        {
+            var go = Spawn("RectBoundsMalformed");
+            var holder = go.AddComponent<AllTypesHolder>();
+            var so = new SerializedObject(holder);
+
+            var rectProp = so.FindProperty(nameof(AllTypesHolder.rectField));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(rectProp, "rect", "1,2,3")); // needs 4
+            Assert.IsFalse(FieldCodec.TryDecode(rectProp, "rect", "1,2,3"));
+
+            var rectIntProp = so.FindProperty(nameof(AllTypesHolder.rectIntField));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(rectIntProp, "rectInt", "1,2,3"));
+            Assert.IsFalse(FieldCodec.TryDecode(rectIntProp, "rectInt", "1,2,3"));
+
+            var boundsProp = so.FindProperty(nameof(AllTypesHolder.boundsField));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(boundsProp, "bounds", "1,2,3,4,5")); // needs 6
+            Assert.IsFalse(FieldCodec.TryDecode(boundsProp, "bounds", "1,2,3,4,5"));
+
+            var boundsIntProp = so.FindProperty(nameof(AllTypesHolder.boundsIntField));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(boundsIntProp, "boundsInt", "1,2,3,4,5"));
+            Assert.IsFalse(FieldCodec.TryDecode(boundsIntProp, "boundsInt", "1,2,3,4,5"));
+
+            var quatProp = so.FindProperty(nameof(AllTypesHolder.quaternionField));
+            Assert.DoesNotThrow(() => FieldCodec.TryDecode(quatProp, "quaternion", "1,2,3")); // needs 4
+            Assert.IsFalse(FieldCodec.TryDecode(quatProp, "quaternion", "1,2,3"));
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_UnknownType_ReturnsFalse()
+        {
+            var go = Spawn("UnknownTypeHolder");
+            var holder = go.AddComponent<AllTypesHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty(nameof(AllTypesHolder.floatField));
+
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "unsupported_or_unknown_type", "123"));
+        }
+
+        [Test]
+        public void FieldCodec_TryDecode_ArraySize_NegativeValue_ReturnsFalse()
+        {
+            var go = Spawn("NegativeArrayHolder");
+            var holder = go.AddComponent<ArrayFieldHolder>();
+            var so = new SerializedObject(holder);
+            var prop = so.FindProperty("items.Array.size");
+
+            Assert.IsFalse(FieldCodec.TryDecode(prop, "int", "-1"));
+            Assert.AreEqual(3, holder.items.Length);
+        }
+
+        #endregion
     }
 }

@@ -179,7 +179,25 @@ namespace AvatarVcs.Editor.Core
             // includeInactive: true because a container (or the whole
             // "[AvatarVCS]" root) can legitimately be toggled off.
             var root = from.GetComponentInParent<AvatarVcsRoot>(includeInactive: true);
-            return root != null && root.transform.parent != null ? root.transform.parent.gameObject : null;
+            if (root != null && root.transform.parent != null) return root.transform.parent.gameObject;
+
+            // The check above only catches "from is inside a container" --
+            // AvatarVcsRoot lives on "[AvatarVCS]" itself, which is a
+            // SIBLING of everything else under the avatar (Body, Armature,
+            // ...), not an ancestor of them. Without this second pass,
+            // Ensure Root on an arbitrary nested child outside any container
+            // (e.g. deep under Body/Armature on an avatar that already has
+            // "[AvatarVCS]") would find nothing here, fail the FindRoot(from)
+            // check right after this method returns, and spin up a second,
+            // nested "[AvatarVCS]" inside that child instead of resolving to
+            // the avatar that's already tracked.
+            for (var ancestor = from.transform.parent; ancestor != null; ancestor = ancestor.parent)
+            {
+                if (FindRoot(ancestor.gameObject) != null)
+                    return ancestor.gameObject;
+            }
+
+            return null;
         }
 
         /// <summary>
