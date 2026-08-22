@@ -127,13 +127,34 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
-        public void TrackedReferenceHierarchyIcon_ShouldShowMarker_OnlyForTrackedGameObjects()
+        public void HierarchyTrackingStatusIcon_GetTrackingStatus_ReflectsBothMechanisms()
         {
-            Assert.IsFalse(TrackedReferenceHierarchyIcon.ShouldShowMarker(null));
-            Assert.IsFalse(TrackedReferenceHierarchyIcon.ShouldShowMarker(avatarRoot));
+            Assert.AreEqual(HierarchyTrackingStatus.None, HierarchyTrackingStatusIcon.GetTrackingStatus(null));
+            Assert.AreEqual(HierarchyTrackingStatus.None, HierarchyTrackingStatusIcon.GetTrackingStatus(avatarRoot));
 
             avatarRoot.AddComponent<AvatarVcsTrackedReference>();
-            Assert.IsTrue(TrackedReferenceHierarchyIcon.ShouldShowMarker(avatarRoot));
+            Assert.AreEqual(HierarchyTrackingStatus.TrackedReference, HierarchyTrackingStatusIcon.GetTrackingStatus(avatarRoot));
+
+            var trackedChild = new GameObject("TrackedChild");
+            trackedChild.transform.SetParent(avatarRoot.transform, false);
+            Assert.AreEqual(HierarchyTrackingStatus.TrackedReference, HierarchyTrackingStatusIcon.GetTrackingStatus(trackedChild),
+                "a descendant with no marker of its own is still covered by an ancestor's marker");
+
+            var containerRootGo = new GameObject("[AvatarVCS]");
+            containerRootGo.AddComponent<AvatarVcsRoot>();
+            Assert.AreEqual(HierarchyTrackingStatus.ContainerManaged, HierarchyTrackingStatusIcon.GetTrackingStatus(containerRootGo));
+
+            var containerChild = new GameObject("Container");
+            containerChild.transform.SetParent(containerRootGo.transform, false);
+            Assert.AreEqual(HierarchyTrackingStatus.ContainerManaged, HierarchyTrackingStatusIcon.GetTrackingStatus(containerChild));
+
+            var strayMarkerUnderContainer = new GameObject("StrayMarker");
+            strayMarkerUnderContainer.transform.SetParent(containerRootGo.transform, false);
+            strayMarkerUnderContainer.AddComponent<AvatarVcsTrackedReference>();
+            Assert.AreEqual(HierarchyTrackingStatus.ContainerManaged, HierarchyTrackingStatusIcon.GetTrackingStatus(strayMarkerUnderContainer),
+                "container-managed status must win over a stray marker underneath [AvatarVCS], matching AvatarReferenceCapture's real skip-everything-under-the-root behavior");
+
+            Object.DestroyImmediate(containerRootGo);
         }
     }
 }
