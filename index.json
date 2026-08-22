@@ -17,7 +17,7 @@
           },
           "description": "Version control for VRChat avatar configurations: prefab-composition containers with destroy/regenerate idempotency, BlendShape/material/component-field tracking, commit history, branches, and diff.",
           "url": "https://github.com/whitegauss/avatar-vcs/releases/download/v0.1.0-poc/dev.avatarvcs.avatar-vcs-0.1.0-poc.zip",
-          "zipSHA256": "f6a6af8d2b28eccb620127d413f5554b36a475e28c60a272d329797b285df21c",
+          "zipSHA256": "ad531a33900e3fff43aac2d3d929e75275c0a273dfc3451ce4a56b58c50a72de",
           "license": "MIT",
           "licenseUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/LICENSE",
           "documentationUrl": "",

@@ -42,7 +42,7 @@ jobs:
         id: zip
         run: |
           zip_name="${{ env.PACKAGE_ID }}-${{ steps.package.outputs.version }}.zip"
-          (cd Packages && zip -r "../${zip_name}" "${{ env.PACKAGE_ID }}")
+          (cd "${{ env.PACKAGE_DIR }}" && zip -r "$OLDPWD/${zip_name}" .)
           sha256=$(sha256sum "${zip_name}" | cut -d ' ' -f1)
           echo "zip_name=${zip_name}" >> "$GITHUB_OUTPUT"
           echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
