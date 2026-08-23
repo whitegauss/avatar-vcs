@@ -29,6 +29,13 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Apply_NullGameObject_ThrowsArgumentNullException()
+        {
+            Assert.Throws<System.ArgumentNullException>(() =>
+                GameObjectStateApplier.Apply(null, activeSelf: true, tag: "Player", layer: 0, "context", "Undo"));
+        }
+
+        [Test]
         public void Apply_SetsActiveSelfAndLayer_NoTagRecorded_ReturnsNull()
         {
             var warning = GameObjectStateApplier.Apply(go, activeSelf: false, tag: null, layer: 3, "context", "Undo");

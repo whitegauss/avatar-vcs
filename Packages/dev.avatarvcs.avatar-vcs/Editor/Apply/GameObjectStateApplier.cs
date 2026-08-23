@@ -29,6 +29,8 @@ namespace AvatarVcs.Editor.Apply
         /// </summary>
         public static string Apply(GameObject go, bool activeSelf, string tag, int layer, string tagContext, string undoName)
         {
+            if (go == null) throw new ArgumentNullException(nameof(go));
+
             if (go.activeSelf != activeSelf)
             {
                 Undo.RecordObject(go, undoName);
