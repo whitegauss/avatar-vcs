@@ -128,43 +128,10 @@ namespace AvatarVcs.Editor.AvatarReferences
                     continue;
                 }
 
-                var go = descendant.gameObject;
-                if (go.activeSelf != objectState.activeSelf)
-                {
-                    Undo.RecordObject(go, "AvatarVCS Apply Object State");
-                    go.SetActive(objectState.activeSelf);
-                }
-
-                if (go.layer != objectState.layer)
-                {
-                    Undo.RecordObject(go, "AvatarVCS Apply Object State");
-                    go.layer = objectState.layer;
-                }
-
-                ApplyTag(go, objectState, state.path);
+                var tagWarning = GameObjectStateApplier.Apply(descendant.gameObject, objectState.activeSelf, objectState.tag, objectState.layer,
+                    $"'{state.path}/{objectState.path}'", "AvatarVCS Apply Object State");
+                if (tagWarning != null) Debug.LogWarning(tagWarning);
             }
-        }
-
-        /// <summary>
-        /// GameObject.tag doesn't throw for an undefined tag (e.g. a custom
-        /// tag recorded in a commit made in a different project) -- it logs
-        /// an engine-level Debug.LogError and silently no-ops, which a
-        /// try/catch around the setter can't intercept. Must validate
-        /// against the project's actual defined tags first instead.
-        /// </summary>
-        private static void ApplyTag(GameObject go, ObjectStateRef objectState, string avatarReferencePath)
-        {
-            if (string.IsNullOrEmpty(objectState.tag) || objectState.tag == go.tag) return;
-
-            if (Array.IndexOf(UnityEditorInternal.InternalEditorUtility.tags, objectState.tag) < 0)
-            {
-                Debug.LogWarning($"[AvatarVCS] Tag '{objectState.tag}' recorded for '{avatarReferencePath}/{objectState.path}' "
-                    + $"is not defined in this project's Tag Manager; left as '{go.tag}'.");
-                return;
-            }
-
-            Undo.RecordObject(go, "AvatarVCS Apply Object State");
-            go.tag = objectState.tag;
         }
     }
 }

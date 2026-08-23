@@ -64,9 +64,10 @@ namespace AvatarVcs.Editor.Operations
             containerGo.transform.localPosition = snapshot.localPosition;
             containerGo.transform.localRotation = snapshot.localRotation;
             containerGo.transform.localScale = snapshot.localScale;
-            ApplyTag(containerGo, snapshot);
-            containerGo.layer = snapshot.layer;
-            containerGo.SetActive(snapshot.activeSelf);
+
+            var tagWarning = GameObjectStateApplier.Apply(containerGo, snapshot.activeSelf, snapshot.tag, snapshot.layer,
+                $"container '{snapshot.containerId}'", "Restore AvatarVCS Container");
+            if (tagWarning != null) Debug.LogWarning(tagWarning);
 
             var marker = Undo.AddComponent<AvatarVcsContainer>(containerGo);
             marker.AssignGuid(snapshot.containerGuid);
@@ -106,28 +107,6 @@ namespace AvatarVcs.Editor.Operations
                 if (!result.IsSuccess)
                     Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{snapshot.containerId}': {result.Message}");
             }
-        }
-
-        /// <summary>
-        /// GameObject.tag logs an error if the tag isn't defined in this project's
-        /// Tag Manager (e.g. a custom tag recorded in a commit made in a
-        /// different project) without throwing a C# exception. Validate against
-        /// InternalEditorUtility.tags first, warn, and leave the default "Untagged"
-        /// rather than letting Unity log an error.
-        /// </summary>
-        private static void ApplyTag(GameObject containerGo, ContainerSnapshot snapshot)
-        {
-            if (string.IsNullOrEmpty(snapshot.tag) || snapshot.tag == containerGo.tag) return;
-
-            var definedTags = UnityEditorInternal.InternalEditorUtility.tags;
-            if (!Array.Exists(definedTags, t => t == snapshot.tag))
-            {
-                Debug.LogWarning($"[AvatarVCS] Tag '{snapshot.tag}' recorded for container '{snapshot.containerId}' "
-                    + $"is not defined in this project's Tag Manager; left as '{containerGo.tag}'.");
-                return;
-            }
-
-            containerGo.tag = snapshot.tag;
         }
 
         /// <summary>
