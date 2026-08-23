@@ -465,6 +465,27 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void IsUnderManagedAvatar_ReflectsWhetherGoIsTheAvatarRootOrSomewhereUnderneathIt()
+        {
+            Assert.IsFalse(ContainerManager.IsUnderManagedAvatar(null));
+            Assert.IsFalse(ContainerManager.IsUnderManagedAvatar(avatarRoot), "no AvatarVCS structure yet");
+
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            Assert.IsTrue(ContainerManager.IsUnderManagedAvatar(avatarRoot), "the avatar root itself counts");
+
+            var body = new GameObject("Body");
+            body.transform.SetParent(avatarRoot.transform, false);
+            Assert.IsTrue(ContainerManager.IsUnderManagedAvatar(body), "a sibling of [AvatarVCS], not just something inside it");
+
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            Assert.IsTrue(ContainerManager.IsUnderManagedAvatar(container.gameObject));
+
+            var unrelated = new GameObject("Unrelated");
+            Assert.IsFalse(ContainerManager.IsUnderManagedAvatar(unrelated));
+            Object.DestroyImmediate(unrelated);
+        }
+
+        [Test]
         public void CaptureContainer_WarnsAboutNonPrefabChild()
         {
             // Not a prefab instance, so it has no guid to regenerate it from

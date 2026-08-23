@@ -184,17 +184,41 @@ namespace AvatarVcs.Editor.Core
             // The check above only catches "from is inside a container" --
             // AvatarVcsRoot lives on "[AvatarVCS]" itself, which is a
             // SIBLING of everything else under the avatar (Body, Armature,
-            // ...), not an ancestor of them. Without this second pass,
+            // ...), not an ancestor of them. Without this fallback walk,
             // Ensure Root on an arbitrary nested child outside any container
             // (e.g. deep under Body/Armature on an avatar that already has
             // "[AvatarVCS]") would find nothing here, fail the FindRoot(from)
             // check right after this method returns, and spin up a second,
             // nested "[AvatarVCS]" inside that child instead of resolving to
-            // the avatar that's already tracked.
-            for (var ancestor = from.transform.parent; ancestor != null; ancestor = ancestor.parent)
+            // the avatar that's already tracked. Self-inclusive (checks
+            // `from` itself first): if `from` already IS the avatar root,
+            // this returns it directly -- callers no longer need a separate
+            // FindRoot(from) check of their own (see
+            // ResolveAvatarRootWithConfirmation).
+            return FindAncestorWithRoot(from.transform)?.gameObject;
+        }
+
+        /// <summary>
+        /// True if go itself, or any ancestor, has "[AvatarVCS]" as a direct
+        /// child -- i.e. go is the avatar root itself, or sits somewhere
+        /// underneath it (inside a container or anywhere else in the
+        /// avatar's own hierarchy).
+        /// </summary>
+        public static bool IsUnderManagedAvatar(GameObject go) =>
+            go != null && FindAncestorWithRoot(go.transform) != null;
+
+        /// <summary>
+        /// Shared walk behind FindEnclosingAvatarRoot's fallback pass and
+        /// IsUnderManagedAvatar: climbs from (inclusive) up to the scene
+        /// root, returning the first ancestor whose own direct children
+        /// include an existing "[AvatarVCS]" (per FindRoot), or null if none
+        /// do.
+        /// </summary>
+        private static Transform FindAncestorWithRoot(Transform from)
+        {
+            for (var t = from; t != null; t = t.parent)
             {
-                if (FindRoot(ancestor.gameObject) != null)
-                    return ancestor.gameObject;
+                if (FindRoot(t.gameObject) != null) return t;
             }
 
             return null;
@@ -218,10 +242,11 @@ namespace AvatarVcs.Editor.Core
         {
             if (selection == null) return null;
 
+            // FindEnclosingAvatarRoot is self-inclusive: if selection is
+            // already the avatar root itself, it comes back here too, no
+            // separate FindRoot(selection) check needed.
             var enclosing = FindEnclosingAvatarRoot(selection);
             if (enclosing != null) return enclosing;
-
-            if (FindRoot(selection) != null) return selection;
 
             return EditorUtility.DisplayDialog("Start Tracking This Object?",
                     $"'{selection.name}' has no AvatarVCS history yet. {actionDescription}\n\n"

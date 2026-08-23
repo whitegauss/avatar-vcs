@@ -69,22 +69,7 @@ namespace AvatarVcs.Editor.UI
         /// drowning out the actual signal.
         /// </summary>
         public static bool ShouldShowUntrackedMarker(GameObject go) =>
-            go != null && GetTrackingStatus(go) == HierarchyTrackingStatus.None && IsPartOfManagedAvatar(go);
-
-        /// <summary>
-        /// True if go or any ancestor has "[AvatarVCS]" as a direct child --
-        /// i.e. go is the avatar root itself or sits somewhere underneath it.
-        /// </summary>
-        private static bool IsPartOfManagedAvatar(GameObject go)
-        {
-            for (var t = go.transform; t != null; t = t.parent)
-            {
-                if (ContainerManager.FindRoot(t.gameObject) != null)
-                    return true;
-            }
-
-            return false;
-        }
+            go != null && GetTrackingStatus(go) == HierarchyTrackingStatus.None && ContainerManager.IsUnderManagedAvatar(go);
 
         private static void OnHierarchyItemGUI(int instanceId, Rect selectionRect)
         {
