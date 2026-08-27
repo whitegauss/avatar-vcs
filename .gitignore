@@ -21,6 +21,7 @@ PRD_avatar-vcs.md
 USAGE.md
 CODE_REVIEW.md
 TODO.md
+plan.md
 .agents/
 
 # Commit history the TestProject writes to ProjectSettings while running tests
