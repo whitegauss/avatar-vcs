@@ -1,5 +1,6 @@
 using System;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
+using AvatarVcs.Core.Reflection;
 using AvatarVcs.Editor.Reflection;
 using UnityEditor;
 using UnityEngine;

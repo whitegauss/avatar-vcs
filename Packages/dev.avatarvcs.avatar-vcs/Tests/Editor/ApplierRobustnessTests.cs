@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.MaterialSettings;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;

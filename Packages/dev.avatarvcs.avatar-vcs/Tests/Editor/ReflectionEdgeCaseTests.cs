@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AvatarVcs.Core.Reflection;
 using AvatarVcs.Editor.Reflection;
 using NUnit.Framework;
 using UnityEditor;

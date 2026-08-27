@@ -2,7 +2,8 @@ using System;
 using System.IO;
 using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Core;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
+using AvatarVcs.Core.Presets;
 using AvatarVcs.Editor.UI;
 using AvatarVcs.Runtime;
 using UnityEditor;
@@ -131,8 +132,8 @@ namespace AvatarVcs.Editor.Menu
             if (string.IsNullOrEmpty(path)) return;
 
             var preset = BlendShapePresetIO.Capture(renderer);
-            File.WriteAllText(path, JsonUtility.ToJson(preset, true));
-            Debug.Log($"[AvatarVCS] Exported {preset.blendShapes.Count} BlendShape(s) to '{path}'.");
+            File.WriteAllText(path, BlendShapePresetJson.Serialize(preset));
+            Debug.Log(BlendShapePresetJson.DescribeExport(preset.blendShapes.Count, path));
         }
 
         [MenuItem("GameObject/AvatarVCS/Export BlendShapes...", true)]
@@ -149,14 +150,20 @@ namespace AvatarVcs.Editor.Menu
             var path = EditorUtility.OpenFilePanel("Import BlendShapes", "", "json");
             if (string.IsNullOrEmpty(path)) return;
 
-            BlendShapePreset preset;
+            string json;
             try
             {
-                preset = JsonUtility.FromJson<BlendShapePreset>(File.ReadAllText(path));
+                json = File.ReadAllText(path);
             }
             catch (Exception e) when (e is IOException or ArgumentException)
             {
                 Debug.LogError($"[AvatarVCS] Could not read '{path}': {e.Message}");
+                return;
+            }
+
+            if (!BlendShapePresetJson.TryParse(json, out var preset, out var error))
+            {
+                Debug.LogError($"[AvatarVCS] Could not read '{path}': {error}");
                 return;
             }
 
@@ -168,8 +175,7 @@ namespace AvatarVcs.Editor.Menu
 
             var skipped = BlendShapePresetIO.Apply(preset, renderer);
             var appliedCount = preset.blendShapes.Count - skipped.Count;
-            Debug.Log($"[AvatarVCS] Imported {appliedCount} BlendShape(s) from '{path}'."
-                + (skipped.Count > 0 ? $" {skipped.Count} not found on this mesh, skipped: {string.Join(", ", skipped)}" : ""));
+            Debug.Log(BlendShapePresetJson.DescribeImport(appliedCount, path, skipped));
         }
 
         [MenuItem("GameObject/AvatarVCS/Import BlendShapes...", true)]

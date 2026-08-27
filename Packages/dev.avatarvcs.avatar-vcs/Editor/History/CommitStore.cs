@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.History;
+using AvatarVcs.Core.Model;
 using UnityEditor;
 using UnityEngine;
 
@@ -13,48 +14,14 @@ namespace AvatarVcs.Editor.History
     /// config. Storage layout follows design doc section 4:
     /// ProjectSettings/AvatarVcs/avatars/{avatarGuid}/{config,index}.json and
     /// commits/{commitId}.json. Plain File I/O, not AssetDatabase: this data
-    /// lives in ProjectSettings, not Assets.
+    /// lives in ProjectSettings, not Assets. Path/identifier shape rules
+    /// live in AvatarVcs.Core.History.CommitPaths/CommitIdentifier; deletion
+    /// planning lives in CommitDeletionPlanner. This class is the I/O half:
+    /// it loads what a plan needs, hands it to the planner, and carries out
+    /// what comes back.
     /// </summary>
     public static class CommitStore
     {
-        private static string AvatarsRoot =>
-            Path.Combine("ProjectSettings", "AvatarVcs", "avatars").Replace('\\', '/');
-
-        /// <summary>
-        /// Both avatarGuid and commitId are always Guid.NewGuid().ToString("N")
-        /// in normal operation, but they're interpolated directly into
-        /// filesystem paths below -- avatarGuid comes off a SerializeField
-        /// that Unity deserializes directly (a hand-edited or shared scene/
-        /// prefab could contain anything), and commitId is re-read from
-        /// commit JSON on disk during checkout. This is the actual defense
-        /// boundary against a value like "../../../outside" escaping
-        /// ProjectSettings/AvatarVcs/ -- not AvatarVcsRoot.AssignGuid, which
-        /// only guards this tool's own generation path.
-        /// </summary>
-        private static bool IsValidIdentifierShape(string value)
-        {
-            if (value == null || value.Length != 32) return false;
-            foreach (var c in value)
-            {
-                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
-            }
-            return true;
-        }
-
-        private static void EnsureValidIdentifier(string value, string paramName)
-        {
-            if (!IsValidIdentifierShape(value))
-                throw new ArgumentException(
-                    $"{paramName} must be a 32-character lowercase hex string (as produced by Guid.NewGuid().ToString(\"N\")); got '{value}'.",
-                    paramName);
-        }
-
-        public static string GetAvatarDir(string avatarGuid)
-        {
-            EnsureValidIdentifier(avatarGuid, nameof(avatarGuid));
-            return $"{AvatarsRoot}/{avatarGuid}";
-        }
-
         /// <summary>
         /// Writes via a temp file in the same directory, then swaps it into
         /// place -- a crash or disk-full partway through leaves either the
@@ -96,18 +63,19 @@ namespace AvatarVcs.Editor.History
             }
         }
 
+        public static string GetAvatarDir(string avatarGuid) => CommitPaths.AvatarDir(avatarGuid);
+
         public static void SaveCommit(string avatarGuid, Commit commit)
         {
             if (commit == null) throw new ArgumentNullException(nameof(commit));
-            EnsureValidIdentifier(commit.commitId, nameof(commit.commitId));
+            CommitIdentifier.EnsureValid(commit.commitId, nameof(commit.commitId));
 
             var commitsDir = $"{GetAvatarDir(avatarGuid)}/commits";
             Directory.CreateDirectory(commitsDir);
             WriteAtomically($"{commitsDir}/{commit.commitId}.json", JsonUtility.ToJson(commit, true));
 
             var index = LoadIndex(avatarGuid);
-            index.entries.RemoveAll(e => e.commitId == commit.commitId);
-            index.entries.Add(new CommitIndexEntry
+            CommitIndexOps.Upsert(index, new CommitIndexEntry
             {
                 commitId = commit.commitId,
                 parentCommitId = commit.parentCommitId,
@@ -130,7 +98,7 @@ namespace AvatarVcs.Editor.History
         /// </summary>
         public static Commit LoadCommit(string avatarGuid, string commitId)
         {
-            if (!IsValidIdentifierShape(commitId)) return null;
+            if (!CommitIdentifier.IsValidShape(commitId)) return null;
             var path = $"{GetAvatarDir(avatarGuid)}/commits/{commitId}.json";
             return File.Exists(path) ? TryLoadJson<Commit>(path) : null;
         }
@@ -162,11 +130,57 @@ namespace AvatarVcs.Editor.History
         }
 
         /// <summary>
-        /// Deletes a single commit: its generated assets (design doc section
-        /// 4/1.4.3 -- duplicate materials created while checking it out),
-        /// its JSON file, and its index entry. Refuses to delete a commit
-        /// that's currently a branch head unless force is true, since that
-        /// would leave the branch pointing at nothing.
+        /// Every commit index.entries points at, keyed by commitId and
+        /// deduped (first entry for a given id wins) -- what
+        /// CommitDeletionPlanner needs to work out which generated assets
+        /// still have a surviving referrer. Tolerates a duplicate or empty
+        /// commitId in index.entries (a corrupted/hand-edited index)
+        /// instead of throwing or double-loading.
+        /// </summary>
+        private static Dictionary<string, Commit> LoadAllCommits(string avatarGuid, CommitIndex index)
+        {
+            var result = new Dictionary<string, Commit>();
+            foreach (var e in index.entries)
+            {
+                if (!string.IsNullOrEmpty(e.commitId) && !result.ContainsKey(e.commitId))
+                    result[e.commitId] = LoadCommit(avatarGuid, e.commitId);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Carries out a CommitDeletionPlan: deletes the generated assets it
+        /// names, then each commit's JSON file, then removes all of them
+        /// from index in one save.
+        /// </summary>
+        private static void ExecutePlan(string avatarGuid, CommitDeletionPlan plan, CommitIndex index)
+        {
+            foreach (var guid in plan.AssetGuidsToDelete)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                if (!string.IsNullOrEmpty(path))
+                    AssetDatabase.DeleteAsset(path);
+            }
+
+            foreach (var commitId in plan.CommitsToDelete)
+            {
+                var commitPath = $"{GetAvatarDir(avatarGuid)}/commits/{commitId}.json";
+                if (File.Exists(commitPath)) File.Delete(commitPath);
+            }
+
+            CommitIndexOps.Remove(index, new HashSet<string>(plan.CommitsToDelete));
+            SaveIndex(avatarGuid, index);
+        }
+
+        /// <summary>
+        /// Deletes a single commit: its generated assets (design doc
+        /// section 4/1.4.3 -- duplicate materials created while checking it
+        /// out), its JSON file, and its index entry. Refuses to delete a
+        /// commit that's currently a branch head unless force is true,
+        /// since that would leave the branch pointing at nothing. Routed
+        /// through the same CommitDeletionPlanner as the batch DeleteCommits
+        /// below, so "still referenced elsewhere" is decided identically
+        /// either way.
         /// </summary>
         public static void DeleteCommit(string avatarGuid, string commitId, bool force = false)
         {
@@ -179,46 +193,22 @@ namespace AvatarVcs.Editor.History
             // LoadCommit just below): unlike commitId, it identifies which
             // avatar's history this call is even operating on, so a bad
             // value there can't be treated as a harmless no-op the same way.
-            if (!IsValidIdentifierShape(commitId)) return;
+            if (!CommitIdentifier.IsValidShape(commitId)) return;
 
-            if (!force)
-            {
-                var headBranch = LoadConfig(avatarGuid).branches.FirstOrDefault(b => b.commitId == commitId);
-                if (headBranch != null)
-                    throw new InvalidOperationException(
-                        $"Commit '{commitId}' is the head of branch '{headBranch.name}'; move the branch first or pass force: true.");
-            }
-
-            var commit = LoadCommit(avatarGuid, commitId);
-            if (commit != null && commit.generatedAssets.Count > 0)
-            {
-                // A generated asset can be shared with other commits (e.g. a
-                // branch created from this one that never regenerated its own
-                // duplicate); only delete guids no other surviving commit
-                // still references.
-                var sharedElsewhere = LoadIndex(avatarGuid).entries
-                    .Where(e => e.commitId != commitId)
-                    .Select(e => LoadCommit(avatarGuid, e.commitId))
-                    .Where(c => c != null)
-                    .SelectMany(c => c.generatedAssets)
-                    .ToHashSet();
-
-                foreach (var guid in commit.generatedAssets)
-                {
-                    if (sharedElsewhere.Contains(guid)) continue;
-
-                    var path = AssetDatabase.GUIDToAssetPath(guid);
-                    if (!string.IsNullOrEmpty(path))
-                        AssetDatabase.DeleteAsset(path);
-                }
-            }
-
-            var commitPath = $"{GetAvatarDir(avatarGuid)}/commits/{commitId}.json";
-            if (File.Exists(commitPath)) File.Delete(commitPath);
-
+            var config = LoadConfig(avatarGuid);
             var index = LoadIndex(avatarGuid);
-            index.entries.RemoveAll(e => e.commitId == commitId);
-            SaveIndex(avatarGuid, index);
+            var loadedCommits = LoadAllCommits(avatarGuid, index);
+
+            var plan = CommitDeletionPlanner.Plan(config, loadedCommits, new[] { commitId }, force);
+
+            if (plan.Blocked.Count > 0)
+            {
+                var blocked = plan.Blocked[0];
+                throw new InvalidOperationException(
+                    $"Commit '{blocked.CommitId}' is the head of branch '{blocked.BranchName}'; move the branch first or pass force: true.");
+            }
+
+            ExecutePlan(avatarGuid, plan, index);
         }
 
         /// <summary>
@@ -237,62 +227,18 @@ namespace AvatarVcs.Editor.History
         /// </summary>
         public static List<string> DeleteCommits(string avatarGuid, IEnumerable<string> commitIds, bool force = false)
         {
-            var requestedIds = commitIds.Where(IsValidIdentifierShape).Distinct().ToList();
-            var blocked = new List<string>();
-            if (requestedIds.Count == 0) return blocked;
+            var requestedIds = commitIds.Where(CommitIdentifier.IsValidShape).Distinct().ToList();
+            if (requestedIds.Count == 0) return new List<string>();
 
             var config = LoadConfig(avatarGuid);
             var index = LoadIndex(avatarGuid);
+            var loadedCommits = LoadAllCommits(avatarGuid, index);
 
-            var toDelete = new List<string>();
-            foreach (var commitId in requestedIds)
-            {
-                if (!force && config.branches.Any(b => b.commitId == commitId))
-                {
-                    blocked.Add(commitId);
-                    continue;
-                }
-                toDelete.Add(commitId);
-            }
-            var allCommits = new Dictionary<string, Commit>();
-            foreach (var e in index.entries)
-            {
-                if (!string.IsNullOrEmpty(e.commitId) && !allCommits.ContainsKey(e.commitId))
-                    allCommits[e.commitId] = LoadCommit(avatarGuid, e.commitId);
-            }
-            var toDeleteSet = new HashSet<string>(toDelete);
+            var plan = CommitDeletionPlanner.Plan(config, loadedCommits, requestedIds, force);
 
-            // Every generated-asset guid still referenced by a commit that
-            // will SURVIVE this batch (not just "any other commit right
-            // now", since two commits sharing a guid could both be in the
-            // same batch -- neither survives, so the asset has no more
-            // referrers and should go too).
-            var stillReferenced = allCommits
-                .Where(kv => kv.Value != null && !toDeleteSet.Contains(kv.Key))
-                .SelectMany(kv => kv.Value.generatedAssets)
-                .ToHashSet();
+            ExecutePlan(avatarGuid, plan, index);
 
-            foreach (var commitId in toDelete)
-            {
-                if (allCommits.TryGetValue(commitId, out var commit) && commit != null)
-                {
-                    foreach (var guid in commit.generatedAssets)
-                    {
-                        if (stillReferenced.Contains(guid)) continue;
-                        var path = AssetDatabase.GUIDToAssetPath(guid);
-                        if (!string.IsNullOrEmpty(path))
-                            AssetDatabase.DeleteAsset(path);
-                    }
-                }
-
-                var commitPath = $"{GetAvatarDir(avatarGuid)}/commits/{commitId}.json";
-                if (File.Exists(commitPath)) File.Delete(commitPath);
-            }
-
-            index.entries.RemoveAll(e => toDeleteSet.Contains(e.commitId));
-            SaveIndex(avatarGuid, index);
-
-            return blocked;
+            return plan.Blocked.Select(b => b.CommitId).ToList();
         }
 
         /// <summary>

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace AvatarVcs.Editor.MaterialSettings
+namespace AvatarVcs.Core.MaterialSettings
 {
     /// <summary>
     /// Decides which shaders AvatarVCS is willing to duplicate-and-modify

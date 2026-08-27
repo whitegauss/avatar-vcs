@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 
-namespace AvatarVcs.Editor.History
+namespace AvatarVcs.Core.Diff
 {
     /// <summary>
     /// Structured commit-to-commit diff. Design doc section 3.3: containers

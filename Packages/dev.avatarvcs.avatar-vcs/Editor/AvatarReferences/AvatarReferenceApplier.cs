@@ -1,7 +1,7 @@
 using System;
 using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.History;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
 using UnityEditor;
 using UnityEngine;

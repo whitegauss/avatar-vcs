@@ -1,8 +1,8 @@
 using System;
-using System.Linq;
+using AvatarVcs.Core.History;
 using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Core;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using UnityEngine;
 
 namespace AvatarVcs.Editor.History
@@ -10,6 +10,8 @@ namespace AvatarVcs.Editor.History
     /// <summary>
     /// Branch pointer bookkeeping on top of CheckoutOperation/CommitStore.
     /// Design doc section 2.2: branches are just named pointers to commit ids.
+    /// Lookup/head-update/name-validation logic itself lives in
+    /// AvatarVcs.Core.History.BranchConfigOps; this class is the I/O half.
     /// </summary>
     public static class BranchManager
     {
@@ -21,13 +23,13 @@ namespace AvatarVcs.Editor.History
             var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
             var config = CommitStore.LoadConfig(avatarGuid);
 
-            var currentHead = FindEntry(config, config.currentBranch)?.commitId;
+            var currentHead = BranchConfigOps.HeadOf(config, config.currentBranch);
             var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
             var commit = CommitBuilder.CreateCommit(
                 avatarRoot, message, config.currentBranch, currentHead, avatarReferences, materialSettings);
             CommitStore.SaveCommit(avatarGuid, commit);
 
-            SetBranchHead(config, config.currentBranch, commit.commitId);
+            BranchConfigOps.SetHead(config, config.currentBranch, commit.commitId);
             CommitStore.SaveConfig(avatarGuid, config);
 
             return commit;
@@ -52,8 +54,8 @@ namespace AvatarVcs.Editor.History
             var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
             var config = CommitStore.LoadConfig(avatarGuid);
 
-            var existing = FindEntry(config, branchName);
-            var startCommitId = fromCommitId ?? FindEntry(config, config.currentBranch)?.commitId;
+            var existing = BranchConfigOps.Find(config, branchName);
+            var startCommitId = fromCommitId ?? BranchConfigOps.HeadOf(config, config.currentBranch);
 
             if (existing != null)
             {
@@ -77,7 +79,7 @@ namespace AvatarVcs.Editor.History
             var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
             var config = CommitStore.LoadConfig(avatarGuid);
 
-            var targetEntry = FindEntry(config, targetBranch);
+            var targetEntry = BranchConfigOps.Find(config, targetBranch);
             if (targetEntry == null)
                 throw new InvalidOperationException($"Branch '{targetBranch}' does not exist.");
             if (string.IsNullOrEmpty(targetEntry.commitId))
@@ -114,36 +116,12 @@ namespace AvatarVcs.Editor.History
             var result = CheckoutOperation.CheckoutWithoutAutoCommit(targetCommit, avatarRoot);
             if (!result.IsSuccess) return result;
 
-            SetBranchHead(config, config.currentBranch, commitId);
+            BranchConfigOps.SetHead(config, config.currentBranch, commitId);
             CommitStore.SaveConfig(avatarGuid, config);
 
             return result;
         }
 
-        // Branch names aren't currently used as filesystem paths anywhere
-        // (storage is keyed by avatarGuid/commitId), but restricting them
-        // now avoids painting into a corner if that ever changes, and rules
-        // out control characters and stray whitespace regardless.
-        private static readonly char[] ForbiddenChars = { '/', '\\', ':', '*', '?', '"', '<', '>', '|' };
-
-        public static bool IsValidBranchName(string name)
-        {
-            if (string.IsNullOrEmpty(name)) return false;
-            if (name != name.Trim()) return false;
-            if (name.StartsWith(".") || name.StartsWith("-")) return false;
-            return name.All(c => !ForbiddenChars.Contains(c) && !char.IsControl(c));
-        }
-
-        private static BranchEntry FindEntry(BranchConfig config, string branchName) =>
-            config.branches.FirstOrDefault(b => b.name == branchName);
-
-        private static void SetBranchHead(BranchConfig config, string branchName, string commitId)
-        {
-            var entry = FindEntry(config, branchName);
-            if (entry != null)
-                entry.commitId = commitId;
-            else
-                config.branches.Add(new BranchEntry { name = branchName, commitId = commitId });
-        }
+        public static bool IsValidBranchName(string name) => BranchConfigOps.IsValidBranchName(name);
     }
 }

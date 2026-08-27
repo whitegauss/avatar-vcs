@@ -1,19 +1,18 @@
 {
-    "name": "AvatarVcs.Editor",
-    "rootNamespace": "AvatarVcs.Editor",
+    "name": "AvatarVcs.Core",
+    "rootNamespace": "AvatarVcs.Core",
     "references": [
-        "AvatarVcs.Runtime",
-        "AvatarVcs.Core"
+        "AvatarVcs.Runtime"
     ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": [],
+    "defineConstraints": [
+        "UNITY_EDITOR"
+    ],
     "versionDefines": [],
     "noEngineReferences": false
 }

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace AvatarVcs.Editor.Model
+namespace AvatarVcs.Core.Model
 {
     /// <summary>
     /// In-memory snapshot of a single container's identity, prefab references,

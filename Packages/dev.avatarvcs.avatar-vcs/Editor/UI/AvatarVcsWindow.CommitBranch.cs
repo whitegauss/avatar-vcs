@@ -1,8 +1,9 @@
 using System;
 using System.Linq;
+using AvatarVcs.Core.History;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using AvatarVcs.Runtime;
 using UnityEditor;
 using UnityEngine;
@@ -35,7 +36,7 @@ namespace AvatarVcs.Editor.UI
             {
                 EditorGUILayout.BeginHorizontal();
                 newBranchName = EditorGUILayout.TextField(newBranchName);
-                var isValid = BranchManager.IsValidBranchName(newBranchName) && !config.branches.Any(b => b.name == newBranchName);
+                var isValid = BranchConfigOps.CanCreate(config, newBranchName);
                 GUI.enabled = isValid;
                 if (GUILayout.Button("Create", GUILayout.Width(80)))
                 {

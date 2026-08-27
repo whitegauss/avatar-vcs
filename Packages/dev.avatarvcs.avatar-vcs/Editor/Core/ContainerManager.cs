@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using AvatarVcs.Core.Naming;
 using AvatarVcs.Runtime;
 using UnityEditor;
 using UnityEngine;
@@ -386,7 +387,8 @@ namespace AvatarVcs.Editor.Core
                 // needlessly disambiguate against its own name.
                 Undo.SetTransformParent(child, wrapper.transform, "Adopt Prefab As Container");
 
-                wrapper.name = MakeUniqueSiblingName(root.transform, child.name);
+                var existingNames = root.transform.Cast<Transform>().Select(t => t.name).ToHashSet();
+                wrapper.name = SiblingNamer.MakeUnique(existingNames, child.name);
                 Undo.SetTransformParent(wrapper.transform, root.transform, "Adopt Prefab As Container");
                 wrapper.transform.localPosition = Vector3.zero;
                 wrapper.transform.localRotation = Quaternion.identity;
@@ -395,21 +397,6 @@ namespace AvatarVcs.Editor.Core
                 var marker = Undo.AddComponent<AvatarVcsContainer>(wrapper);
                 marker.AssignGuid(Guid.NewGuid().ToString("N"));
             }
-        }
-
-        private static string MakeUniqueSiblingName(Transform root, string baseName)
-        {
-            if (root.Find(baseName) == null) return baseName;
-
-            var i = 1;
-            string candidate;
-            do
-            {
-                candidate = $"{baseName}_{i}";
-                i++;
-            } while (root.Find(candidate) != null);
-
-            return candidate;
         }
 
         /// <summary>

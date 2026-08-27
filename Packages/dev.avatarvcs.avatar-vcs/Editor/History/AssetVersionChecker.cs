@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.History;
+using AvatarVcs.Core.Model;
 using UnityEditor;
 
 namespace AvatarVcs.Editor.History
@@ -10,30 +12,26 @@ namespace AvatarVcs.Editor.History
     /// Records and checks asset content hashes (design doc section 6.3).
     /// Never blocks anything -- the tool has no asset backup, so a mismatch
     /// only explains why a restored result may look different, it can't be
-    /// fixed by this tool.
+    /// fixed by this tool. Entry assembly and warning-building themselves
+    /// live in AvatarVcs.Core.History.AssetVersionComparer; this class is
+    /// the I/O half (AssetDatabase lookups and the GUID-remap-then-lookup
+    /// probe).
     /// </summary>
     public static class AssetVersionChecker
     {
         public static List<AssetVersionEntry> RecordVersions(IEnumerable<string> guids)
         {
             var recordedAt = DateTime.UtcNow.ToString("o");
-            var entries = new List<AssetVersionEntry>();
 
-            foreach (var guid in guids.Where(g => !string.IsNullOrEmpty(g)).Distinct())
-            {
-                var path = AssetDatabase.GUIDToAssetPath(guid);
-                if (string.IsNullOrEmpty(path)) continue;
+            var assets = guids.Where(g => !string.IsNullOrEmpty(g)).Distinct()
+                .Select(guid => (guid, path: AssetDatabase.GUIDToAssetPath(guid)))
+                .Where(x => !string.IsNullOrEmpty(x.path))
+                .Select(x => (
+                    guid: x.guid,
+                    assetName: Path.GetFileName(x.path),
+                    contentHash: AssetDatabase.GetAssetDependencyHash(x.path).ToString()));
 
-                entries.Add(new AssetVersionEntry
-                {
-                    guid = guid,
-                    assetName = System.IO.Path.GetFileName(path),
-                    contentHash = AssetDatabase.GetAssetDependencyHash(path).ToString(),
-                    recordedAt = recordedAt,
-                });
-            }
-
-            return entries;
+            return AssetVersionComparer.BuildEntries(assets, recordedAt);
         }
 
         /// <summary>
@@ -42,24 +40,13 @@ namespace AvatarVcs.Editor.History
         /// </summary>
         public static List<string> CheckForChanges(List<AssetVersionEntry> recorded)
         {
-            var warnings = new List<string>();
-            if (recorded == null) return warnings;
-
-            foreach (var entry in recorded)
+            return AssetVersionComparer.BuildWarnings(recorded, guid =>
             {
-                var path = AssetDatabase.GUIDToAssetPath(GuidRemapper.Resolve(entry.guid));
-                if (string.IsNullOrEmpty(path))
-                {
-                    warnings.Add($"'{entry.assetName}' ({entry.guid}) is no longer in the project.");
-                    continue;
-                }
-
-                var currentHash = AssetDatabase.GetAssetDependencyHash(path).ToString();
-                if (currentHash != entry.contentHash)
-                    warnings.Add($"'{entry.assetName}' has changed since this commit was recorded; the result may look different.");
-            }
-
-            return warnings;
+                var path = AssetDatabase.GUIDToAssetPath(GuidRemapper.Resolve(guid));
+                return string.IsNullOrEmpty(path)
+                    ? new AssetVersionProbe { Exists = false }
+                    : new AssetVersionProbe { Exists = true, ContentHash = AssetDatabase.GetAssetDependencyHash(path).ToString() };
+            });
         }
     }
 }

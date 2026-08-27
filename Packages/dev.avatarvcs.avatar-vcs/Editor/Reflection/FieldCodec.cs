@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using AvatarVcs.Core.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -14,16 +15,6 @@ namespace AvatarVcs.Editor.Reflection
     public static class FieldCodec
     {
         private static readonly CultureInfo Culture = CultureInfo.InvariantCulture;
-
-        // Sane upper bound for an array-size write. Without this, a crafted
-        // or corrupted FieldValue targeting "someArray.Array.size" (a real,
-        // FindProperty-resolvable SerializedProperty path independent of
-        // whether it was ever legitimately captured that way) could set
-        // prop.intValue to e.g. 2,000,000,000 and have Unity attempt a huge
-        // array resize, hanging or OOM-ing the Editor. No legitimate capture
-        // from this tool's own ComponentCapturer produces anything remotely
-        // close to this.
-        private const int MaxArraySize = 100_000;
 
         public static bool TryEncode(SerializedProperty prop, out string value, out string type)
         {
@@ -62,7 +53,7 @@ namespace AvatarVcs.Editor.Reflection
                     return true;
                 case SerializedPropertyType.Color:
                     var c = prop.colorValue;
-                    value = Join(c.r, c.g, c.b, c.a);
+                    value = ScalarCodec.Join(c.r, c.g, c.b, c.a);
                     type = "color";
                     return true;
                 case SerializedPropertyType.LayerMask:
@@ -79,17 +70,17 @@ namespace AvatarVcs.Editor.Reflection
                     return true;
                 case SerializedPropertyType.Vector2:
                     var v2 = prop.vector2Value;
-                    value = Join(v2.x, v2.y);
+                    value = ScalarCodec.Join(v2.x, v2.y);
                     type = "vector2";
                     return true;
                 case SerializedPropertyType.Vector3:
                     var v3 = prop.vector3Value;
-                    value = Join(v3.x, v3.y, v3.z);
+                    value = ScalarCodec.Join(v3.x, v3.y, v3.z);
                     type = "vector3";
                     return true;
                 case SerializedPropertyType.Vector4:
                     var v4 = prop.vector4Value;
-                    value = Join(v4.x, v4.y, v4.z, v4.w);
+                    value = ScalarCodec.Join(v4.x, v4.y, v4.z, v4.w);
                     type = "vector4";
                     return true;
                 case SerializedPropertyType.Vector2Int:
@@ -104,7 +95,7 @@ namespace AvatarVcs.Editor.Reflection
                     return true;
                 case SerializedPropertyType.Rect:
                     var r = prop.rectValue;
-                    value = Join(r.x, r.y, r.width, r.height);
+                    value = ScalarCodec.Join(r.x, r.y, r.width, r.height);
                     type = "rect";
                     return true;
                 case SerializedPropertyType.RectInt:
@@ -114,7 +105,7 @@ namespace AvatarVcs.Editor.Reflection
                     return true;
                 case SerializedPropertyType.Bounds:
                     var b = prop.boundsValue;
-                    value = Join(b.center.x, b.center.y, b.center.z, b.size.x, b.size.y, b.size.z);
+                    value = ScalarCodec.Join(b.center.x, b.center.y, b.center.z, b.size.x, b.size.y, b.size.z);
                     type = "bounds";
                     return true;
                 case SerializedPropertyType.BoundsInt:
@@ -124,15 +115,15 @@ namespace AvatarVcs.Editor.Reflection
                     return true;
                 case SerializedPropertyType.Quaternion:
                     var q = prop.quaternionValue;
-                    value = Join(q.x, q.y, q.z, q.w);
+                    value = ScalarCodec.Join(q.x, q.y, q.z, q.w);
                     type = "quaternion";
                     return true;
                 case SerializedPropertyType.AnimationCurve:
-                    value = EncodeAnimationCurve(prop.animationCurveValue);
+                    value = AnimationCurveCodec.Encode(prop.animationCurveValue);
                     type = "animationCurve";
                     return true;
                 case SerializedPropertyType.Gradient:
-                    value = EncodeGradient(prop.gradientValue);
+                    value = GradientCodec.Encode(prop.gradientValue);
                     type = "gradient";
                     return true;
                 default:
@@ -173,7 +164,7 @@ namespace AvatarVcs.Editor.Reflection
                 case "character":
                 {
                     var intValue = int.Parse(value, Culture);
-                    if (prop.propertyType == SerializedPropertyType.ArraySize && (intValue < 0 || intValue > MaxArraySize))
+                    if (prop.propertyType == SerializedPropertyType.ArraySize && !ScalarCodec.IsAcceptableArraySize(intValue))
                         return false;
                     prop.intValue = intValue;
                     return true;
@@ -195,201 +186,79 @@ namespace AvatarVcs.Editor.Reflection
                     return true;
                 case "color":
                 {
-                    var p = ParseFloats(value);
+                    var p = ScalarCodec.ParseFloats(value);
                     prop.colorValue = new Color(p[0], p[1], p[2], p[3]);
                     return true;
                 }
                 case "vector2":
                 {
-                    var p = ParseFloats(value);
+                    var p = ScalarCodec.ParseFloats(value);
                     prop.vector2Value = new Vector2(p[0], p[1]);
                     return true;
                 }
                 case "vector3":
                 {
-                    var p = ParseFloats(value);
+                    var p = ScalarCodec.ParseFloats(value);
                     prop.vector3Value = new Vector3(p[0], p[1], p[2]);
                     return true;
                 }
                 case "vector4":
                 {
-                    var p = ParseFloats(value);
+                    var p = ScalarCodec.ParseFloats(value);
                     prop.vector4Value = new Vector4(p[0], p[1], p[2], p[3]);
                     return true;
                 }
                 case "vector2Int":
                 {
-                    var p = ParseInts(value);
+                    var p = ScalarCodec.ParseInts(value);
                     prop.vector2IntValue = new Vector2Int(p[0], p[1]);
                     return true;
                 }
                 case "vector3Int":
                 {
-                    var p = ParseInts(value);
+                    var p = ScalarCodec.ParseInts(value);
                     prop.vector3IntValue = new Vector3Int(p[0], p[1], p[2]);
                     return true;
                 }
                 case "rect":
                 {
-                    var p = ParseFloats(value);
+                    var p = ScalarCodec.ParseFloats(value);
                     prop.rectValue = new Rect(p[0], p[1], p[2], p[3]);
                     return true;
                 }
                 case "rectInt":
                 {
-                    var p = ParseInts(value);
+                    var p = ScalarCodec.ParseInts(value);
                     prop.rectIntValue = new RectInt(p[0], p[1], p[2], p[3]);
                     return true;
                 }
                 case "bounds":
                 {
-                    var p = ParseFloats(value);
+                    var p = ScalarCodec.ParseFloats(value);
                     prop.boundsValue = new Bounds(new Vector3(p[0], p[1], p[2]), new Vector3(p[3], p[4], p[5]));
                     return true;
                 }
                 case "boundsInt":
                 {
-                    var p = ParseInts(value);
+                    var p = ScalarCodec.ParseInts(value);
                     prop.boundsIntValue = new BoundsInt(new Vector3Int(p[0], p[1], p[2]), new Vector3Int(p[3], p[4], p[5]));
                     return true;
                 }
                 case "quaternion":
                 {
-                    var p = ParseFloats(value);
+                    var p = ScalarCodec.ParseFloats(value);
                     prop.quaternionValue = new Quaternion(p[0], p[1], p[2], p[3]);
                     return true;
                 }
                 case "animationCurve":
-                    prop.animationCurveValue = DecodeAnimationCurve(value);
+                    prop.animationCurveValue = AnimationCurveCodec.Decode(value);
                     return true;
                 case "gradient":
-                    prop.gradientValue = DecodeGradient(value);
+                    prop.gradientValue = GradientCodec.Decode(value);
                     return true;
                 default:
                     return false;
             }
         }
-
-        /// <summary>
-        /// "{preWrapMode},{postWrapMode}|{key1};{key2};..." where each key is
-        /// "time,value,inTangent,outTangent,inWeight,outWeight,weightedMode".
-        /// </summary>
-        private static string EncodeAnimationCurve(AnimationCurve curve)
-        {
-            var keys = curve.keys;
-            var keyParts = new string[keys.Length];
-            for (var i = 0; i < keys.Length; i++)
-            {
-                var k = keys[i];
-                keyParts[i] = string.Join(",", new[]
-                {
-                    k.time.ToString("R", Culture),
-                    k.value.ToString("R", Culture),
-                    k.inTangent.ToString("R", Culture),
-                    k.outTangent.ToString("R", Culture),
-                    k.inWeight.ToString("R", Culture),
-                    k.outWeight.ToString("R", Culture),
-                    ((int)k.weightedMode).ToString(Culture),
-                });
-            }
-
-            return $"{(int)curve.preWrapMode},{(int)curve.postWrapMode}|{string.Join(";", keyParts)}";
-        }
-
-        private static AnimationCurve DecodeAnimationCurve(string value)
-        {
-            var parts = value.Split('|');
-            var wrapModes = parts[0].Split(',');
-            var preWrapMode = (WrapMode)int.Parse(wrapModes[0], Culture);
-            var postWrapMode = (WrapMode)int.Parse(wrapModes[1], Culture);
-
-            var keyParts = parts.Length > 1 && parts[1].Length > 0
-                ? parts[1].Split(';')
-                : Array.Empty<string>();
-            var keys = new Keyframe[keyParts.Length];
-            for (var i = 0; i < keyParts.Length; i++)
-            {
-                var f = keyParts[i].Split(',');
-                keys[i] = new Keyframe(
-                    float.Parse(f[0], Culture),
-                    float.Parse(f[1], Culture),
-                    float.Parse(f[2], Culture),
-                    float.Parse(f[3], Culture),
-                    float.Parse(f[4], Culture),
-                    float.Parse(f[5], Culture))
-                {
-                    weightedMode = (WeightedMode)int.Parse(f[6], Culture),
-                };
-            }
-
-            return new AnimationCurve(keys) { preWrapMode = preWrapMode, postWrapMode = postWrapMode };
-        }
-
-        /// <summary>
-        /// "{mode}|{colorKey1};{colorKey2};...|{alphaKey1};{alphaKey2};..."
-        /// where a color key is "r,g,b,time" and an alpha key is "alpha,time".
-        /// Alpha is carried separately (GradientAlphaKey), not through a
-        /// color key's own alpha component, which Unity ignores.
-        /// </summary>
-        private static string EncodeGradient(Gradient gradient)
-        {
-            var colorParts = new string[gradient.colorKeys.Length];
-            for (var i = 0; i < gradient.colorKeys.Length; i++)
-            {
-                var k = gradient.colorKeys[i];
-                colorParts[i] = string.Join(",", new[]
-                {
-                    k.color.r.ToString("R", Culture), k.color.g.ToString("R", Culture),
-                    k.color.b.ToString("R", Culture), k.time.ToString("R", Culture),
-                });
-            }
-
-            var alphaParts = new string[gradient.alphaKeys.Length];
-            for (var i = 0; i < gradient.alphaKeys.Length; i++)
-            {
-                var k = gradient.alphaKeys[i];
-                alphaParts[i] = $"{k.alpha.ToString("R", Culture)},{k.time.ToString("R", Culture)}";
-            }
-
-            return $"{(int)gradient.mode}|{string.Join(";", colorParts)}|{string.Join(";", alphaParts)}";
-        }
-
-        private static Gradient DecodeGradient(string value)
-        {
-            var parts = value.Split('|');
-            var mode = (GradientMode)int.Parse(parts[0], Culture);
-
-            var colorKeyParts = parts[1].Length > 0 ? parts[1].Split(';') : Array.Empty<string>();
-            var colorKeys = new GradientColorKey[colorKeyParts.Length];
-            for (var i = 0; i < colorKeyParts.Length; i++)
-            {
-                var f = colorKeyParts[i].Split(',');
-                colorKeys[i] = new GradientColorKey(
-                    new Color(float.Parse(f[0], Culture), float.Parse(f[1], Culture), float.Parse(f[2], Culture)),
-                    float.Parse(f[3], Culture));
-            }
-
-            var alphaKeyParts = parts[2].Length > 0 ? parts[2].Split(';') : Array.Empty<string>();
-            var alphaKeys = new GradientAlphaKey[alphaKeyParts.Length];
-            for (var i = 0; i < alphaKeyParts.Length; i++)
-            {
-                var f = alphaKeyParts[i].Split(',');
-                alphaKeys[i] = new GradientAlphaKey(float.Parse(f[0], Culture), float.Parse(f[1], Culture));
-            }
-
-            var gradient = new Gradient();
-            gradient.SetKeys(colorKeys, alphaKeys);
-            gradient.mode = mode;
-            return gradient;
-        }
-
-        private static string Join(params float[] values) =>
-            string.Join(",", Array.ConvertAll(values, v => v.ToString("R", Culture)));
-
-        private static float[] ParseFloats(string value) =>
-            Array.ConvertAll(value.Split(','), s => float.Parse(s, Culture));
-
-        private static int[] ParseInts(string value) =>
-            Array.ConvertAll(value.Split(','), s => int.Parse(s, Culture));
     }
 }

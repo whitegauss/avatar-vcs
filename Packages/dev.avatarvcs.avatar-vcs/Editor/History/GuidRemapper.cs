@@ -1,7 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.History;
+using AvatarVcs.Core.Model;
 using UnityEngine;
 
 namespace AvatarVcs.Editor.History
@@ -11,18 +12,20 @@ namespace AvatarVcs.Editor.History
     /// asset gets a new GUID, which would otherwise make every commit that
     /// referenced it unresolvable forever. Once a user maps old -> new, every
     /// future resolution applies it automatically without asking again.
+    /// Chain-following/cycle-detection itself lives in
+    /// AvatarVcs.Core.History.GuidRemapResolver; this class is the I/O half
+    /// (file load/save, caching, and the cycle-warning log).
     /// </summary>
     public static class GuidRemapper
     {
-        private static string ConfigPath =>
-            Path.Combine("ProjectSettings", "AvatarVcs", "guid-remapping.json").Replace('\\', '/');
+        private static string ConfigPath => CommitPaths.GuidRemapFile;
 
         // Separate from Load()'s cache: Load() must keep returning an
         // independent snapshot each call (callers mutate the result in
         // place), while this cache exists purely to spare the many Resolve()
-        // calls in a single checkout's restore loop from re-reading the file.
-        // Invalidated on every Save().
-        private static GuidRemapConfig resolveCache;
+        // calls in a single checkout's restore loop from re-reading the file
+        // and rebuilding the lookup index. Invalidated on every Save().
+        private static Dictionary<string, string> resolveIndexCache;
 
         /// <summary>
         /// Returns the remapped GUID if one is recorded, else guid unchanged.
@@ -32,21 +35,11 @@ namespace AvatarVcs.Editor.History
         {
             if (string.IsNullOrEmpty(guid)) return guid;
 
-            resolveCache ??= Load();
-            var mappings = resolveCache.mappings;
-            var current = guid;
-            // Cap hops at the mapping count: a correct chain can be at most
-            // this long, so hitting the cap means a cycle.
-            var hops = 0;
-            for (; hops < mappings.Count; hops++)
-            {
-                var entry = mappings.FirstOrDefault(m => m.oldGuid == current);
-                if (entry == null) break;
-                current = entry.newGuid;
-            }
-            if (hops == mappings.Count && mappings.Any(m => m.oldGuid == current))
-                Debug.LogWarning($"[AvatarVCS] GUID remapping for '{guid}' hit a cycle; using '{current}' unresolved.");
-            return current;
+            resolveIndexCache ??= GuidRemapResolver.BuildIndex(Load());
+            var resolution = GuidRemapResolver.Resolve(resolveIndexCache, guid);
+            if (resolution.CycleDetected)
+                Debug.LogWarning($"[AvatarVCS] GUID remapping for '{guid}' hit a cycle; using '{resolution.Guid}' unresolved.");
+            return resolution.Guid;
         }
 
         public static void AddMapping(string oldGuid, string newGuid)
@@ -55,11 +48,7 @@ namespace AvatarVcs.Editor.History
             if (string.IsNullOrEmpty(newGuid)) throw new ArgumentException("newGuid must not be empty.", nameof(newGuid));
 
             var config = Load();
-            var existing = config.mappings.FirstOrDefault(m => m.oldGuid == oldGuid);
-            if (existing != null)
-                existing.newGuid = newGuid;
-            else
-                config.mappings.Add(new GuidRemapEntry { oldGuid = oldGuid, newGuid = newGuid });
+            GuidRemapResolver.AddOrUpdate(config, oldGuid, newGuid);
 
             Save(config);
         }
@@ -102,7 +91,7 @@ namespace AvatarVcs.Editor.History
                 File.Replace(tempPath, ConfigPath, null);
             else
                 File.Move(tempPath, ConfigPath);
-            resolveCache = null;
+            resolveIndexCache = null;
         }
     }
 }

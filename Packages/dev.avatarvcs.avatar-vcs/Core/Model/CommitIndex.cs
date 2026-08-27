@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace AvatarVcs.Editor.Model
+namespace AvatarVcs.Core.Model
 {
     /// <summary>
     /// Lightweight metadata for one commit, for listing history without
