@@ -27,6 +27,15 @@ namespace AvatarVcs.Core.History
     public static class GuidRemapResolver
     {
         /// <summary>
+        /// Skips a mapping that's null, or whose oldGuid/newGuid is
+        /// null/empty, before it ever reaches the dictionary -- matches
+        /// SnapshotDiffer.SafeToDictionary's "if (key == null) continue;"
+        /// and the reasoning behind it: GuidRemapConfig is deserialized from
+        /// the hand-editable ProjectSettings/AvatarVcs/guid-remapping.json,
+        /// where a bare "{}" entry yields oldGuid == null, and
+        /// Dictionary&lt;string,string&gt;'s indexer/ContainsKey throw
+        /// ArgumentNullException on a null key. A corrupt/hand-edited entry
+        /// should degrade to "ignored", not crash every resolution.
         /// First-mapping-wins if oldGuid somehow repeats (shouldn't happen
         /// via AddOrUpdate, which overwrites in place, but a hand-edited
         /// config could contain it) -- matches the linear-scan
@@ -37,6 +46,8 @@ namespace AvatarVcs.Core.History
             var index = new Dictionary<string, string>();
             foreach (var mapping in config.mappings)
             {
+                if (mapping == null) continue;
+                if (string.IsNullOrEmpty(mapping.oldGuid) || string.IsNullOrEmpty(mapping.newGuid)) continue;
                 if (!index.ContainsKey(mapping.oldGuid))
                     index[mapping.oldGuid] = mapping.newGuid;
             }
@@ -48,7 +59,10 @@ namespace AvatarVcs.Core.History
         /// guard. Hop budget is index.Count (the number of distinct source
         /// guids): a correct, non-cycling chain can visit at most that many
         /// distinct nodes, so exhausting the budget while the current node
-        /// still has an outgoing mapping means a cycle.
+        /// still has an outgoing mapping means a cycle. A null/empty next
+        /// hop stops the walk immediately rather than continuing with it as
+        /// current -- BuildIndex never produces one, but this keeps Resolve
+        /// itself safe against a hand-built index that does.
         /// </summary>
         public static GuidResolution Resolve(IReadOnlyDictionary<string, string> index, string guid)
         {
@@ -60,6 +74,7 @@ namespace AvatarVcs.Core.History
             for (; hops < cap; hops++)
             {
                 if (!index.TryGetValue(current, out var next)) break;
+                if (string.IsNullOrEmpty(next)) break;
                 current = next;
             }
 

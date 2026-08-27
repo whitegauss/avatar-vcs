@@ -70,9 +70,9 @@ namespace AvatarVcs.Editor.History
             if (commit == null) throw new ArgumentNullException(nameof(commit));
             CommitIdentifier.EnsureValid(commit.commitId, nameof(commit.commitId));
 
-            var commitsDir = $"{GetAvatarDir(avatarGuid)}/commits";
-            Directory.CreateDirectory(commitsDir);
-            WriteAtomically($"{commitsDir}/{commit.commitId}.json", JsonUtility.ToJson(commit, true));
+            var commitPath = CommitPaths.CommitFile(avatarGuid, commit.commitId);
+            Directory.CreateDirectory(Path.GetDirectoryName(commitPath)!);
+            WriteAtomically(commitPath, JsonUtility.ToJson(commit, true));
 
             var index = LoadIndex(avatarGuid);
             CommitIndexOps.Upsert(index, new CommitIndexEntry
@@ -99,34 +99,34 @@ namespace AvatarVcs.Editor.History
         public static Commit LoadCommit(string avatarGuid, string commitId)
         {
             if (!CommitIdentifier.IsValidShape(commitId)) return null;
-            var path = $"{GetAvatarDir(avatarGuid)}/commits/{commitId}.json";
+            var path = CommitPaths.CommitFile(avatarGuid, commitId);
             return File.Exists(path) ? TryLoadJson<Commit>(path) : null;
         }
 
         public static CommitIndex LoadIndex(string avatarGuid)
         {
-            var path = $"{GetAvatarDir(avatarGuid)}/index.json";
+            var path = CommitPaths.IndexFile(avatarGuid);
             return (File.Exists(path) ? TryLoadJson<CommitIndex>(path) : null) ?? new CommitIndex();
         }
 
         private static void SaveIndex(string avatarGuid, CommitIndex index)
         {
-            var dir = GetAvatarDir(avatarGuid);
-            Directory.CreateDirectory(dir);
-            WriteAtomically($"{dir}/index.json", JsonUtility.ToJson(index, true));
+            var path = CommitPaths.IndexFile(avatarGuid);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            WriteAtomically(path, JsonUtility.ToJson(index, true));
         }
 
         public static BranchConfig LoadConfig(string avatarGuid)
         {
-            var path = $"{GetAvatarDir(avatarGuid)}/config.json";
+            var path = CommitPaths.ConfigFile(avatarGuid);
             return (File.Exists(path) ? TryLoadJson<BranchConfig>(path) : null) ?? new BranchConfig();
         }
 
         public static void SaveConfig(string avatarGuid, BranchConfig config)
         {
-            var dir = GetAvatarDir(avatarGuid);
-            Directory.CreateDirectory(dir);
-            WriteAtomically($"{dir}/config.json", JsonUtility.ToJson(config, true));
+            var path = CommitPaths.ConfigFile(avatarGuid);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            WriteAtomically(path, JsonUtility.ToJson(config, true));
         }
 
         /// <summary>
@@ -164,7 +164,7 @@ namespace AvatarVcs.Editor.History
 
             foreach (var commitId in plan.CommitsToDelete)
             {
-                var commitPath = $"{GetAvatarDir(avatarGuid)}/commits/{commitId}.json";
+                var commitPath = CommitPaths.CommitFile(avatarGuid, commitId);
                 if (File.Exists(commitPath)) File.Delete(commitPath);
             }
 

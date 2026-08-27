@@ -19,8 +19,11 @@ namespace AvatarVcs.Core.History
             return $"{AvatarsRoot}/{avatarGuid}";
         }
 
-        public static string CommitFile(string avatarGuid, string commitId) =>
-            $"{AvatarDir(avatarGuid)}/commits/{commitId}.json";
+        public static string CommitFile(string avatarGuid, string commitId)
+        {
+            CommitIdentifier.EnsureValid(commitId, nameof(commitId));
+            return $"{AvatarDir(avatarGuid)}/commits/{commitId}.json";
+        }
 
         public static string IndexFile(string avatarGuid) =>
             $"{AvatarDir(avatarGuid)}/index.json";
