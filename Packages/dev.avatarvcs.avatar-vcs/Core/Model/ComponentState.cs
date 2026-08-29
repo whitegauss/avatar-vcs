@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace AvatarVcs.Editor.Model
+namespace AvatarVcs.Core.Model
 {
     /// <summary>
     /// Captured state of a single Component, obtained via SerializedObject.

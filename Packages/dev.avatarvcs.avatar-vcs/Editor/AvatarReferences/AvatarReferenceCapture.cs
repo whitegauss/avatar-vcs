@@ -1,7 +1,7 @@
 using System;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
 using AvatarVcs.Runtime;
 using UnityEditor;

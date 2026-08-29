@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace AvatarVcs.Editor.Model
+namespace AvatarVcs.Core.Model
 {
     /// <summary>
     /// Records the content hash of a referenced asset at commit time, so

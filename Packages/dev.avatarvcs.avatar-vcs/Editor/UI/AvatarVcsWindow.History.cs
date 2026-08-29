@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Editor.History;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Diff;
+using AvatarVcs.Core.Model;
 using UnityEditor;
 using UnityEngine;
 
@@ -121,22 +122,15 @@ namespace AvatarVcs.Editor.UI
 
         private void DrawDiffEntry(ContainerDiff diff)
         {
-            var symbol = diff.kind switch
+            var tone = DiffRowFormatter.ToneOf(diff.kind);
+            var color = tone switch
             {
-                DiffKind.Added => "+",
-                DiffKind.Removed => "-",
-                DiffKind.Changed => "~",
-                _ => "=",
-            };
-            var color = diff.kind switch
-            {
-                DiffKind.Added => Color.green,
-                DiffKind.Removed => Color.red,
-                DiffKind.Changed => Color.yellow,
+                DiffTone.Added => Color.green,
+                DiffTone.Removed => Color.red,
+                DiffTone.Changed => Color.yellow,
                 _ => GUI.color,
             };
-            var label = $"{symbol} {diff.containerId}";
-            if (diff.kind == DiffKind.Unchanged) label += " (unchanged)";
+            var label = DiffRowFormatter.RowLabel(diff);
 
             var prevColor = GUI.color;
             GUI.color = color;

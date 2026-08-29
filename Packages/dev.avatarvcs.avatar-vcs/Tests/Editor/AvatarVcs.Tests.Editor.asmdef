@@ -4,6 +4,7 @@
     "references": [
         "AvatarVcs.Runtime",
         "AvatarVcs.Editor",
+        "AvatarVcs.Core",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

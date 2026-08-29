@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace AvatarVcs.Editor.Model
+namespace AvatarVcs.Core.Model
 {
     /// <summary>
     /// A full snapshot of an avatar's tracked state at one point in time.

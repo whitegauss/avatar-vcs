@@ -1,6 +1,6 @@
 using System;
 
-namespace AvatarVcs.Editor.Model
+namespace AvatarVcs.Core.Model
 {
     [Serializable]
     public class FieldValue

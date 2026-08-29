@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using AvatarVcs.Editor.AvatarReferences;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using NUnit.Framework;
 using UnityEngine;
 

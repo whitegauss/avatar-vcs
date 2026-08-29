@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.History;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using AvatarVcs.Runtime;
 using UnityEditor;
 using UnityEngine;

@@ -1,6 +1,7 @@
 using System.Linq;
 using AvatarVcs.Editor.MaterialSettings;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.MaterialSettings;
+using AvatarVcs.Core.Model;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;

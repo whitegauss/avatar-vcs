@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
+using AvatarVcs.Core.Diff;
+using AvatarVcs.Core.History;
 using AvatarVcs.Editor.History;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using UnityEditor;
 using UnityEngine;
 

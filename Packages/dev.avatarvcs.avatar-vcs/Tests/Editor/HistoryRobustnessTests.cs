@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AvatarVcs.Core.Diff;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;

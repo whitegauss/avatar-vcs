@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace AvatarVcs.Editor.Reflection
+namespace AvatarVcs.Core.Reflection
 {
     /// <summary>
     /// Resolves a Type from its full name across all loaded assemblies.

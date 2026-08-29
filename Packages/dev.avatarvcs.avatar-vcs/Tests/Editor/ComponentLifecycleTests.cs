@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.Capture;
-using AvatarVcs.Editor.Model;
-using AvatarVcs.Editor.Reflection;
+using AvatarVcs.Core.Model;
+using AvatarVcs.Core.Reflection;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;

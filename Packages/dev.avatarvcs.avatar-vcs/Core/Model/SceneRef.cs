@@ -1,6 +1,6 @@
 using System;
 
-namespace AvatarVcs.Editor.Model
+namespace AvatarVcs.Core.Model
 {
     /// <summary>
     /// A reference to a live scene object (GameObject/Transform/Component),

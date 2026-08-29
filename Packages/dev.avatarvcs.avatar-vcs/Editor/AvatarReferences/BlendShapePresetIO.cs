@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using UnityEditor;
 using UnityEngine;
 

@@ -2,7 +2,8 @@
     "name": "AvatarVcs.Editor",
     "rootNamespace": "AvatarVcs.Editor",
     "references": [
-        "AvatarVcs.Runtime"
+        "AvatarVcs.Runtime",
+        "AvatarVcs.Core"
     ],
     "includePlatforms": [
         "Editor"

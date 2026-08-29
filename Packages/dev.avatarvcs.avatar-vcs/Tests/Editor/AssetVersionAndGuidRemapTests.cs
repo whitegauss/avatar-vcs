@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.History;
+using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Operations;
 using NUnit.Framework;
 using UnityEditor;
@@ -167,6 +169,61 @@ namespace AvatarVcs.Tests.Editor
         {
             Assert.IsNull(GuidRemapper.Resolve(null));
             Assert.AreEqual("", GuidRemapper.Resolve(""));
+        }
+
+        // Regression tests for GuidRemapResolver.BuildIndex: a hand-edited
+        // guid-remapping.json can deserialize a mapping entry with a null
+        // oldGuid/newGuid (e.g. a bare "{}" element), and
+        // Dictionary<string,string>'s indexer/ContainsKey throw
+        // ArgumentNullException on a null key. These call GuidRemapResolver
+        // directly with a hand-built GuidRemapConfig, bypassing GuidRemapper's
+        // file I/O, the same way the resolver's own doc comment says it's
+        // meant to be tested.
+
+        [Test]
+        public void GuidRemapResolver_BuildIndex_MappingWithNullOldGuid_SkippedInsteadOfThrowing()
+        {
+            var config = new GuidRemapConfig();
+            config.mappings.Add(new GuidRemapEntry { oldGuid = null, newGuid = "new-guid" });
+
+            Dictionary<string, string> index = null;
+            Assert.DoesNotThrow(() => index = GuidRemapResolver.BuildIndex(config));
+            Assert.IsEmpty(index);
+        }
+
+        [Test]
+        public void GuidRemapResolver_BuildIndex_MappingWithNullNewGuid_SkippedInsteadOfThrowing()
+        {
+            var config = new GuidRemapConfig();
+            config.mappings.Add(new GuidRemapEntry { oldGuid = "old-guid", newGuid = null });
+
+            Dictionary<string, string> index = null;
+            Assert.DoesNotThrow(() => index = GuidRemapResolver.BuildIndex(config));
+            Assert.IsEmpty(index);
+        }
+
+        [Test]
+        public void GuidRemapResolver_BuildIndex_MappingWithEmptyStrings_SkippedInsteadOfThrowing()
+        {
+            var config = new GuidRemapConfig();
+            config.mappings.Add(new GuidRemapEntry { oldGuid = "", newGuid = "" });
+
+            Dictionary<string, string> index = null;
+            Assert.DoesNotThrow(() => index = GuidRemapResolver.BuildIndex(config));
+            Assert.IsEmpty(index);
+        }
+
+        [Test]
+        public void GuidRemapResolver_BuildIndex_ValidMappingAlongsideInvalidMapping_StillResolvesValidOne()
+        {
+            var config = new GuidRemapConfig();
+            config.mappings.Add(new GuidRemapEntry { oldGuid = null, newGuid = "unused" });
+            config.mappings.Add(new GuidRemapEntry { oldGuid = "old-guid", newGuid = "new-guid" });
+
+            GuidResolution resolution = default;
+            Assert.DoesNotThrow(() => resolution = GuidRemapResolver.Resolve(config, "old-guid"));
+            Assert.AreEqual("new-guid", resolution.Guid);
+            Assert.IsFalse(resolution.CycleDetected);
         }
 
         private const string RemapConfigPath = "ProjectSettings/AvatarVcs/guid-remapping.json";

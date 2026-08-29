@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace AvatarVcs.Editor.Reflection
+namespace AvatarVcs.Core.Reflection
 {
     /// <summary>
     /// SerializedProperty names that identify/link a Component/GameObject

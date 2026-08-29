@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
-using AvatarVcs.Editor.Model;
+using AvatarVcs.Core.Model;
 using AvatarVcs.Runtime;
 using UnityEngine;
 

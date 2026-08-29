@@ -1,4 +1,5 @@
 using System.Linq;
+using AvatarVcs.Core.History;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
 using NUnit.Framework;
