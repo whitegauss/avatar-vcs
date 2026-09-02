@@ -3,6 +3,7 @@ using System.Linq;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Core.Model;
+using AvatarVcs.Editor.Reflection;
 using AvatarVcs.Runtime;
 using UnityEngine;
 
@@ -26,6 +27,8 @@ namespace AvatarVcs.Editor.Operations
             var marker = container.GetComponent<AvatarVcsContainer>();
             if (marker == null)
                 throw new ArgumentException($"'{container.name}' is not an AvatarVCS container (missing AvatarVcsContainer).", nameof(container));
+
+            ReferenceResolver.WarnOnSameNameSiblings(container, $"container '{container.name}'");
 
             var childGuids = container.Cast<Transform>()
                 .Select(child => (child, guid: ContainerManager.GetPrefabGuid(child.gameObject)))

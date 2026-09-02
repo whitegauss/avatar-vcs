@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AvatarVcs.Core.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -11,6 +12,41 @@ namespace AvatarVcs.Editor.Reflection
     /// </summary>
     public static class ReferenceResolver
     {
+        /// <summary>
+        /// Logs a warning for every GameObject in root's subtree that has two
+        /// or more children sharing a name. GetRelativePath joins names and
+        /// ResolvePath is Transform.Find, so only the first same-named
+        /// sibling is ever reachable -- anything captured against a later one
+        /// (ObjectStateRef / SceneRef / ComponentState.path) is silently
+        /// restored onto the first instead. Warn, don't block: same stance as
+        /// ContainerCapture's non-prefab-child warning. A real fix (a sibling
+        /// index in the path) is a schema change tracked separately (KAN-15).
+        /// </summary>
+        public static void WarnOnSameNameSiblings(Transform root, string context)
+        {
+            if (root == null) return;
+
+            var queue = new Queue<Transform>();
+            queue.Enqueue(root);
+            while (queue.Count > 0)
+            {
+                var node = queue.Dequeue();
+
+                var dupes = node.Cast<Transform>()
+                    .GroupBy(c => c.name)
+                    .Where(g => g.Count() > 1)
+                    .ToList();
+                if (dupes.Count > 0)
+                    Debug.LogWarning($"[AvatarVCS] {context}: '{node.name}' has same-named children ("
+                        + string.Join(", ", dupes.Select(g => $"'{g.Key}' x{g.Count()}")) + "). "
+                        + "Path-based restore can't tell same-named siblings apart, so their tracked state may be "
+                        + "restored onto the wrong one -- give them unique names.");
+
+                foreach (Transform child in node)
+                    queue.Enqueue(child);
+            }
+        }
+
         public static string GetRelativePath(Transform target, Transform root)
         {
             if (target == null) throw new ArgumentNullException(nameof(target));

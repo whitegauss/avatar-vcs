@@ -12,6 +12,7 @@ using AvatarVcs.Editor.UI;
 using AvatarVcs.Runtime;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
 namespace AvatarVcs.Tests.Editor
@@ -175,6 +176,27 @@ namespace AvatarVcs.Tests.Editor
             {
                 Object.DestroyImmediate(plainGo);
             }
+        }
+
+        [Test]
+        public void ContainerCapture_SameNameSiblingsInContainer_LogsOneCombinedWarning()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            foreach (var name in new[] { "Dup", "Dup", "Two", "Two" })
+                new GameObject(name).transform.SetParent(container.transform);
+
+            // Two duplicated name groups on one node -> exactly one warning
+            // naming both. (A second Expect here that never matches would
+            // fail the test, so this also pins "one, not per-group".)
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex(@"'outfit_a' has same-named children \(.*'Dup' x2.*'Two' x2.*\)"));
+            // Each loose child also trips the existing non-prefab warning.
+            for (var i = 0; i < 4; i++)
+                LogAssert.Expect(LogType.Warning,
+                    new System.Text.RegularExpressions.Regex("inside container 'outfit_a' is not a prefab instance"));
+
+            Assert.DoesNotThrow(() => ContainerCapture.CaptureContainer(container.transform));
         }
 
         [Test]
