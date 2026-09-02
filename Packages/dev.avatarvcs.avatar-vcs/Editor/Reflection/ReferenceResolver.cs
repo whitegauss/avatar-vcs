@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Core.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -21,8 +22,10 @@ namespace AvatarVcs.Editor.Reflection
         /// restored onto the first instead. Warn, don't block: same stance as
         /// ContainerCapture's non-prefab-child warning. A real fix (a sibling
         /// index in the path) is a schema change tracked separately (KAN-15).
+        /// The warning goes to the caller's DiagnosticLog (KAN-20) so it
+        /// reaches CheckoutResult.Diagnostics like every other capture warning.
         /// </summary>
-        public static void WarnOnSameNameSiblings(Transform root, string context)
+        public static void WarnOnSameNameSiblings(Transform root, string context, DiagnosticLog log)
         {
             if (root == null) return;
 
@@ -37,7 +40,7 @@ namespace AvatarVcs.Editor.Reflection
                     .Where(g => g.Count() > 1)
                     .ToList();
                 if (dupes.Count > 0)
-                    Debug.LogWarning($"[AvatarVCS] {context}: '{node.name}' has same-named children ("
+                    log.Warn($"[AvatarVCS] {context}: '{node.name}' has same-named children ("
                         + string.Join(", ", dupes.Select(g => $"'{g.Key}' x{g.Count()}")) + "). "
                         + "Path-based restore can't tell same-named siblings apart, so their tracked state may be "
                         + "restored onto the wrong one -- give them unique names.");

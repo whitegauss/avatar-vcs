@@ -48,7 +48,7 @@ namespace AvatarVcs.Editor.Operations
 
         private static ContainerSnapshot CaptureCore(Transform container, Transform avatarRoot, AvatarVcsContainer marker, DiagnosticLog log)
         {
-            ReferenceResolver.WarnOnSameNameSiblings(container, $"container '{container.name}'");
+            ReferenceResolver.WarnOnSameNameSiblings(container, $"container '{container.name}'", log);
 
             var childGuids = container.Cast<Transform>()
                 .Select(child => (child, guid: ContainerManager.GetPrefabGuid(child.gameObject)))
