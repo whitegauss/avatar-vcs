@@ -13,6 +13,13 @@ namespace AvatarVcs.Editor.UI
     // Branch switcher/creation, commit, and checkout-selected-commit.
     public partial class AvatarVcsWindow
     {
+        /// <summary>
+        /// The branch dropdown, "+ New Branch" toggle, and (when open) the
+        /// new-branch name field. Switch and create both run their actual
+        /// work -- which can throw and pop a dialog -- only after the
+        /// EditorGUILayout horizontal group is closed, so a failure can't
+        /// unwind through an open IMGUI layout group (KAN-7).
+        /// </summary>
         private void DrawBranchBar()
         {
             EditorGUILayout.BeginHorizontal();
@@ -20,17 +27,26 @@ namespace AvatarVcs.Editor.UI
             var branchNames = config.branches.Select(b => b.name).ToArray();
             var currentIndex = Array.IndexOf(branchNames, config.currentBranch);
             var newIndex = EditorGUILayout.Popup("Branch", currentIndex, branchNames);
+            string switchTarget = null;
             if (newIndex != currentIndex && newIndex >= 0)
-            {
-                var target = branchNames[newIndex];
-                if (ConfirmDiscardIfUncommitted("Switch Branch", $"Switch from '{config.currentBranch}' to '{target}'?"))
-                    RunCheckout(() => BranchManager.SwitchBranch(avatarRoot, target));
-            }
+                switchTarget = branchNames[newIndex];
 
             if (GUILayout.Button("+ New Branch", GUILayout.Width(100)))
                 showNewBranchField = !showNewBranchField;
 
             EditorGUILayout.EndHorizontal();
+
+            // Run the branch switch -- which can throw and pop a dialog -- only
+            // after the layout group is closed, for the same reason the Create
+            // and Commit handlers below defer their work past EndHorizontal:
+            // RunCheckout only catches InvalidOperationException, so anything
+            // else (corrupt config, deleted avatar root, a Unity prefab-API
+            // exception) would unwind straight out of OnGUI through this
+            // EndHorizontal and leave IMGUI spewing "Invalid GUILayout state"
+            // until the window was reopened.
+            if (switchTarget != null
+                && ConfirmDiscardIfUncommitted("Switch Branch", $"Switch from '{config.currentBranch}' to '{switchTarget}'?"))
+                RunCheckout(() => BranchManager.SwitchBranch(avatarRoot, switchTarget));
 
             if (showNewBranchField)
             {
@@ -38,15 +54,30 @@ namespace AvatarVcs.Editor.UI
                 newBranchName = EditorGUILayout.TextField(newBranchName);
                 var isValid = BranchConfigOps.CanCreate(config, newBranchName);
                 GUI.enabled = isValid;
-                if (GUILayout.Button("Create", GUILayout.Width(80)))
-                {
-                    BranchManager.CreateBranch(avatarRoot, newBranchName);
-                    newBranchName = "";
-                    showNewBranchField = false;
-                    Reload();
-                }
+                var createClicked = GUILayout.Button("Create", GUILayout.Width(80));
                 GUI.enabled = true;
                 EditorGUILayout.EndHorizontal();
+
+                // Same reasoning as DrawCommitBar: CreateBranch can throw
+                // (CanCreate gates the button, but its checks and
+                // CreateBranch's own validation aren't guaranteed identical),
+                // and there was no catch here at all -- an exception would
+                // unwind straight out of OnGUI past this EndHorizontal.
+                if (createClicked)
+                {
+                    try
+                    {
+                        BranchManager.CreateBranch(avatarRoot, newBranchName);
+                        newBranchName = "";
+                        showNewBranchField = false;
+                        Reload();
+                    }
+                    catch (Exception e) when (e is ArgumentException or InvalidOperationException)
+                    {
+                        EditorUtility.DisplayDialog("Create Branch Failed", e.Message, "OK");
+                    }
+                }
+
                 if (!string.IsNullOrEmpty(newBranchName) && !isValid)
                     EditorGUILayout.HelpBox(
                         "Invalid or duplicate branch name. Avoid / \\ : * ? \" < > | and leading/trailing whitespace or a leading '.' or '-'.",
@@ -65,6 +96,14 @@ namespace AvatarVcs.Editor.UI
 
         private const string CommitMessageControlName = "AvatarVcsCommitMessageField";
 
+        /// <summary>
+        /// The commit message field and Commit button (Enter in the field
+        /// commits too). The commit itself -- which can throw, show a
+        /// "Commit Failed" dialog, and early-return -- runs only after the
+        /// EditorGUILayout horizontal group is closed, so a failed commit
+        /// can't skip EndHorizontal and leave IMGUI in an invalid layout
+        /// state (KAN-7).
+        /// </summary>
         private void DrawCommitBar()
         {
             EditorGUILayout.BeginHorizontal();
@@ -80,25 +119,33 @@ namespace AvatarVcs.Editor.UI
                 && GUI.GetNameOfFocusedControl() == CommitMessageControlName;
             if (enterInMessageField) Event.current.Use();
 
-            if (GUILayout.Button("Commit", GUILayout.Width(100)) || enterInMessageField)
-            {
-                var message = string.IsNullOrEmpty(commitMessage) ? "Manual commit" : commitMessage;
-                try
-                {
-                    BranchManager.Commit(avatarRoot, message);
-                }
-                catch (InvalidOperationException e)
-                {
-                    EditorUtility.DisplayDialog("Commit Failed", e.Message, "OK");
-                    return;
-                }
-                commitMessage = "";
-                // The very first commit creates the root (and its guid) as a
-                // side effect; avatarGuid may still be null/stale here.
-                avatarGuid = ContainerManager.FindRoot(avatarRoot).GetComponent<AvatarVcsRoot>().AvatarGuid;
-                Reload();
-            }
+            var commitClicked = GUILayout.Button("Commit", GUILayout.Width(100)) || enterInMessageField;
             EditorGUILayout.EndHorizontal();
+
+            // Run the commit -- which can throw, pop a dialog, and early-return
+            // -- only after the layout group is closed. Doing it inside the
+            // BeginHorizontal/EndHorizontal pair meant a failed commit (the
+            // exact case this dialog exists to report: duplicate/nested
+            // containers) skipped EndHorizontal and left IMGUI spewing
+            // "Invalid GUILayout state" until the window was reopened.
+            if (!commitClicked)
+                return;
+
+            var message = string.IsNullOrEmpty(commitMessage) ? "Manual commit" : commitMessage;
+            try
+            {
+                BranchManager.Commit(avatarRoot, message);
+            }
+            catch (InvalidOperationException e)
+            {
+                EditorUtility.DisplayDialog("Commit Failed", e.Message, "OK");
+                return;
+            }
+            commitMessage = "";
+            // The very first commit creates the root (and its guid) as a
+            // side effect; avatarGuid may still be null/stale here.
+            avatarGuid = ContainerManager.FindRoot(avatarRoot).GetComponent<AvatarVcsRoot>().AvatarGuid;
+            Reload();
         }
 
         private void DrawCheckoutBar()
