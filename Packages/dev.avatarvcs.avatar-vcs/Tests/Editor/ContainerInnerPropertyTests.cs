@@ -34,6 +34,10 @@ namespace AvatarVcs.Tests.Editor
                 triangles = new[] { 0, 1, 2 },
             };
             mesh.AddBlendShapeFrame("Puff", 100f, new[] { Vector3.zero, Vector3.zero, Vector3.zero }, null, null);
+            // Must be a saved asset: a runtime Mesh can't be referenced by
+            // the prefab, so the regenerated instance's SMR would have no
+            // mesh and nothing to write blend shape weights onto.
+            AssetDatabase.CreateAsset(mesh, $"{Dir}/OutfitMesh.asset");
 
             var src = new GameObject("Outfit");
             src.AddComponent<SkinnedMeshRenderer>().sharedMesh = mesh;
@@ -45,7 +49,7 @@ namespace AvatarVcs.Tests.Editor
         [OneTimeTearDown]
         public void OneTimeTearDown()
         {
-            if (mesh != null) Object.DestroyImmediate(mesh);
+            // mesh is an asset now -- deleting the folder removes it.
             if (AssetDatabase.IsValidFolder(Dir)) AssetDatabase.DeleteAsset(Dir);
         }
 
