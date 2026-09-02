@@ -143,6 +143,49 @@ namespace AvatarVcs.Core.Diff
             notes.AddRange(DiffMap(FlattenFields(before.components), FlattenFields(after.components),
                 (key, b, a) => $"{key}: '{b}' -> '{a}'"));
 
+            // Inner-property versioning (KAN-70): BlendShape / material /
+            // active-tag-layer the user adjusted inside the container's prefab
+            // instances. Keyed exactly like DescribeAvatarReferenceChanges --
+            // including the tag/layer objectState lines, so an inner tag or
+            // layer edit shows up in the diff, not just an active-state edit.
+            //
+            // Skipped when only `after` carries inner-property data: a
+            // pre-KAN-70 `before` has none, so each of its implicit defaults
+            // (activeSelf=false, tag=null, weight=0, guid=null) would diff
+            // against a full post-KAN-70 capture and flood the row with
+            // spurious "changed" lines for objects the user never touched.
+            var beforeHasInner = before.blendShapes.Count > 0 || before.materials.Count > 0
+                || before.objectStates.Count > 0;
+            var afterHasInner = after.blendShapes.Count > 0 || after.materials.Count > 0
+                || after.objectStates.Count > 0;
+            if (beforeHasInner || !afterHasInner)
+            {
+                notes.AddRange(DiffMap(
+                    SafeToDictionary(before.blendShapes, BlendShapeKey, s => s.weight),
+                    SafeToDictionary(after.blendShapes, BlendShapeKey, s => s.weight),
+                    (key, b, a) => $"blendShape '{BlendShapeKeyLabel(key)}': {b} -> {a}"));
+
+                notes.AddRange(DiffMap(
+                    SafeToDictionary(before.materials, MaterialKey, m => m.guid),
+                    SafeToDictionary(after.materials, MaterialKey, m => m.guid),
+                    (key, b, a) => $"material {MaterialKeyLabel(key)}: '{b}' -> '{a}'"));
+
+                notes.AddRange(DiffMap(
+                    SafeToDictionary(before.objectStates, s => s.path, s => s.activeSelf),
+                    SafeToDictionary(after.objectStates, s => s.path, s => s.activeSelf),
+                    (path, b, a) => $"active '{path}': {b} -> {a}"));
+
+                notes.AddRange(DiffMap(
+                    SafeToDictionary(before.objectStates, s => s.path, s => s.tag),
+                    SafeToDictionary(after.objectStates, s => s.path, s => s.tag),
+                    (path, b, a) => $"tag '{path}': '{b}' -> '{a}'"));
+
+                notes.AddRange(DiffMap(
+                    SafeToDictionary(before.objectStates, s => s.path, s => s.layer),
+                    SafeToDictionary(after.objectStates, s => s.path, s => s.layer),
+                    (path, b, a) => $"layer '{path}': {b} -> {a}"));
+            }
+
             return notes;
         }
 
