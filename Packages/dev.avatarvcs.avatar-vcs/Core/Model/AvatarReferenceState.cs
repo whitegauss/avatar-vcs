@@ -6,6 +6,13 @@ namespace AvatarVcs.Core.Model
     [Serializable]
     public class BlendShapeRef
     {
+        // Slash path, relative to the tracked target, of the descendant
+        // (or "" = the target itself) whose SkinnedMeshRenderer this blend
+        // shape belongs to. Same per-path shape as ObjectStateRef. Commits
+        // written before descendant blend-shape capture existed have no
+        // key here, so JsonUtility leaves it null -> treated as "" -> the
+        // target itself, exactly the old single-renderer behaviour.
+        public string path;
         public string name;
         public float weight;
     }
@@ -13,6 +20,7 @@ namespace AvatarVcs.Core.Model
     [Serializable]
     public class MaterialRef
     {
+        public string path; // same convention as BlendShapeRef.path
         public int slot;
         public string guid;
     }

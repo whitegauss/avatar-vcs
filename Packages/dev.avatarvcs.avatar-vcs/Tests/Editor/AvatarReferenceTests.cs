@@ -297,6 +297,45 @@ namespace AvatarVcs.Tests.Editor
             }
         }
 
+        [Test]
+        public void DefaultEnsureRootConfig_RoundTripsTrackedBodyBlendShape_AfterDrift()
+        {
+            // Critical 1 (KAN-9): every other blend-shape test here marks
+            // Body directly. The config the "Ensure Root" command actually
+            // produces marks the avatar root AND every top-level child. The
+            // AvatarReferenceCollector outermost-marker filter then collapses
+            // that to the avatar root alone -- which has no renderer -- and
+            // the narrow BlendShape/material capture only ever looked at the
+            // target itself, so a default-config avatar committed nothing of
+            // Body's blend shapes at all until the Critical 1-b fix.
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            var renderer = body.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = testMesh;
+            renderer.SetBlendShapeWeight(0, 88f);
+
+            ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            Assert.IsNotNull(avatarRoot.GetComponent<AvatarVcsTrackedReference>(), "sanity: default config tracks the avatar root");
+            Assert.IsNotNull(body.GetComponent<AvatarVcsTrackedReference>(), "sanity: default config tracks Body too");
+
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            try
+            {
+                var commit = BranchManager.Commit(avatarRoot, "default-config checkpoint");
+
+                renderer.SetBlendShapeWeight(0, 0f); // drift after committing
+
+                var result = BranchManager.RestoreToCommit(avatarRoot, commit.commitId);
+
+                Assert.IsTrue(result.IsSuccess);
+                Assert.AreEqual(88f, renderer.GetBlendShapeWeight(0), 0.0001f);
+            }
+            finally
+            {
+                CommitStore.DeleteAvatarHistory(avatarGuid);
+            }
+        }
+
         // Broadened tracking (design doc 1.4, revised): a marked target's
         // whole subtree, not just its own BlendShape/material, is captured
         // generically (same ComponentCapturer/ComponentApplier containers

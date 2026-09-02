@@ -180,6 +180,86 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsTrue(bodyDiff.changeNotes.Any(n => n.Contains("slot 0") && n.Contains("guid_after")));
         }
 
+        private static List<string> BlendShapeNotesForBody(
+            IEnumerable<BlendShapeRef> before, IEnumerable<BlendShapeRef> after)
+        {
+            var b = new Commit { avatarReferences = { new AvatarReferenceState { path = "Body" } } };
+            b.avatarReferences[0].blendShapes.AddRange(before);
+            var a = new Commit { avatarReferences = { new AvatarReferenceState { path = "Body" } } };
+            a.avatarReferences[0].blendShapes.AddRange(after);
+
+            return SnapshotDiffer.Diff(b, a)
+                .Single(d => d.containerId == "avatarRef:Body")
+                .changeNotes
+                .Where(n => n.StartsWith("blendShape "))
+                .ToList();
+        }
+
+        [Test]
+        public void Diff_BlendShapeKey_SlashInName_DiffsEachRefIndependently()
+        {
+            // The diff key joins (path, name); a plain "/"-readable join
+            // would let path "Hair" + name "Brow/Up" collide with path
+            // "Hair/Brow" + name "Up" and drop one. Both must produce their
+            // own note. Their human-readable labels are unavoidably identical
+            // here ("Hair/Brow/Up"), so this asserts on the count and the
+            // pair of value transitions instead.
+            var notes = BlendShapeNotesForBody(
+                new[]
+                {
+                    new BlendShapeRef { path = "Hair", name = "Brow/Up", weight = 0f },
+                    new BlendShapeRef { path = "Hair/Brow", name = "Up", weight = 0f },
+                },
+                new[]
+                {
+                    new BlendShapeRef { path = "Hair", name = "Brow/Up", weight = 10f },
+                    new BlendShapeRef { path = "Hair/Brow", name = "Up", weight = 20f },
+                });
+
+            Assert.AreEqual(2, notes.Count, "the two refs must not collapse into one note");
+            CollectionAssert.Contains(notes, "blendShape 'Hair/Brow/Up': 0 -> 10");
+            CollectionAssert.Contains(notes, "blendShape 'Hair/Brow/Up': 0 -> 20");
+        }
+
+        [Test]
+        public void Diff_BlendShapeKey_SamePathDifferentName_EachNoteHasCorrectNameAndDelta()
+        {
+            var notes = BlendShapeNotesForBody(
+                new[]
+                {
+                    new BlendShapeRef { path = "Hair", name = "Wave", weight = 0f },
+                    new BlendShapeRef { path = "Hair", name = "Curl", weight = 0f },
+                },
+                new[]
+                {
+                    new BlendShapeRef { path = "Hair", name = "Wave", weight = 10f }, // Curl unchanged
+                    new BlendShapeRef { path = "Hair", name = "Curl", weight = 0f },
+                });
+
+            CollectionAssert.AreEqual(new[] { "blendShape 'Hair/Wave': 0 -> 10" }, notes,
+                "only Wave changed; its note must name Wave (not Curl) with the 0 -> 10 delta");
+        }
+
+        [Test]
+        public void Diff_BlendShapeKey_DifferentPathSameName_EachNoteHasCorrectPathAndDelta()
+        {
+            var notes = BlendShapeNotesForBody(
+                new[]
+                {
+                    new BlendShapeRef { path = "HairL", name = "Wave", weight = 0f },
+                    new BlendShapeRef { path = "HairR", name = "Wave", weight = 0f },
+                },
+                new[]
+                {
+                    new BlendShapeRef { path = "HairL", name = "Wave", weight = 10f },
+                    new BlendShapeRef { path = "HairR", name = "Wave", weight = 20f },
+                });
+
+            CollectionAssert.AreEquivalent(
+                new[] { "blendShape 'HairL/Wave': 0 -> 10", "blendShape 'HairR/Wave': 0 -> 20" }, notes,
+                "same shape name on two renderers must diff separately, each note carrying its own path and delta");
+        }
+
         [Test]
         public void Diff_DetectsActiveTagAndLayerChange_InAvatarReferences()
         {

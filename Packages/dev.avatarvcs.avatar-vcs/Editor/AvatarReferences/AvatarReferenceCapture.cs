@@ -11,11 +11,11 @@ namespace AvatarVcs.Editor.AvatarReferences
 {
     /// <summary>
     /// Captures tracked avatar-side state (design doc 1.4.1/1.4.2) for a
-    /// marked subtree: blend shape weights and material slot references on
-    /// the target itself (name/GUID-resolved), plus generic field values for
-    /// every other component on the target and its descendants (path-
-    /// resolved, same mechanism containers use for their own root). Never
-    /// mutates the target.
+    /// marked subtree: blend shape weights and material slot references for
+    /// every SkinnedMeshRenderer/Renderer in the subtree (name/GUID-resolved,
+    /// path-tagged), plus generic field values for every other component on
+    /// the target and its descendants (path-resolved, same mechanism
+    /// containers use for their own root). Never mutates the target.
     /// </summary>
     public static class AvatarReferenceCapture
     {
@@ -29,30 +29,45 @@ namespace AvatarVcs.Editor.AvatarReferences
                 path = ReferenceResolver.GetRelativePath(target, avatarRoot),
             };
 
-            var skinnedRenderer = target.GetComponent<SkinnedMeshRenderer>();
+            CaptureDescendantComponents(target, avatarRoot, state);
+
+            return state;
+        }
+
+        /// <summary>
+        /// Blend shape weights and material slot references for one renderer
+        /// in the tracked subtree, tagged with its path relative to target
+        /// ("" = target itself). The default "Ensure Root" config tracks the
+        /// avatar root, so the renderers that actually matter (Body,
+        /// accessories, ...) are always descendants, never the target -- the
+        /// pre-KAN-10 target-only capture recorded nothing for them.
+        /// </summary>
+        private static void CaptureRenderersAt(Transform node, string relPath, AvatarReferenceState state)
+        {
+            var skinnedRenderer = node.GetComponent<SkinnedMeshRenderer>();
             if (skinnedRenderer != null && skinnedRenderer.sharedMesh != null)
             {
                 var mesh = skinnedRenderer.sharedMesh;
-                // Every blend shape on a tracked target is recorded, including
-                // ones currently at 0 -- a shape whose prefab/mesh default is
-                // non-zero (e.g. an outfit shipping a shape pre-set to 100)
-                // can legitimately be turned down to exactly 0 by the user,
-                // and that explicit choice must round-trip through a commit
-                // like any other value. (Design doc 1.4.2's "JSON absence
-                // means not tracked" is about targets/paths never added to
-                // avatarReferences at all, not about values within one that
-                // already is.)
+                // Every blend shape is recorded, including ones currently at
+                // 0 -- a shape whose prefab/mesh default is non-zero (e.g. an
+                // outfit shipping a shape pre-set to 100) can legitimately be
+                // turned down to exactly 0 by the user, and that explicit
+                // choice must round-trip through a commit like any other
+                // value. (Design doc 1.4.2's "JSON absence means not tracked"
+                // is about targets/paths never added to avatarReferences at
+                // all, not about values within one that already is.)
                 for (var i = 0; i < mesh.blendShapeCount; i++)
                 {
                     state.blendShapes.Add(new BlendShapeRef
                     {
+                        path = relPath,
                         name = mesh.GetBlendShapeName(i),
                         weight = skinnedRenderer.GetBlendShapeWeight(i),
                     });
                 }
             }
 
-            var renderer = target.GetComponent<Renderer>();
+            var renderer = node.GetComponent<Renderer>();
             if (renderer != null)
             {
                 var materials = renderer.sharedMaterials;
@@ -65,13 +80,9 @@ namespace AvatarVcs.Editor.AvatarReferences
                     var guid = string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.AssetPathToGUID(assetPath);
                     if (string.IsNullOrEmpty(guid)) continue;
 
-                    state.materials.Add(new MaterialRef { slot = slot, guid = guid });
+                    state.materials.Add(new MaterialRef { path = relPath, slot = slot, guid = guid });
                 }
             }
-
-            CaptureDescendantComponents(target, avatarRoot, state);
-
-            return state;
         }
 
         private static void CaptureDescendantComponents(Transform target, Transform avatarRoot, AvatarReferenceState state)
@@ -92,6 +103,8 @@ namespace AvatarVcs.Editor.AvatarReferences
                 // does.
                 if (vcsRoot != null && descendant.IsChildOf(vcsRoot)) continue;
 
+                var relPath = ReferenceResolver.GetRelativePath(descendant, target);
+
                 // activeSelf/tag/layer live on the GameObject itself, not on
                 // any one Component's SerializedObject, so they need their
                 // own capture step alongside the per-component walk below
@@ -99,11 +112,19 @@ namespace AvatarVcs.Editor.AvatarReferences
                 // container's own root).
                 state.objectStates.Add(new ObjectStateRef
                 {
-                    path = ReferenceResolver.GetRelativePath(descendant, target),
+                    path = relPath,
                     activeSelf = descendant.gameObject.activeSelf,
                     tag = descendant.gameObject.tag,
                     layer = descendant.gameObject.layer,
                 });
+
+                // Name/GUID-resolved blend shape + material capture for this
+                // node's renderer, before the generic component walk below
+                // (StripNarrowlyTrackedFields then drops the same fields from
+                // the generic Renderer capture -- now correctly, because this
+                // narrow path finally covers every descendant, not just the
+                // target).
+                CaptureRenderersAt(descendant, relPath, state);
 
                 foreach (var component in descendant.GetComponents<Component>())
                 {
@@ -175,8 +196,9 @@ namespace AvatarVcs.Editor.AvatarReferences
 
         /// <summary>
         /// m_BlendShapeWeights/m_Materials are already captured robustly (by
-        /// name / by GUID with GuidRemapper support) via the narrow path
-        /// above; capturing them again here as fragile index-based array
+        /// name / by GUID with GuidRemapper support) by CaptureRenderersAt,
+        /// which now runs for every descendant renderer, not just the
+        /// target's; capturing them again here as fragile index-based array
         /// entries would double-manage the same data. Scoped to `is
         /// Renderer` so it never touches an unrelated component that happens
         /// to share a field name.

@@ -150,15 +150,20 @@ namespace AvatarVcs.Core.Diff
         {
             var notes = new List<string>();
 
+            // Keyed by (path, name) / (path, slot), not name / slot alone:
+            // a tracked subtree can now hold several renderers (KAN-10), and
+            // two of them can legitimately share a blend-shape name or a slot
+            // number. path "" (or a pre-KAN-10 commit's null) is the target
+            // itself and stays displayed bare.
             notes.AddRange(DiffMap(
-                SafeToDictionary(before.blendShapes, s => s.name, s => s.weight),
-                SafeToDictionary(after.blendShapes, s => s.name, s => s.weight),
-                (name, b, a) => $"blendShape '{name}': {b} -> {a}"));
+                SafeToDictionary(before.blendShapes, BlendShapeKey, s => s.weight),
+                SafeToDictionary(after.blendShapes, BlendShapeKey, s => s.weight),
+                (key, b, a) => $"blendShape '{BlendShapeKeyLabel(key)}': {b} -> {a}"));
 
             notes.AddRange(DiffMap(
-                SafeToDictionary(before.materials, m => m.slot, m => m.guid),
-                SafeToDictionary(after.materials, m => m.slot, m => m.guid),
-                (slot, b, a) => $"material slot {slot}: '{b}' -> '{a}'"));
+                SafeToDictionary(before.materials, MaterialKey, m => m.guid),
+                SafeToDictionary(after.materials, MaterialKey, m => m.guid),
+                (key, b, a) => $"material {MaterialKeyLabel(key)}: '{b}' -> '{a}'"));
 
             notes.AddRange(DiffMap(FlattenFields(before.components), FlattenFields(after.components),
                 (key, b, a) => $"{key}: '{b}' -> '{a}'"));
@@ -179,6 +184,37 @@ namespace AvatarVcs.Core.Diff
                 (path, b, a) => $"layer '{path}': {b} -> {a}"));
 
             return notes;
+        }
+
+        // '\0' can't appear in a Unity GameObject name or a blend-shape
+        // name, so a NUL-joined (path, name) round-trips unambiguously --
+        // unlike a "/"-joined readable string, where path "A" + name "B/C"
+        // and path "A/B" + name "C" would collide. KeyLabel rebuilds the
+        // readable form for the diff note.
+        private const char KeySeparator = '\0';
+
+        private static string BlendShapeKey(BlendShapeRef s) =>
+            $"{s.path ?? string.Empty}{KeySeparator}{s.name ?? string.Empty}";
+
+        private static string BlendShapeKeyLabel(string key)
+        {
+            var i = key.IndexOf(KeySeparator);
+            if (i < 0) return key;
+            var path = key.Substring(0, i);
+            var name = key.Substring(i + 1);
+            return string.IsNullOrEmpty(path) ? name : $"{path}/{name}";
+        }
+
+        private static string MaterialKey(MaterialRef m) =>
+            $"{m.path ?? string.Empty}{KeySeparator}{m.slot}";
+
+        private static string MaterialKeyLabel(string key)
+        {
+            var i = key.IndexOf(KeySeparator);
+            if (i < 0) return $"slot {key}";
+            var path = key.Substring(0, i);
+            var slot = key.Substring(i + 1);
+            return string.IsNullOrEmpty(path) ? $"slot {slot}" : $"{path} slot {slot}";
         }
 
         private static List<string> DescribeMaterialSettingsChanges(MaterialSettingsState before, MaterialSettingsState after)
