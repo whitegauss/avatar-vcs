@@ -56,7 +56,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                 }
 
                 var mesh = renderer.sharedMesh;
-                Undo.RecordObject(renderer, "AvatarVCS Apply BlendShapes");
+                var recorded = false;
 
                 foreach (var shape in group)
                 {
@@ -65,6 +65,17 @@ namespace AvatarVcs.Editor.AvatarReferences
                     {
                         Debug.LogWarning($"[AvatarVCS] Blend shape '{shape.name}' not found on '{where}'; skipped.");
                         continue;
+                    }
+                    // Only write when the value actually differs (KAN-72):
+                    // capture records every shape on every renderer, so an
+                    // unconditional write would stamp a prefab-instance
+                    // override on every renderer on every checkout.
+                    if (Mathf.Approximately(renderer.GetBlendShapeWeight(index), shape.weight)) continue;
+
+                    if (!recorded)
+                    {
+                        Undo.RecordObject(renderer, "AvatarVCS Apply BlendShapes");
+                        recorded = true;
                     }
                     renderer.SetBlendShapeWeight(index, shape.weight);
                 }
@@ -104,6 +115,12 @@ namespace AvatarVcs.Editor.AvatarReferences
                         Debug.LogWarning($"[AvatarVCS] Material GUID '{materialRef.guid}' could not be resolved for slot {materialRef.slot} on '{where}'; skipped.");
                         continue;
                     }
+
+                    // Only reassign when the slot actually points somewhere
+                    // else (KAN-72): capture records every slot on every
+                    // renderer, so an unconditional write would dirty the
+                    // renderer / add a prefab override on every checkout.
+                    if (materials[materialRef.slot] == material) continue;
 
                     materials[materialRef.slot] = material;
                     changed = true;

@@ -5,6 +5,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Checkout no longer stamps a prefab-instance override onto every tracked renderer. `AvatarReferenceApplier` now writes a BlendShape weight or material slot only when it actually differs from the live value (matching `GameObjectStateApplier`), so restoring a commit whose values already match leaves the prefab instance clean and keeps the Inspector's Overrides dropdown usable.
 - `Ensure Root` no longer creates an empty `[AvatarVCS]/container_1`. Default property tracking already covers the common case, and a loose prefab dropped under `[AvatarVCS]` is auto-wrapped into a container at commit time. README clarified: containers are for prefab add/remove/swap; property tracking is for BlendShape/material/field values.
 - Containers now version the BlendShape weights, material slots, and active/tag/layer state you adjust *inside* their prefab instances. On checkout the container is still regenerated from the prefab, then those recorded adjustments are re-applied on top — so "swap this outfit prefab" history and "keep my tweaks to it" no longer conflict.
 
