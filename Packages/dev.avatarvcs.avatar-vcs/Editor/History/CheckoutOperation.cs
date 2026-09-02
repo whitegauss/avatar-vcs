@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Core.History;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.MaterialSettings;
 using AvatarVcs.Editor.Operations;
 using AvatarVcs.Runtime;
@@ -33,22 +35,30 @@ namespace AvatarVcs.Editor.History
             var configRoot = ContainerManager.EnsureRoot(avatarRoot);
             var avatarGuid = configRoot.GetComponent<AvatarVcsRoot>().AvatarGuid;
 
+            // KAN-20: one DiagnosticLog for the whole operation. Every helper
+            // appends to it instead of calling Debug.LogWarning directly; we
+            // flush it to the console (unchanged behaviour) and also hand its
+            // entries to the CheckoutResult so a caller/test can inspect them.
+            var log = new DiagnosticLog();
+
             // Same capture BranchManager.Commit uses -- this safety-net
             // commit must preserve tracked BlendShape/material state too, or
             // it's silently lost the moment the checkout below overwrites it.
-            var (autoAvatarReferences, autoMaterialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
+            var (autoAvatarReferences, autoMaterialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot, log);
             var autoCommit = CommitBuilder.CreateCommit(
                 avatarRoot,
                 $"[auto] before checkout to {commit.commitId}",
                 sourceBranch,
                 autoCommitParentId,
                 autoAvatarReferences,
-                autoMaterialSettings);
+                autoMaterialSettings,
+                log);
             CommitStore.SaveCommit(avatarGuid, autoCommit);
 
-            var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid);
+            var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid, log);
 
-            return CheckoutResult.Success(autoCommit.commitId, versionWarnings);
+            UnityDiagnosticSink.Flush(log);
+            return CheckoutResult.Success(autoCommit.commitId, versionWarnings, log.Entries);
         }
 
         /// <summary>
@@ -72,9 +82,11 @@ namespace AvatarVcs.Editor.History
             var configRoot = ContainerManager.EnsureRoot(avatarRoot);
             var avatarGuid = configRoot.GetComponent<AvatarVcsRoot>().AvatarGuid;
 
-            var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid);
+            var log = new DiagnosticLog();
+            var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid, log);
 
-            return CheckoutResult.Success(null, versionWarnings);
+            UnityDiagnosticSink.Flush(log);
+            return CheckoutResult.Success(null, versionWarnings, log.Entries);
         }
 
         private static List<string> FindMissingPrefabs(Commit commit)
@@ -88,7 +100,7 @@ namespace AvatarVcs.Editor.History
             return missing;
         }
 
-        private static List<string> ApplyCommitToScene(Commit commit, GameObject avatarRoot, GameObject configRoot, string avatarGuid)
+        private static List<string> ApplyCommitToScene(Commit commit, GameObject avatarRoot, GameObject configRoot, string avatarGuid, DiagnosticLog log)
         {
             foreach (var existing in ContainerManager.GetContainers(configRoot).ToList())
                 Undo.DestroyObjectImmediate(existing.gameObject);
@@ -102,13 +114,13 @@ namespace AvatarVcs.Editor.History
             // next container is even created would fail to resolve such a
             // reference depending on commit.containers' order.
             var restoredContainers = commit.containers
-                .Select(snapshot => (snapshot, go: ContainerRestore.InstantiateContainerStructure(snapshot, configRoot)))
+                .Select(snapshot => (snapshot, go: ContainerRestore.InstantiateContainerStructure(snapshot, configRoot, log)))
                 .ToList();
             foreach (var (snapshot, go) in restoredContainers)
-                ContainerRestore.ApplyContainerComponents(snapshot, go, avatarRoot);
+                ContainerRestore.ApplyContainerComponents(snapshot, go, avatarRoot, log);
 
             foreach (var reference in commit.avatarReferences)
-                AvatarReferenceApplier.Apply(reference, avatarRoot.transform);
+                AvatarReferenceApplier.Apply(reference, avatarRoot.transform, log);
 
             var priorGeneratedGuids = commit.materialSettings.Select(m => m.generatedGuid).ToList();
             foreach (var materialSetting in commit.materialSettings)
@@ -120,11 +132,11 @@ namespace AvatarVcs.Editor.History
                 // and containers already destroyed/regenerated.
                 try
                 {
-                    MaterialSettingsApplier.Apply(materialSetting, avatarRoot);
+                    MaterialSettingsApplier.Apply(materialSetting, avatarRoot, log);
                 }
                 catch (Exception e) when (e is InvalidOperationException or NotSupportedException)
                 {
-                    Debug.LogWarning($"[AvatarVCS] Failed to apply material settings for slot {materialSetting.slot} "
+                    log.Warn($"[AvatarVCS] Failed to apply material settings for slot {materialSetting.slot} "
                         + $"on '{materialSetting.targetPath}': {e.Message}");
                 }
             }

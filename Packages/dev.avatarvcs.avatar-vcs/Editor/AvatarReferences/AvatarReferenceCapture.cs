@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
 using AvatarVcs.Runtime;
@@ -20,19 +22,31 @@ namespace AvatarVcs.Editor.AvatarReferences
     /// </summary>
     public static class AvatarReferenceCapture
     {
-        public static AvatarReferenceState Capture(Transform target, Transform avatarRoot)
+        public static AvatarReferenceState Capture(Transform target, Transform avatarRoot, DiagnosticLog log = null)
         {
             if (target == null) throw new ArgumentNullException(nameof(target));
             if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
 
-            var state = new AvatarReferenceState
+            // KAN-20: a caller mid-operation (a commit collecting every
+            // tracked target) passes its own DiagnosticLog; a direct caller
+            // (tests) passes none, so make one and flush it here.
+            var ownsLog = log == null;
+            log ??= new DiagnosticLog();
+            try
             {
-                path = ReferenceResolver.GetRelativePath(target, avatarRoot),
-            };
+                var state = new AvatarReferenceState
+                {
+                    path = ReferenceResolver.GetRelativePath(target, avatarRoot),
+                };
 
-            CaptureDescendantComponents(target, avatarRoot, state);
+                CaptureDescendantComponents(target, avatarRoot, state, log);
 
-            return state;
+                return state;
+            }
+            finally
+            {
+                if (ownsLog) UnityDiagnosticSink.Flush(log);
+            }
         }
 
         /// <summary>
@@ -87,7 +101,7 @@ namespace AvatarVcs.Editor.AvatarReferences
             }
         }
 
-        private static void CaptureDescendantComponents(Transform target, Transform avatarRoot, AvatarReferenceState state)
+        private static void CaptureDescendantComponents(Transform target, Transform avatarRoot, AvatarReferenceState state, DiagnosticLog log)
         {
             var vcsRoot = ContainerManager.FindRoot(avatarRoot.gameObject)?.transform;
 
@@ -165,7 +179,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                         continue;
                     }
 
-                    var captured = ComponentCapturer.Capture(component, target, avatarRoot);
+                    var captured = ComponentCapturer.Capture(component, target, avatarRoot, log);
                     StripNarrowlyTrackedFields(component, captured);
 
                     if (captured.fields.Count == 0 && captured.assetRefs.Count == 0 && captured.sceneRefs.Count == 0)

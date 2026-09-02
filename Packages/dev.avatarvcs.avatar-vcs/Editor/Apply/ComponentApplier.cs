@@ -1,6 +1,8 @@
 using System;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Core.Reflection;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -47,10 +49,31 @@ namespace AvatarVcs.Editor.Apply
         /// as long as the component has no scene references pointing outside
         /// the container.
         /// </summary>
-        public static ApplyResult Apply(ComponentState state, GameObject containerRoot, GameObject avatarRoot = null, bool createIfMissing = false)
+        public static ApplyResult Apply(ComponentState state, GameObject containerRoot, GameObject avatarRoot = null,
+            bool createIfMissing = false, DiagnosticLog log = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (containerRoot == null) throw new ArgumentNullException(nameof(containerRoot));
+
+            // KAN-20: collect skipped-field warnings into a DiagnosticLog. A
+            // caller mid-operation passes its own; a direct caller (tests)
+            // passes none, so make one and flush it to the console here so
+            // existing LogAssert expectations still see the warnings.
+            var ownsLog = log == null;
+            log ??= new DiagnosticLog();
+            try
+            {
+                return ApplyCore(state, containerRoot, avatarRoot, createIfMissing, log);
+            }
+            finally
+            {
+                if (ownsLog) UnityDiagnosticSink.Flush(log);
+            }
+        }
+
+        private static ApplyResult ApplyCore(ComponentState state, GameObject containerRoot, GameObject avatarRoot,
+            bool createIfMissing, DiagnosticLog log)
+        {
             avatarRoot ??= containerRoot;
 
             if (PrefabUtility.IsPartOfPrefabAsset(containerRoot))
@@ -91,18 +114,18 @@ namespace AvatarVcs.Editor.Apply
             {
                 if (ReservedPropertyNames.Names.Contains(field.key))
                 {
-                    Debug.LogWarning($"[AvatarVCS] Refusing to write reserved property '{field.key}' on {state.type} at '{state.path}'; skipped.");
+                    log.Warn($"[AvatarVCS] Refusing to write reserved property '{field.key}' on {state.type} at '{state.path}'; skipped.");
                     continue;
                 }
 
                 var prop = so.FindProperty(field.key);
                 if (prop == null)
                 {
-                    Debug.LogWarning($"[AvatarVCS] Unknown field '{field.key}' on {state.type} at '{state.path}' was skipped.");
+                    log.Warn($"[AvatarVCS] Unknown field '{field.key}' on {state.type} at '{state.path}' was skipped.");
                     continue;
                 }
                 if (!FieldCodec.TryDecode(prop, field.type, field.value))
-                    Debug.LogWarning($"[AvatarVCS] Could not decode field '{field.key}' (type '{field.type}') on {state.type}.");
+                    log.Warn($"[AvatarVCS] Could not decode field '{field.key}' (type '{field.type}') on {state.type}.");
             }
 
             foreach (var assetRef in state.assetRefs)
@@ -115,14 +138,14 @@ namespace AvatarVcs.Editor.Apply
                 // this component.
                 if (ReservedPropertyNames.Names.Contains(assetRef.key))
                 {
-                    Debug.LogWarning($"[AvatarVCS] Refusing to write reserved property '{assetRef.key}' on {state.type} at '{state.path}'; skipped.");
+                    log.Warn($"[AvatarVCS] Refusing to write reserved property '{assetRef.key}' on {state.type} at '{state.path}'; skipped.");
                     continue;
                 }
 
                 var prop = so.FindProperty(assetRef.key);
                 if (prop == null)
                 {
-                    Debug.LogWarning($"[AvatarVCS] Unknown asset reference '{assetRef.key}' on {state.type} at '{state.path}' was skipped.");
+                    log.Warn($"[AvatarVCS] Unknown asset reference '{assetRef.key}' on {state.type} at '{state.path}' was skipped.");
                     continue;
                 }
 
@@ -135,21 +158,21 @@ namespace AvatarVcs.Editor.Apply
             {
                 if (ReservedPropertyNames.Names.Contains(sceneRef.key))
                 {
-                    Debug.LogWarning($"[AvatarVCS] Refusing to write reserved property '{sceneRef.key}' on {state.type} at '{state.path}'; skipped.");
+                    log.Warn($"[AvatarVCS] Refusing to write reserved property '{sceneRef.key}' on {state.type} at '{state.path}'; skipped.");
                     continue;
                 }
 
                 var prop = so.FindProperty(sceneRef.key);
                 if (prop == null)
                 {
-                    Debug.LogWarning($"[AvatarVCS] Unknown scene reference '{sceneRef.key}' on {state.type} at '{state.path}' was skipped.");
+                    log.Warn($"[AvatarVCS] Unknown scene reference '{sceneRef.key}' on {state.type} at '{state.path}' was skipped.");
                     continue;
                 }
 
                 var referencedTransform = ReferenceResolver.ResolvePath(sceneRef.path, avatarRoot.transform);
                 if (referencedTransform == null)
                 {
-                    Debug.LogWarning($"[AvatarVCS] Scene reference path '{sceneRef.path}' for '{sceneRef.key}' on {state.type} could not be resolved and was skipped.");
+                    log.Warn($"[AvatarVCS] Scene reference path '{sceneRef.path}' for '{sceneRef.key}' on {state.type} could not be resolved and was skipped.");
                     continue;
                 }
 

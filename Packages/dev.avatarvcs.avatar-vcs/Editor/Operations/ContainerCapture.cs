@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
 using AvatarVcs.Runtime;
@@ -21,7 +23,7 @@ namespace AvatarVcs.Editor.Operations
         /// avatarRoot is used only to resolve scene-reference fields (see
         /// ComponentCapturer); it defaults to container when omitted.
         /// </summary>
-        public static ContainerSnapshot CaptureContainer(Transform container, Transform avatarRoot = null)
+        public static ContainerSnapshot CaptureContainer(Transform container, Transform avatarRoot = null, DiagnosticLog log = null)
         {
             if (container == null) throw new ArgumentNullException(nameof(container));
             avatarRoot ??= container;
@@ -30,6 +32,22 @@ namespace AvatarVcs.Editor.Operations
             if (marker == null)
                 throw new ArgumentException($"'{container.name}' is not an AvatarVCS container (missing AvatarVcsContainer).", nameof(container));
 
+            // KAN-20: a caller mid-commit passes its own DiagnosticLog; a
+            // direct caller (tests) passes none, so make one and flush here.
+            var ownsLog = log == null;
+            log ??= new DiagnosticLog();
+            try
+            {
+                return CaptureCore(container, avatarRoot, marker, log);
+            }
+            finally
+            {
+                if (ownsLog) UnityDiagnosticSink.Flush(log);
+            }
+        }
+
+        private static ContainerSnapshot CaptureCore(Transform container, Transform avatarRoot, AvatarVcsContainer marker, DiagnosticLog log)
+        {
             ReferenceResolver.WarnOnSameNameSiblings(container, $"container '{container.name}'");
 
             var childGuids = container.Cast<Transform>()
@@ -49,7 +67,7 @@ namespace AvatarVcs.Editor.Operations
             foreach (var (child, guid) in childGuids)
             {
                 if (string.IsNullOrEmpty(guid))
-                    Debug.LogWarning($"[AvatarVCS] '{child.name}' inside container '{container.name}' is not a prefab "
+                    log.Warn($"[AvatarVCS] '{child.name}' inside container '{container.name}' is not a prefab "
                         + "instance and will be permanently lost the next time this container is checked out. "
                         + "Turn it into a prefab and place the instance in the container instead.");
             }
@@ -61,7 +79,7 @@ namespace AvatarVcs.Editor.Operations
             // by re-instantiating the prefab, not by capturing them here.
             var components = container.GetComponents<Component>()
                 .Where(c => c != null && c is not Transform && c is not AvatarVcsContainer)
-                .Select(c => ComponentCapturer.Capture(c, container, avatarRoot))
+                .Select(c => ComponentCapturer.Capture(c, container, avatarRoot, log))
                 .ToList();
 
             // KAN-70: containers regenerate their prefab instances clean on

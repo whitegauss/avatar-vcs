@@ -1,3 +1,4 @@
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Editor.Apply;
 using NUnit.Framework;
 using UnityEngine;
@@ -11,15 +12,20 @@ namespace AvatarVcs.Tests.Editor
     /// AvatarReferenceApplier.ApplyObjectStates -- extracted after the same
     /// "GameObject.tag doesn't throw for an undefined tag" bug was
     /// independently found and fixed in both call sites.
+    ///
+    /// KAN-20: Apply no longer returns a warning string; it appends to a
+    /// DiagnosticLog the caller owns.
     /// </summary>
     public class GameObjectStateApplierTests
     {
         private GameObject go;
+        private DiagnosticLog log;
 
         [SetUp]
         public void SetUp()
         {
             go = new GameObject("Target");
+            log = new DiagnosticLog();
         }
 
         [TearDown]
@@ -32,35 +38,37 @@ namespace AvatarVcs.Tests.Editor
         public void Apply_NullGameObject_ThrowsArgumentNullException()
         {
             Assert.Throws<System.ArgumentNullException>(() =>
-                GameObjectStateApplier.Apply(null, activeSelf: true, tag: "Player", layer: 0, "context", "Undo"));
+                GameObjectStateApplier.Apply(null, activeSelf: true, tag: "Player", layer: 0, "context", "Undo", log));
         }
 
         [Test]
-        public void Apply_SetsActiveSelfAndLayer_NoTagRecorded_ReturnsNull()
+        public void Apply_SetsActiveSelfAndLayer_NoTagRecorded_LogsNothing()
         {
-            var warning = GameObjectStateApplier.Apply(go, activeSelf: false, tag: null, layer: 3, "context", "Undo");
+            GameObjectStateApplier.Apply(go, activeSelf: false, tag: null, layer: 3, "context", "Undo", log);
 
-            Assert.IsNull(warning);
+            Assert.IsTrue(log.IsEmpty);
             Assert.IsFalse(go.activeSelf);
             Assert.AreEqual(3, go.layer);
             Assert.AreEqual("Untagged", go.tag);
         }
 
         [Test]
-        public void Apply_DefinedTag_SetsItAndReturnsNull()
+        public void Apply_DefinedTag_SetsItAndLogsNothing()
         {
-            var warning = GameObjectStateApplier.Apply(go, activeSelf: true, tag: "Player", layer: 0, "context", "Undo");
+            GameObjectStateApplier.Apply(go, activeSelf: true, tag: "Player", layer: 0, "context", "Undo", log);
 
-            Assert.IsNull(warning);
+            Assert.IsTrue(log.IsEmpty);
             Assert.AreEqual("Player", go.tag);
         }
 
         [Test]
-        public void Apply_UndefinedTag_LeavesTagUnchangedAndReturnsWarning()
+        public void Apply_UndefinedTag_LeavesTagUnchangedAndWarns()
         {
-            var warning = GameObjectStateApplier.Apply(go, activeSelf: true, tag: "ThisTagDoesNotExist_12345", layer: 0, "the widget", "Undo");
+            GameObjectStateApplier.Apply(go, activeSelf: true, tag: "ThisTagDoesNotExist_12345", layer: 0, "the widget", "Undo", log);
 
-            Assert.IsNotNull(warning);
+            Assert.AreEqual(1, log.Entries.Count);
+            Assert.AreEqual(DiagnosticSeverity.Warning, log.Entries[0].Severity);
+            var warning = log.Entries[0].Message;
             StringAssert.Contains("ThisTagDoesNotExist_12345", warning);
             StringAssert.Contains("the widget", warning);
             StringAssert.Contains("not defined in this project's Tag Manager", warning);
@@ -72,9 +80,9 @@ namespace AvatarVcs.Tests.Editor
         {
             go.tag = "Player";
 
-            var warning = GameObjectStateApplier.Apply(go, activeSelf: true, tag: "Player", layer: 0, "context", "Undo");
+            GameObjectStateApplier.Apply(go, activeSelf: true, tag: "Player", layer: 0, "context", "Undo", log);
 
-            Assert.IsNull(warning);
+            Assert.IsTrue(log.IsEmpty);
             Assert.AreEqual("Player", go.tag);
         }
     }

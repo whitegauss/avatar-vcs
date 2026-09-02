@@ -351,6 +351,12 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.IsTrue(result.IsSuccess,
                 "one bad material setting must not abort the whole checkout, leaving containers already destroyed/regenerated but nothing else applied");
+
+            // KAN-20: the same warning is also surfaced on the result, not
+            // only written to the console.
+            Assert.IsTrue(
+                result.Diagnostics.Any(d => d.Message.Contains("Failed to apply material settings")),
+                "the non-fatal failure should be reported in CheckoutResult.Diagnostics");
         }
 
         [Test]

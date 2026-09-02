@@ -1,7 +1,9 @@
 using System;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Core.History;
 using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Core.Model;
 using UnityEngine;
 
@@ -24,14 +26,19 @@ namespace AvatarVcs.Editor.History
             var config = CommitStore.LoadConfig(avatarGuid);
 
             var currentHead = BranchConfigOps.HeadOf(config, config.currentBranch);
-            var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
+
+            // KAN-20: one DiagnosticLog for the whole commit; capture helpers
+            // append to it and it is flushed to the console once at the end.
+            var log = new DiagnosticLog();
+            var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot, log);
             var commit = CommitBuilder.CreateCommit(
-                avatarRoot, message, config.currentBranch, currentHead, avatarReferences, materialSettings);
+                avatarRoot, message, config.currentBranch, currentHead, avatarReferences, materialSettings, log);
             CommitStore.SaveCommit(avatarGuid, commit);
 
             BranchConfigOps.SetHead(config, config.currentBranch, commit.commitId);
             CommitStore.SaveConfig(avatarGuid, config);
 
+            UnityDiagnosticSink.Flush(log);
             return commit;
         }
 
