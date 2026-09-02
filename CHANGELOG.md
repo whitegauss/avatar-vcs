@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- `Ensure Root` no longer creates an empty `[AvatarVCS]/container_1`. Default property tracking already covers the common case, and a loose prefab dropped under `[AvatarVCS]` is auto-wrapped into a container at commit time. README clarified: containers are for prefab add/remove/swap; property tracking is for BlendShape/material/field values.
+
 ## [0.3.0-poc] - 2026-09-02
 
 ### Fixed

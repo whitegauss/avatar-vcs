@@ -57,15 +57,26 @@ https://github.com/whitegauss/avatar-vcs.git?path=Packages/dev.avatarvcs.avatar-
 
 ## 使い方
 
-### 1. コンテナを作る
+### 1. 準備する（Ensure Root）
 
-Hierarchy でアバターのルート GameObject を選択し、`GameObject > AvatarVCS > Ensure Root` で管理ルート `[AvatarVCS]` を作成します。1つの Prefab を管理したいだけなら、その Prefab インスタンスを `[AvatarVCS]` 直下に配置するだけで OK です(コミット時に自動でコンテナに包まれます。`Create Container` を手動で呼ぶ必要はありません)。複数の Prefab をまとめて1つの切り替え単位にしたい場合(例: `hair_long` としてまとめて2つの Prefab を切り替えたい)は、`Create Container` でコンテナを作り、その下に配置してください。
+Hierarchy でアバターのルート GameObject を選択し、`GameObject > AvatarVCS > Ensure Root` で管理ルート `[AvatarVCS]` を作成します。この時点でアバタールートと直下の子（Body / Armature など）は自動で追跡対象になります（空のコンテナは作られません）。
 
-### 2. コミットする
+AvatarVCS には**役割の違う2つの仕組み**があります。
 
-`Window > AvatarVCS` から開く EditorWindow の Commit バーで、現在のコンテナ構成をコミットとして記録します。コミット・checkout・ブランチ操作はすべてこの EditorWindow から行います(選択中のオブジェクトをそのまま「アバター」として扱ってしまう誤操作を防ぐため、GameObject メニューには置いていません)。
+- **プロパティの版管理（Track Properties）**: 既存オブジェクトの BlendShape weight・マテリアル参照・lilToon 設定・tag・active・各種フィールド値を記録し、checkout で**その場で上書き**します。構造（オブジェクト／コンポーネントの増減）は一切触りません。既定でアバタールート配下が対象なので、通常はここに何もしなくて OK。特定サブツリーを外したいときだけ `Untrack Properties Here`。
+- **構造の版管理（コンテナ）**: Prefab の**追加・削除・入れ替え**を記録します。checkout で中身を**破棄して Prefab から再生成**します。「髪ロング版」と「髪ショート版」で Prefab そのものを切り替えたい、というときに使います。
 
-### 3. ブランチ・履歴を操作する
+### 2. コンテナ（Prefab 差し替えをしたい場合のみ）
+
+1つの Prefab を差し替え単位にしたいだけなら、その Prefab インスタンスを `[AvatarVCS]` 直下に配置するだけで OK です（コミット時に自動でコンテナに包まれます。`Create Container` を手動で呼ぶ必要はありません）。複数の Prefab をまとめて1つの切り替え単位にしたい場合（例: `hair_long` としてまとめて2つの Prefab を切り替えたい）は、`Create Container` でコンテナを作り、その下に配置してください。
+
+> コンテナは checkout で Prefab から再生成されるため、**コンテナの中で行った BlendShape やマテリアルの調整は現状バージョン管理されません**（Prefab の既定値に戻ります）。そうした調整値も版管理したい場合は、その部分をコンテナに入れず通常の子として置き、Track Properties の対象にしてください。
+
+### 3. コミットする
+
+`Window > AvatarVCS` から開く EditorWindow の Commit バーで、現在の構成をコミットとして記録します。コミット・checkout・ブランチ操作はすべてこの EditorWindow から行います(選択中のオブジェクトをそのまま「アバター」として扱ってしまう誤操作を防ぐため、GameObject メニューには置いていません)。
+
+### 4. ブランチ・履歴を操作する
 
 EditorWindow (`Window > AvatarVCS`、またはアバターの GameObject を選択した状態で `GameObject > AvatarVCS > Open Window` を使うとアバターが自動セットされた状態で開けます) で以下が行えます。
 
