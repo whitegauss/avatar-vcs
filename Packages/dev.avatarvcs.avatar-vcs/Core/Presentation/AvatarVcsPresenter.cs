@@ -242,7 +242,8 @@ namespace AvatarVcs.Core.Presentation
 
         // ---- commit / branch ----
 
-        public void CommitCurrent(string message)
+        /// <summary>Returns true when the commit succeeded (so the view can clear its message field).</summary>
+        public bool CommitCurrent(string message)
         {
             var resolved = string.IsNullOrEmpty(message) ? "Manual commit" : message;
             try
@@ -252,17 +253,19 @@ namespace AvatarVcs.Core.Presentation
             catch (InvalidOperationException e)
             {
                 prompt.Alert("Commit Failed", e.Message);
-                return;
+                return false;
             }
 
             // The very first commit creates the root (and its guid).
             avatarGuid = gateway.FindAvatarGuid();
             Reload();
+            return true;
         }
 
         public bool CanCreateBranch(string name) => BranchConfigOps.CanCreate(config, name);
 
-        public void CreateBranch(string name)
+        /// <summary>Returns true when the branch was created (so the view can clear its input).</summary>
+        public bool CreateBranch(string name)
         {
             try
             {
@@ -271,10 +274,11 @@ namespace AvatarVcs.Core.Presentation
             catch (Exception e) when (e is ArgumentException or InvalidOperationException)
             {
                 prompt.Alert("Create Branch Failed", e.Message);
-                return;
+                return false;
             }
 
             Reload();
+            return true;
         }
 
         public void SwitchBranch(string name)
