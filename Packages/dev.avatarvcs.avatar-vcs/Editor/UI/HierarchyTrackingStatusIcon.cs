@@ -10,6 +10,13 @@ namespace AvatarVcs.Editor.UI
         None,
         TrackedReference,
         ContainerManaged,
+
+        /// <summary>
+        /// Explicitly opted out via AvatarVcsUntracked, at this object or an
+        /// ancestor -- not captured, even if a tracked ancestor's recursive
+        /// walk would otherwise reach it (KAN-11).
+        /// </summary>
+        Untracked,
     }
 
     /// <summary>
@@ -36,15 +43,15 @@ namespace AvatarVcs.Editor.UI
 
         /// <summary>
         /// GetComponentInParent checks go itself before walking ancestors, so
-        /// this covers both "the marker is directly on go" and "an
-        /// ancestor's marker's recursive capture already walks down into
-        /// go" in one call -- a descendant with no marker of its own is
-        /// still genuinely captured via that ancestor (AvatarReferenceCapture
-        /// walks every descendant of a marked target), so it must show the
-        /// same status. ContainerManaged is checked first: anything under
-        /// "[AvatarVCS]" is unconditionally skipped by AvatarReferenceCapture
-        /// regardless of a stray AvatarVcsTrackedReference placed there, so
-        /// container status must win over it, matching that real behavior.
+        /// each check covers both "the marker is directly on go" and "an
+        /// ancestor's marker applies to go" in one call.
+        /// Priority, matching AvatarReferenceCapture's real behaviour:
+        /// ContainerManaged (anything under "[AvatarVCS]" is unconditionally
+        /// skipped, even with a stray AvatarVcsTrackedReference there) >
+        /// Untracked (AvatarVcsUntracked excludes its subtree even from a
+        /// tracked ancestor's recursive walk, KAN-11) > TrackedReference (a
+        /// descendant with no marker of its own is still genuinely captured
+        /// via a marked ancestor) > None.
         /// </summary>
         public static HierarchyTrackingStatus GetTrackingStatus(GameObject go)
         {
@@ -53,6 +60,9 @@ namespace AvatarVcs.Editor.UI
             if (go.GetComponentInParent<AvatarVcsRoot>(includeInactive: true) != null)
                 return HierarchyTrackingStatus.ContainerManaged;
 
+            if (go.GetComponentInParent<AvatarVcsUntracked>(includeInactive: true) != null)
+                return HierarchyTrackingStatus.Untracked;
+
             if (go.GetComponentInParent<AvatarVcsTrackedReference>(includeInactive: true) != null)
                 return HierarchyTrackingStatus.TrackedReference;
 
@@ -60,16 +70,19 @@ namespace AvatarVcs.Editor.UI
         }
 
         /// <summary>
-        /// True only for the exception worth flagging: go is part of an
-        /// avatar actually under AvatarVCS management (the avatar root
-        /// itself, or somewhere underneath it) AND isn't covered by either
-        /// tracking mechanism. Without the management-scope check, every
-        /// unrelated GameObject in the whole scene (lights, cameras, objects
-        /// with nothing to do with any avatar) would get flagged too,
-        /// drowning out the actual signal.
+        /// True for an object worth flagging as "won't round-trip through
+        /// commit/checkout": part of an avatar actually under AvatarVCS
+        /// management, and either covered by no tracking mechanism (None) or
+        /// explicitly opted out (Untracked). The management-scope check keeps
+        /// every unrelated GameObject in the scene (lights, cameras, ...)
+        /// from lighting up and drowning out the signal.
         /// </summary>
-        public static bool ShouldShowUntrackedMarker(GameObject go) =>
-            go != null && GetTrackingStatus(go) == HierarchyTrackingStatus.None && ContainerManager.IsUnderManagedAvatar(go);
+        public static bool ShouldShowUntrackedMarker(GameObject go)
+        {
+            if (go == null || !ContainerManager.IsUnderManagedAvatar(go)) return false;
+            var status = GetTrackingStatus(go);
+            return status is HierarchyTrackingStatus.None or HierarchyTrackingStatus.Untracked;
+        }
 
         private static void OnHierarchyItemGUI(int instanceId, Rect selectionRect)
         {

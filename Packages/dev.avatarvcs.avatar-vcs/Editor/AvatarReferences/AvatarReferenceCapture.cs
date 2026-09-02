@@ -103,6 +103,13 @@ namespace AvatarVcs.Editor.AvatarReferences
                 // does.
                 if (vcsRoot != null && descendant.IsChildOf(vcsRoot)) continue;
 
+                // AvatarVcsUntracked opts a subtree back out even though an
+                // ancestor target is tracked -- the "don't version-control
+                // this outfit" exclusion (KAN-11). GetComponentInParent
+                // includes descendant itself, so this drops the marked node
+                // and everything under it.
+                if (descendant.GetComponentInParent<AvatarVcsUntracked>(includeInactive: true) != null) continue;
+
                 var relPath = ReferenceResolver.GetRelativePath(descendant, target);
 
                 // activeSelf/tag/layer live on the GameObject itself, not on
