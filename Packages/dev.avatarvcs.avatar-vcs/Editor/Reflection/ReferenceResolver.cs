@@ -31,10 +31,17 @@ namespace AvatarVcs.Editor.Reflection
             while (queue.Count > 0)
             {
                 var node = queue.Dequeue();
-                foreach (var group in node.Cast<Transform>().GroupBy(c => c.name).Where(g => g.Count() > 1))
-                    Debug.LogWarning($"[AvatarVCS] {context}: '{node.name}' has {group.Count()} children named '{group.Key}'. "
+
+                var dupes = node.Cast<Transform>()
+                    .GroupBy(c => c.name)
+                    .Where(g => g.Count() > 1)
+                    .ToList();
+                if (dupes.Count > 0)
+                    Debug.LogWarning($"[AvatarVCS] {context}: '{node.name}' has same-named children ("
+                        + string.Join(", ", dupes.Select(g => $"'{g.Key}' x{g.Count()}")) + "). "
                         + "Path-based restore can't tell same-named siblings apart, so their tracked state may be "
                         + "restored onto the wrong one -- give them unique names.");
+
                 foreach (Transform child in node)
                     queue.Enqueue(child);
             }

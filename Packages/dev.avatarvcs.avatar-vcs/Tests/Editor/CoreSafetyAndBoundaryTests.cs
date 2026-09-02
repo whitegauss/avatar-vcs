@@ -179,20 +179,22 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
-        public void ContainerCapture_SameNameSiblingsInContainer_LogsWarning()
+        public void ContainerCapture_SameNameSiblingsInContainer_LogsOneCombinedWarning()
         {
             var root = ContainerManager.EnsureRoot(avatarRoot);
             var container = ContainerManager.CreateContainer(root, "outfit_a");
-            new GameObject("Dup").transform.SetParent(container.transform);
-            new GameObject("Dup").transform.SetParent(container.transform);
+            foreach (var name in new[] { "Dup", "Dup", "Two", "Two" })
+                new GameObject(name).transform.SetParent(container.transform);
 
+            // Two duplicated name groups on one node -> exactly one warning
+            // naming both. (A second Expect here that never matches would
+            // fail the test, so this also pins "one, not per-group".)
             LogAssert.Expect(LogType.Warning,
-                new System.Text.RegularExpressions.Regex("'outfit_a' has 2 children named 'Dup'"));
-            // The two plain children also trip the existing non-prefab warning.
-            LogAssert.Expect(LogType.Warning,
-                new System.Text.RegularExpressions.Regex("'Dup' inside container 'outfit_a' is not a prefab instance"));
-            LogAssert.Expect(LogType.Warning,
-                new System.Text.RegularExpressions.Regex("'Dup' inside container 'outfit_a' is not a prefab instance"));
+                new System.Text.RegularExpressions.Regex(@"'outfit_a' has same-named children \(.*'Dup' x2.*'Two' x2.*\)"));
+            // Each loose child also trips the existing non-prefab warning.
+            for (var i = 0; i < 4; i++)
+                LogAssert.Expect(LogType.Warning,
+                    new System.Text.RegularExpressions.Regex("inside container 'outfit_a' is not a prefab instance"));
 
             Assert.DoesNotThrow(() => ContainerCapture.CaptureContainer(container.transform));
         }
