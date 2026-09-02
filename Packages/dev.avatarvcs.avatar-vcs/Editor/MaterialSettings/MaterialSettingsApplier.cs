@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Core.MaterialSettings;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
@@ -24,11 +26,30 @@ namespace AvatarVcs.Editor.MaterialSettings
     /// </summary>
     public static class MaterialSettingsApplier
     {
-        public static Material Apply(MaterialSettingsState state, GameObject avatarRoot)
+        public static Material Apply(MaterialSettingsState state, GameObject avatarRoot, DiagnosticLog log = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
 
+            // KAN-20: per-property "couldn't apply that one" warnings collect
+            // into a DiagnosticLog. A caller mid-checkout passes its own; a
+            // direct caller (tests) passes none, so make one and flush it --
+            // even on the throw path, so warnings logged before the throw
+            // still reach the console.
+            var ownsLog = log == null;
+            log ??= new DiagnosticLog();
+            try
+            {
+                return ApplyCore(state, avatarRoot, log);
+            }
+            finally
+            {
+                if (ownsLog) UnityDiagnosticSink.Flush(log);
+            }
+        }
+
+        private static Material ApplyCore(MaterialSettingsState state, GameObject avatarRoot, DiagnosticLog log)
+        {
             if (!ShaderPropertyMap.IsSupported(state.shader))
                 throw new NotSupportedException($"Shader '{state.shader}' is not supported (see ShaderPropertyMap).");
 
@@ -71,7 +92,7 @@ namespace AvatarVcs.Editor.MaterialSettings
                 var existing = string.IsNullOrEmpty(existingPath) ? null : AssetDatabase.LoadAssetAtPath<Material>(existingPath);
                 if (existing != null)
                 {
-                    ApplyProperties(existing, state.properties);
+                    ApplyProperties(existing, state.properties, log);
                     AssetDatabase.SaveAssets();
                     PointRendererAt(renderer, state.slot, state.targetPath, existing);
                     return existing;
@@ -80,7 +101,7 @@ namespace AvatarVcs.Editor.MaterialSettings
 
             // Copy-constructing reads sourceMaterial but never writes to it.
             var duplicate = new Material(sourceMaterial) { name = sourceMaterial.name + "_avatarvcs" };
-            ApplyProperties(duplicate, state.properties);
+            ApplyProperties(duplicate, state.properties, log);
 
             var directory = System.IO.Path.GetDirectoryName(sourcePath)?.Replace('\\', '/');
             if (string.IsNullOrEmpty(directory) || directory.StartsWith("Packages/") || directory == "Packages")
@@ -106,7 +127,7 @@ namespace AvatarVcs.Editor.MaterialSettings
             return duplicate;
         }
 
-        private static void ApplyProperties(Material material, List<MaterialPropertyValue> properties)
+        private static void ApplyProperties(Material material, List<MaterialPropertyValue> properties, DiagnosticLog log)
         {
             // A null material here means the just-created/reused duplicate
             // failed to load (line ~101). Now that the per-property loop also
@@ -122,7 +143,7 @@ namespace AvatarVcs.Editor.MaterialSettings
             {
                 if (!material.HasProperty(property.name))
                 {
-                    Debug.LogWarning($"[AvatarVCS] Duplicate material has no property '{property.name}'; skipped.");
+                    log.Warn($"[AvatarVCS] Duplicate material has no property '{property.name}'; skipped.");
                     continue;
                 }
 
@@ -143,7 +164,7 @@ namespace AvatarVcs.Editor.MaterialSettings
                             material.SetFloat(property.name, float.Parse(property.value, CultureInfo.InvariantCulture));
                             break;
                         default:
-                            Debug.LogWarning($"[AvatarVCS] Unsupported material property type '{property.type}' for '{property.name}' was skipped.");
+                            log.Warn($"[AvatarVCS] Unsupported material property type '{property.type}' for '{property.name}' was skipped.");
                             break;
                     }
                 }
@@ -153,7 +174,7 @@ namespace AvatarVcs.Editor.MaterialSettings
                 // gets to throw ArgumentNullException.
                 catch (Exception e) when (e is FormatException or OverflowException or IndexOutOfRangeException or ArgumentNullException or NullReferenceException)
                 {
-                    Debug.LogWarning($"[AvatarVCS] Could not parse material property '{property.name}' (type '{property.type}', value '{property.value}'): {e.Message}; skipped.");
+                    log.Warn($"[AvatarVCS] Could not parse material property '{property.name}' (type '{property.type}', value '{property.value}'): {e.Message}; skipped.");
                 }
             }
         }

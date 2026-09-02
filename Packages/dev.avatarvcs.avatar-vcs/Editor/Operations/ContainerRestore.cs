@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.AvatarReferences;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
@@ -36,12 +38,24 @@ namespace AvatarVcs.Editor.Operations
         /// components are applied) fails to resolve, even though both
         /// containers exist by the end of the full checkout.
         /// </summary>
-        public static GameObject InstantiateContainer(ContainerSnapshot snapshot, GameObject root)
+        public static GameObject InstantiateContainer(ContainerSnapshot snapshot, GameObject root, DiagnosticLog log = null)
         {
-            var containerGo = InstantiateContainerStructure(snapshot, root);
-            var avatarRoot = root.transform.parent != null ? root.transform.parent.gameObject : root;
-            ApplyContainerComponents(snapshot, containerGo, avatarRoot);
-            return containerGo;
+            // KAN-20: own a DiagnosticLog for the whole single-container
+            // restore and hand it to both passes so they don't each make and
+            // flush their own; a caller mid-checkout passes its own instead.
+            var ownsLog = log == null;
+            log ??= new DiagnosticLog();
+            try
+            {
+                var containerGo = InstantiateContainerStructure(snapshot, root, log);
+                var avatarRoot = root.transform.parent != null ? root.transform.parent.gameObject : root;
+                ApplyContainerComponents(snapshot, containerGo, avatarRoot, log);
+                return containerGo;
+            }
+            finally
+            {
+                if (ownsLog) UnityDiagnosticSink.Flush(log);
+            }
         }
 
         /// <summary>
@@ -51,11 +65,25 @@ namespace AvatarVcs.Editor.Operations
         /// ApplyContainerComponents applies as a separate second pass (see
         /// InstantiateContainer's doc comment for why the split matters).
         /// </summary>
-        public static GameObject InstantiateContainerStructure(ContainerSnapshot snapshot, GameObject root)
+        public static GameObject InstantiateContainerStructure(ContainerSnapshot snapshot, GameObject root, DiagnosticLog log = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (root == null) throw new ArgumentNullException(nameof(root));
 
+            var ownsLog = log == null;
+            log ??= new DiagnosticLog();
+            try
+            {
+                return InstantiateContainerStructureCore(snapshot, root, log);
+            }
+            finally
+            {
+                if (ownsLog) UnityDiagnosticSink.Flush(log);
+            }
+        }
+
+        private static GameObject InstantiateContainerStructureCore(ContainerSnapshot snapshot, GameObject root, DiagnosticLog log)
+        {
             var existing = root.transform.Find(snapshot.containerId);
             if (existing != null)
                 Undo.DestroyObjectImmediate(existing.gameObject);
@@ -67,9 +95,8 @@ namespace AvatarVcs.Editor.Operations
             containerGo.transform.localRotation = snapshot.localRotation;
             containerGo.transform.localScale = snapshot.localScale;
 
-            var tagWarning = GameObjectStateApplier.Apply(containerGo, snapshot.activeSelf, snapshot.tag, snapshot.layer,
-                $"container '{snapshot.containerId}'", "Restore AvatarVCS Container");
-            if (tagWarning != null) Debug.LogWarning(tagWarning);
+            GameObjectStateApplier.Apply(containerGo, snapshot.activeSelf, snapshot.tag, snapshot.layer,
+                $"container '{snapshot.containerId}'", "Restore AvatarVCS Container", log);
 
             var marker = Undo.AddComponent<AvatarVcsContainer>(containerGo);
             marker.AssignGuid(snapshot.containerGuid);
@@ -98,11 +125,25 @@ namespace AvatarVcs.Editor.Operations
         /// applying any container's components -- see InstantiateContainer's
         /// doc comment.
         /// </summary>
-        public static void ApplyContainerComponents(ContainerSnapshot snapshot, GameObject containerGo, GameObject avatarRoot)
+        public static void ApplyContainerComponents(ContainerSnapshot snapshot, GameObject containerGo, GameObject avatarRoot, DiagnosticLog log = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (containerGo == null) throw new ArgumentNullException(nameof(containerGo));
 
+            var ownsLog = log == null;
+            log ??= new DiagnosticLog();
+            try
+            {
+                ApplyContainerComponentsCore(snapshot, containerGo, avatarRoot, log);
+            }
+            finally
+            {
+                if (ownsLog) UnityDiagnosticSink.Flush(log);
+            }
+        }
+
+        private static void ApplyContainerComponentsCore(ContainerSnapshot snapshot, GameObject containerGo, GameObject avatarRoot, DiagnosticLog log)
+        {
             foreach (var componentState in snapshot.components)
             {
                 // ComponentApplier.Apply reports expected failures via
@@ -119,9 +160,9 @@ namespace AvatarVcs.Editor.Operations
                 // rather than degrade silently to a green checkout.
                 try
                 {
-                    var result = ComponentApplier.Apply(componentState, containerGo, avatarRoot, createIfMissing: true);
+                    var result = ComponentApplier.Apply(componentState, containerGo, avatarRoot, createIfMissing: true, log);
                     if (!result.IsSuccess)
-                        Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{snapshot.containerId}': {result.Message}");
+                        log.Warn($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{snapshot.containerId}': {result.Message}");
                 }
                 catch (Exception e)
                 {
@@ -130,7 +171,7 @@ namespace AvatarVcs.Editor.Operations
                 }
             }
 
-            ApplyInnerProperties(snapshot, containerGo, avatarRoot);
+            ApplyInnerProperties(snapshot, containerGo, avatarRoot, log);
         }
 
         /// <summary>
@@ -142,7 +183,7 @@ namespace AvatarVcs.Editor.Operations
         /// avatar makes that applier resolve each entry correctly. Empty on a
         /// pre-KAN-70 commit -> no-op.
         /// </summary>
-        private static void ApplyInnerProperties(ContainerSnapshot snapshot, GameObject containerGo, GameObject avatarRoot)
+        private static void ApplyInnerProperties(ContainerSnapshot snapshot, GameObject containerGo, GameObject avatarRoot, DiagnosticLog log)
         {
             // Null-safe, not just .Count: a hand-edited or corrupt commit can
             // carry an explicit `null` for any of these lists. Dereferencing it
@@ -165,7 +206,7 @@ namespace AvatarVcs.Editor.Operations
                     materials = materials,
                     objectStates = objectStates,
                 };
-                AvatarReferenceApplier.Apply(state, avatarRoot.transform);
+                AvatarReferenceApplier.Apply(state, avatarRoot.transform, log);
             }
             catch (Exception e)
             {

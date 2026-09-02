@@ -1,6 +1,8 @@
 using System;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Core.Reflection;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -21,12 +23,30 @@ namespace AvatarVcs.Editor.Capture
         /// degrades scene-reference paths to being container-relative rather
         /// than failing outright.
         /// </summary>
-        public static ComponentState Capture(Component component, Transform containerRoot, Transform avatarRoot = null)
+        public static ComponentState Capture(Component component, Transform containerRoot, Transform avatarRoot = null,
+            DiagnosticLog log = null)
         {
             if (component == null) throw new ArgumentNullException(nameof(component));
             if (containerRoot == null) throw new ArgumentNullException(nameof(containerRoot));
             avatarRoot ??= containerRoot;
 
+            // KAN-20: a caller mid-operation passes its own DiagnosticLog; a
+            // direct caller (tests) passes none, so make one and flush it to
+            // the console here so existing LogAssert expectations still fire.
+            var ownsLog = log == null;
+            log ??= new DiagnosticLog();
+            try
+            {
+                return CaptureCore(component, containerRoot, avatarRoot, log);
+            }
+            finally
+            {
+                if (ownsLog) UnityDiagnosticSink.Flush(log);
+            }
+        }
+
+        private static ComponentState CaptureCore(Component component, Transform containerRoot, Transform avatarRoot, DiagnosticLog log)
+        {
             var componentType = component.GetType();
             var siblings = component.GetComponents(componentType);
             var state = new ComponentState
@@ -55,7 +75,7 @@ namespace AvatarVcs.Editor.Capture
 
                 if (prop.propertyType == SerializedPropertyType.ObjectReference)
                 {
-                    CaptureObjectReference(state, prop, avatarRoot);
+                    CaptureObjectReference(state, prop, avatarRoot, log);
                     continue;
                 }
 
@@ -70,7 +90,7 @@ namespace AvatarVcs.Editor.Capture
                 }
                 else
                 {
-                    Debug.LogWarning($"[AvatarVCS] Unsupported property type '{prop.propertyType}' at '{prop.propertyPath}' on {state.type} was skipped.");
+                    log.Warn($"[AvatarVCS] Unsupported property type '{prop.propertyType}' at '{prop.propertyPath}' on {state.type} was skipped.");
                 }
             }
 
@@ -86,7 +106,7 @@ namespace AvatarVcs.Editor.Capture
         /// instead, since resolving them via AssetDatabase would silently
         /// come back empty and null the field out on restore.
         /// </summary>
-        private static void CaptureObjectReference(ComponentState state, SerializedProperty prop, Transform avatarRoot)
+        private static void CaptureObjectReference(ComponentState state, SerializedProperty prop, Transform avatarRoot, DiagnosticLog log)
         {
             var reference = prop.objectReferenceValue;
 
@@ -118,7 +138,7 @@ namespace AvatarVcs.Editor.Capture
 
             if (referenceTransform == null)
             {
-                Debug.LogWarning($"[AvatarVCS] Scene reference '{prop.propertyPath}' on {state.type} is neither a GameObject nor a Component and was skipped.");
+                log.Warn($"[AvatarVCS] Scene reference '{prop.propertyPath}' on {state.type} is neither a GameObject nor a Component and was skipped.");
                 return;
             }
 
@@ -134,7 +154,7 @@ namespace AvatarVcs.Editor.Capture
             }
             catch (ArgumentException)
             {
-                Debug.LogWarning($"[AvatarVCS] Scene reference '{prop.propertyPath}' on {state.type} points outside the avatar hierarchy and was skipped.");
+                log.Warn($"[AvatarVCS] Scene reference '{prop.propertyPath}' on {state.type} points outside the avatar hierarchy and was skipped.");
             }
         }
     }

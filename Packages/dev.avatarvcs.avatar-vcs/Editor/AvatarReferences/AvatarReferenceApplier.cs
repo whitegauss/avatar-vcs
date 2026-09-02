@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Editor.Apply;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
@@ -17,22 +19,40 @@ namespace AvatarVcs.Editor.AvatarReferences
     /// </summary>
     public static class AvatarReferenceApplier
     {
-        public static void Apply(AvatarReferenceState state, Transform avatarRoot)
+        public static void Apply(AvatarReferenceState state, Transform avatarRoot, DiagnosticLog log = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
 
+            // KAN-20: a caller mid-operation (checkout, container restore)
+            // passes its own DiagnosticLog; a direct caller (tests) passes
+            // none, so make one and flush it to the console here so existing
+            // LogAssert expectations still fire.
+            var ownsLog = log == null;
+            log ??= new DiagnosticLog();
+            try
+            {
+                ApplyCore(state, avatarRoot, log);
+            }
+            finally
+            {
+                if (ownsLog) UnityDiagnosticSink.Flush(log);
+            }
+        }
+
+        private static void ApplyCore(AvatarReferenceState state, Transform avatarRoot, DiagnosticLog log)
+        {
             var target = ReferenceResolver.ResolvePath(state.path, avatarRoot);
             if (target == null)
             {
-                Debug.LogWarning($"[AvatarVCS] avatarReferences path '{state.path}' could not be resolved; skipped.");
+                log.Warn($"[AvatarVCS] avatarReferences path '{state.path}' could not be resolved; skipped.");
                 return;
             }
 
-            ApplyBlendShapes(state, target);
-            ApplyMaterials(state, target);
-            ApplyComponents(state, target, avatarRoot);
-            ApplyObjectStates(state, target);
+            ApplyBlendShapes(state, target, log);
+            ApplyMaterials(state, target, log);
+            ApplyComponents(state, target, avatarRoot, log);
+            ApplyObjectStates(state, target, log);
         }
 
         // blendShapes/materials are grouped by BlendShapeRef.path /
@@ -40,7 +60,7 @@ namespace AvatarVcs.Editor.AvatarReferences
         // which JsonUtility leaves null) means the tracked target itself,
         // otherwise a descendant renderer. Each group resolves its own
         // renderer under target.
-        private static void ApplyBlendShapes(AvatarReferenceState state, Transform target)
+        private static void ApplyBlendShapes(AvatarReferenceState state, Transform target, DiagnosticLog log)
         {
             if (state.blendShapes.Count == 0) return;
 
@@ -51,7 +71,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                 var renderer = node == null ? null : node.GetComponent<SkinnedMeshRenderer>();
                 if (renderer == null || renderer.sharedMesh == null)
                 {
-                    Debug.LogWarning($"[AvatarVCS] '{where}' has no SkinnedMeshRenderer with a mesh; blend shapes skipped.");
+                    log.Warn($"[AvatarVCS] '{where}' has no SkinnedMeshRenderer with a mesh; blend shapes skipped.");
                     continue;
                 }
 
@@ -63,7 +83,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                     var index = mesh.GetBlendShapeIndex(shape.name);
                     if (index < 0)
                     {
-                        Debug.LogWarning($"[AvatarVCS] Blend shape '{shape.name}' not found on '{where}'; skipped.");
+                        log.Warn($"[AvatarVCS] Blend shape '{shape.name}' not found on '{where}'; skipped.");
                         continue;
                     }
                     // Only write when the value actually differs (KAN-72):
@@ -82,7 +102,7 @@ namespace AvatarVcs.Editor.AvatarReferences
             }
         }
 
-        private static void ApplyMaterials(AvatarReferenceState state, Transform target)
+        private static void ApplyMaterials(AvatarReferenceState state, Transform target, DiagnosticLog log)
         {
             if (state.materials.Count == 0) return;
 
@@ -93,7 +113,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                 var renderer = node == null ? null : node.GetComponent<Renderer>();
                 if (renderer == null)
                 {
-                    Debug.LogWarning($"[AvatarVCS] '{where}' has no Renderer; material references skipped.");
+                    log.Warn($"[AvatarVCS] '{where}' has no Renderer; material references skipped.");
                     continue;
                 }
 
@@ -104,7 +124,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                 {
                     if (materialRef.slot < 0 || materialRef.slot >= materials.Length)
                     {
-                        Debug.LogWarning($"[AvatarVCS] Material slot {materialRef.slot} out of range on '{where}'; skipped.");
+                        log.Warn($"[AvatarVCS] Material slot {materialRef.slot} out of range on '{where}'; skipped.");
                         continue;
                     }
 
@@ -112,7 +132,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                     var material = string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.LoadAssetAtPath<Material>(assetPath);
                     if (material == null)
                     {
-                        Debug.LogWarning($"[AvatarVCS] Material GUID '{materialRef.guid}' could not be resolved for slot {materialRef.slot} on '{where}'; skipped.");
+                        log.Warn($"[AvatarVCS] Material GUID '{materialRef.guid}' could not be resolved for slot {materialRef.slot} on '{where}'; skipped.");
                         continue;
                     }
 
@@ -140,13 +160,13 @@ namespace AvatarVcs.Editor.AvatarReferences
         // divergence the user made on purpose; re-adding it has no clean
         // semantics here (unlike containers, which rebuild the whole
         // subtree from scratch every checkout).
-        private static void ApplyComponents(AvatarReferenceState state, Transform target, Transform avatarRoot)
+        private static void ApplyComponents(AvatarReferenceState state, Transform target, Transform avatarRoot, DiagnosticLog log)
         {
             foreach (var componentState in state.components)
             {
-                var result = ComponentApplier.Apply(componentState, target.gameObject, avatarRoot.gameObject, createIfMissing: false);
+                var result = ComponentApplier.Apply(componentState, target.gameObject, avatarRoot.gameObject, createIfMissing: false, log);
                 if (!result.IsSuccess)
-                    Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{state.path}': {result.Message}");
+                    log.Warn($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{state.path}': {result.Message}");
             }
         }
 
@@ -158,20 +178,19 @@ namespace AvatarVcs.Editor.AvatarReferences
             : string.IsNullOrEmpty(b) ? a
             : $"{a}/{b}";
 
-        private static void ApplyObjectStates(AvatarReferenceState state, Transform target)
+        private static void ApplyObjectStates(AvatarReferenceState state, Transform target, DiagnosticLog log)
         {
             foreach (var objectState in state.objectStates)
             {
                 var descendant = ReferenceResolver.ResolvePath(objectState.path, target);
                 if (descendant == null)
                 {
-                    Debug.LogWarning($"[AvatarVCS] avatarReferences objectState path '{objectState.path}' under '{state.path}' could not be resolved; skipped.");
+                    log.Warn($"[AvatarVCS] avatarReferences objectState path '{objectState.path}' under '{state.path}' could not be resolved; skipped.");
                     continue;
                 }
 
-                var tagWarning = GameObjectStateApplier.Apply(descendant.gameObject, objectState.activeSelf, objectState.tag, objectState.layer,
-                    $"'{state.path}/{objectState.path}'", "AvatarVCS Apply Object State");
-                if (tagWarning != null) Debug.LogWarning(tagWarning);
+                GameObjectStateApplier.Apply(descendant.gameObject, objectState.activeSelf, objectState.tag, objectState.layer,
+                    $"'{state.path}/{objectState.path}'", "AvatarVCS Apply Object State", log);
             }
         }
     }

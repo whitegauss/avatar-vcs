@@ -1,7 +1,9 @@
 using System;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Core.History;
 using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Core.Model;
 using UnityEngine;
 
@@ -24,15 +26,28 @@ namespace AvatarVcs.Editor.History
             var config = CommitStore.LoadConfig(avatarGuid);
 
             var currentHead = BranchConfigOps.HeadOf(config, config.currentBranch);
-            var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
-            var commit = CommitBuilder.CreateCommit(
-                avatarRoot, message, config.currentBranch, currentHead, avatarReferences, materialSettings);
-            CommitStore.SaveCommit(avatarGuid, commit);
 
-            BranchConfigOps.SetHead(config, config.currentBranch, commit.commitId);
-            CommitStore.SaveConfig(avatarGuid, config);
+            // KAN-20: one DiagnosticLog for the whole commit; capture helpers
+            // append to it and it is flushed to the console once at the end.
+            // Flush in a finally so warnings collected before a throw (e.g.
+            // CommitBuilder's container validation) still reach the console.
+            var log = new DiagnosticLog();
+            try
+            {
+                var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot, log);
+                var commit = CommitBuilder.CreateCommit(
+                    avatarRoot, message, config.currentBranch, currentHead, avatarReferences, materialSettings, log);
+                CommitStore.SaveCommit(avatarGuid, commit);
 
-            return commit;
+                BranchConfigOps.SetHead(config, config.currentBranch, commit.commitId);
+                CommitStore.SaveConfig(avatarGuid, config);
+
+                return commit;
+            }
+            finally
+            {
+                UnityDiagnosticSink.Flush(log);
+            }
         }
 
         /// <summary>

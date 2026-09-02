@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.MaterialSettings;
 using AvatarVcs.Core.MaterialSettings;
 using AvatarVcs.Core.Model;
@@ -26,10 +28,28 @@ namespace AvatarVcs.Editor.AvatarReferences
     public static class AvatarReferenceCollector
     {
         public static (List<AvatarReferenceState> avatarReferences, List<MaterialSettingsState> materialSettings)
-            CollectFromTrackedTargets(GameObject avatarRoot)
+            CollectFromTrackedTargets(GameObject avatarRoot, DiagnosticLog log = null)
         {
             if (avatarRoot == null) throw new ArgumentNullException(nameof(avatarRoot));
 
+            // KAN-20: pass a DiagnosticLog through to each per-target capture.
+            // BranchManager.Commit / the checkout auto-commit pass their own;
+            // a direct caller (tests) passes none, so make one and flush here.
+            var ownsLog = log == null;
+            log ??= new DiagnosticLog();
+            try
+            {
+                return CollectCore(avatarRoot, log);
+            }
+            finally
+            {
+                if (ownsLog) UnityDiagnosticSink.Flush(log);
+            }
+        }
+
+        private static (List<AvatarReferenceState> avatarReferences, List<MaterialSettingsState> materialSettings)
+            CollectCore(GameObject avatarRoot, DiagnosticLog log)
+        {
             var avatarReferences = new List<AvatarReferenceState>();
             var materialSettings = new List<MaterialSettingsState>();
 
@@ -52,7 +72,7 @@ namespace AvatarVcs.Editor.AvatarReferences
             foreach (var tracked in trackedTargets)
             {
                 var target = tracked.transform;
-                avatarReferences.Add(AvatarReferenceCapture.Capture(target, avatarRoot.transform));
+                avatarReferences.Add(AvatarReferenceCapture.Capture(target, avatarRoot.transform, log));
 
                 // Every renderer in the tracked subtree, not just the target's
                 // own -- the default "Ensure Root" config tracks the avatar
