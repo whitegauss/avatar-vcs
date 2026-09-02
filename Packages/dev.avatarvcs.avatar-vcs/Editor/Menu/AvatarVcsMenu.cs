@@ -35,6 +35,12 @@ namespace AvatarVcs.Editor.Menu
         [MenuItem("GameObject/AvatarVCS/Ensure Root", true)]
         private static bool ValidateEnsureRootMenuItem() => Selection.activeGameObject != null;
 
+        /// <summary>
+        /// Adds one container under the selected avatar's "[AvatarVCS]" root
+        /// and selects it. Warns (rather than throwing) when no root exists
+        /// yet. The name auto-numbers so repeated use doesn't error -- see
+        /// ContainerManager.CreateContainerWithUniqueName.
+        /// </summary>
         [MenuItem("GameObject/AvatarVCS/Create Container", false, 1)]
         private static void CreateContainerMenuItem()
         {
@@ -46,8 +52,10 @@ namespace AvatarVcs.Editor.Menu
                 return;
             }
 
-            var containerId = "new_container";
-            var container = ContainerManager.CreateContainer(root, containerId);
+            // Auto-numbers ("new_container", "new_container_1", ...) so a
+            // second invocation doesn't hit CreateContainer's duplicate-name
+            // InvalidOperationException with nothing here to catch it.
+            var container = ContainerManager.CreateContainerWithUniqueName(root, "new_container");
             Selection.activeGameObject = container;
         }
 

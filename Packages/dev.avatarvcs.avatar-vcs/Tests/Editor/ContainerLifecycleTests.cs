@@ -289,6 +289,50 @@ namespace AvatarVcs.Tests.Editor
                 ContainerManager.CreateContainer(root, "outfit_a"));
         }
 
+        /// <summary>
+        /// CreateContainerWithUniqueName disambiguates a repeated base name
+        /// ("new_container", "new_container_1", ...) instead of throwing --
+        /// the "Create Container" menu command passes a fixed base name and
+        /// its second invocation used to hit CreateContainer's duplicate-name
+        /// InvalidOperationException with nothing to catch it (KAN-8).
+        /// </summary>
+        [Test]
+        public void CreateContainerWithUniqueName_RepeatedSameBaseName_AutoNumbersInsteadOfThrowing()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+
+            GameObject first = null, second = null, third = null;
+            Assert.DoesNotThrow(() =>
+            {
+                first = ContainerManager.CreateContainerWithUniqueName(root, "new_container");
+                second = ContainerManager.CreateContainerWithUniqueName(root, "new_container");
+                third = ContainerManager.CreateContainerWithUniqueName(root, "new_container");
+            });
+
+            Assert.AreEqual("new_container", first.name);
+            Assert.AreEqual("new_container_1", second.name);
+            Assert.AreEqual("new_container_2", third.name);
+            Assert.AreEqual(3, ContainerManager.GetContainers(root).Length);
+        }
+
+        /// <summary>
+        /// The disambiguation candidate set is every direct child, not just
+        /// containers: CreateContainer's uniqueness check is by child name,
+        /// so a plain (non-container) child called "new_container" still
+        /// forces the new container to "new_container_1".
+        /// </summary>
+        [Test]
+        public void CreateContainerWithUniqueName_DisambiguatesAgainstNonContainerChildToo()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var plainChild = new GameObject("new_container");
+            plainChild.transform.SetParent(root.transform, false);
+
+            var container = ContainerManager.CreateContainerWithUniqueName(root, "new_container");
+
+            Assert.AreEqual("new_container_1", container.name);
+        }
+
         [Test]
         public void ValidateContainers_DetectsDuplicateNameFromManualRename()
         {
