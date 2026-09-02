@@ -158,23 +158,18 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
-        public void EnsureRootWithDefaults_OnFirstCreation_SeedsBothContainerAndTracking()
+        public void EnsureRootWithDefaults_OnFirstCreation_SeedsTrackingButNoEmptyContainer()
         {
-            // The combined method the "Ensure Root" menu command actually
-            // calls -- must seed both in one pass. Calling
-            // EnsureRootAndDefaultContainer then EnsureRootWithDefaultTracking
-            // back to back would NOT work here: each independently checks
-            // "is this a new root?", and the first call already having
-            // created the root would make the second one see it as
-            // pre-existing and skip its own seeding.
+            // The "Ensure Root" menu command: seeds default tracking, and
+            // deliberately does NOT seed an empty container (KAN-71) -- a
+            // prefab dropped under the avatar root is auto-wrapped at commit
+            // time, so an empty "[AvatarVCS]/container_1" was just noise.
             var body = new GameObject("Body");
             body.transform.SetParent(avatarRoot.transform, false);
 
             var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
 
-            var containers = ContainerManager.GetContainers(root);
-            Assert.AreEqual(1, containers.Length);
-            Assert.AreEqual(ContainerManager.DefaultContainerId, containers[0].name);
+            Assert.IsEmpty(ContainerManager.GetContainers(root), "no empty container is seeded");
             Assert.IsNotNull(avatarRoot.GetComponent<AvatarVcsTrackedReference>());
             Assert.IsNotNull(body.GetComponent<AvatarVcsTrackedReference>());
         }

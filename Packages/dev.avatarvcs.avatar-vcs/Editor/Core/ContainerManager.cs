@@ -96,23 +96,23 @@ namespace AvatarVcs.Editor.Core
         }
 
         /// <summary>
-        /// EnsureRoot, plus both EnsureRootAndDefaultContainer's and
-        /// EnsureRootWithDefaultTracking's first-creation seeding in one
-        /// pass -- what the "Ensure Root" command actually calls. Calling
-        /// those two methods back to back here instead would break: each
-        /// independently re-checks "is this a new root?", and the first
-        /// call's side effect (creating the root) would make the second
-        /// call see an already-existing root and skip its own seeding.
+        /// EnsureRoot, plus EnsureRootWithDefaultTracking's first-creation
+        /// seeding -- what the "Ensure Root" command actually calls.
+        /// Deliberately does NOT seed an empty container: property tracking
+        /// (the default, seeded here) already covers the common case, and a
+        /// loose prefab instance placed directly under "[AvatarVCS]" is
+        /// wrapped into a container automatically at commit time
+        /// (AdoptLoosePrefabInstancesAsContainers), so an empty
+        /// "[AvatarVCS]/container_1" was just noise (KAN-71).
+        /// EnsureRootAndDefaultContainer still exists for callers that
+        /// explicitly want one.
         /// </summary>
         public static GameObject EnsureRootWithDefaults(GameObject avatarRoot)
         {
             var isNewRoot = FindRoot(avatarRoot) == null;
             var root = EnsureRoot(avatarRoot);
             if (isNewRoot)
-            {
-                SeedDefaultContainer(root);
                 SeedDefaultTracking(avatarRoot, root);
-            }
 
             return root;
         }
