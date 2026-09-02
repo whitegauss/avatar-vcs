@@ -1,6 +1,6 @@
 {
   "name": "dev.avatarvcs.avatar-vcs",
-  "version": "0.2.0-poc",
+  "version": "0.3.0-poc",
   "displayName": "Avatar VCS (Phase 1 PoC)",
   "description": "Version control for VRChat avatar configurations: prefab-composition containers with destroy/regenerate idempotency, BlendShape/material/component-field tracking, commit history, branches, and diff.",
   "unity": "2022.3",
