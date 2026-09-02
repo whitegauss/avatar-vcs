@@ -108,6 +108,16 @@ namespace AvatarVcs.Editor.MaterialSettings
 
         private static void ApplyProperties(Material material, List<MaterialPropertyValue> properties)
         {
+            // A null material here means the just-created/reused duplicate
+            // failed to load (line ~101). Now that the per-property loop also
+            // swallows NullReferenceException, an unchecked null would make
+            // material.HasProperty NRE, silently skip every property, and let
+            // the caller point the renderer slot at a null material. Fail
+            // loudly instead -- CheckoutOperation catches InvalidOperationException
+            // and warn-continues, so this still doesn't abort a checkout.
+            if (material == null)
+                throw new InvalidOperationException("Generated material could not be loaded; cannot apply properties.");
+
             foreach (var property in properties)
             {
                 if (!material.HasProperty(property.name))
@@ -137,7 +147,11 @@ namespace AvatarVcs.Editor.MaterialSettings
                             break;
                     }
                 }
-                catch (Exception e) when (e is FormatException or OverflowException or IndexOutOfRangeException or ArgumentNullException)
+                // NullReferenceException: a missing "value" key leaves
+                // property.value null (JsonUtility), and ParseColor(null)
+                // dereferences it in value.Split(',') before any Parse call
+                // gets to throw ArgumentNullException.
+                catch (Exception e) when (e is FormatException or OverflowException or IndexOutOfRangeException or ArgumentNullException or NullReferenceException)
                 {
                     Debug.LogWarning($"[AvatarVCS] Could not parse material property '{property.name}' (type '{property.type}', value '{property.value}'): {e.Message}; skipped.");
                 }

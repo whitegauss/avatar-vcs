@@ -148,7 +148,7 @@ namespace AvatarVcs.Editor.Reflection
             {
                 return TryDecodeCore(prop, type, value);
             }
-            catch (Exception e) when (e is FormatException or OverflowException or IndexOutOfRangeException or ArgumentNullException)
+            catch (Exception e) when (e is FormatException or OverflowException or IndexOutOfRangeException or ArgumentNullException or NullReferenceException)
             {
                 return false;
             }
@@ -156,6 +156,17 @@ namespace AvatarVcs.Editor.Reflection
 
         private static bool TryDecodeCore(SerializedProperty prop, string type, string value)
         {
+            // JsonUtility leaves a FieldValue.value that had no key in the JSON
+            // as null rather than "" (the repo notes this in
+            // BlendShapePresetIO.cs). "int"/"float"/... funnel that into
+            // int.Parse(null) -> ArgumentNullException (already caught), but
+            // the component-wise types ("vector3", "color", "gradient", ...)
+            // reach value.Split(...) first and NRE instead. Reject null up
+            // front for every type so the caller warn-and-skips this one
+            // field rather than the exception aborting an in-flight checkout.
+            if (value == null)
+                return false;
+
             switch (type)
             {
                 case "int":

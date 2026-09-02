@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Core.Diff;
+using AvatarVcs.Core.History;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Core.Model;
@@ -330,6 +331,36 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.IsTrue(result.IsSuccess,
                 "one bad material setting must not abort the whole checkout, leaving containers already destroyed/regenerated but nothing else applied");
+        }
+
+        [Test]
+        public void CheckoutOperation_NullValuedCompositeFieldInContainer_WarnsButDoesNotAbortCheckout()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var root = ContainerManager.EnsureRoot(avatar);
+            ContainerManager.CreateContainer(root, "outfit_a");
+            var commit = BranchManager.Commit(avatar, "init");
+
+            // A missing "value" key in the commit JSON leaves FieldValue.value
+            // null (JsonUtility). For a component-wise type ("vector3") that
+            // reaches value.Split(',') before any Parse call, so it used to
+            // NRE straight through ApplyContainerComponents /
+            // ApplyCommitToScene -- past every catch filter on the way out --
+            // and strand the avatar with every container already destroyed.
+            commit.containers[0].components.Add(new ComponentState
+            {
+                path = "",
+                type = typeof(Light).FullName,
+                fields = { new FieldValue { key = "m_Intensity", type = "vector3", value = null } },
+            });
+
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex("Could not decode field 'm_Intensity'"));
+
+            CheckoutResult result = null;
+            Assert.DoesNotThrow(() => result = CheckoutOperation.CheckoutWithoutAutoCommit(commit, avatar));
+            Assert.IsTrue(result.IsSuccess,
+                "a null-valued composite field must warn-and-skip, not abort the checkout after containers are destroyed/regenerated");
         }
 
         #endregion
