@@ -187,13 +187,19 @@ namespace AvatarVcs.Editor.History
             SaveIndex(avatarGuid, index);
         }
 
+        // The filename MaterialSettingsApplier.Apply produces:
+        // "<source>_avatarvcs", optionally + AssetDatabase.GenerateUniqueAssetPath's
+        // " 1", " 2", ... uniquifier, anchored to the end. Deliberately NOT
+        // a substring match -- a user's "Coat_avatarvcs_backup.mat" must not
+        // qualify as deletable.
+        private static readonly System.Text.RegularExpressions.Regex GeneratedNamePattern =
+            new(@"_avatarvcs( \d+)?$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
         /// <summary>
-        /// Whether assetPath looks like something MaterialSettingsApplier
-        /// generated: its filename carries the "_avatarvcs" suffix that
-        /// method appends (AssetDatabase.GenerateUniqueAssetPath may add a
-        /// " 1" etc. after it, hence Contains not EndsWith), or it lives in
-        /// the Assets/AvatarVCS_Generated/ folder that method falls back to
-        /// for read-only source locations. Keep both checks in sync with
+        /// Whether assetPath is something MaterialSettingsApplier.Apply
+        /// generated: its filename matches GeneratedNamePattern, or it lives
+        /// in the Assets/AvatarVCS_Generated/ folder that method falls back
+        /// to for read-only source locations. Keep both in sync with
         /// MaterialSettingsApplier.Apply.
         /// </summary>
         private static bool IsAvatarVcsGeneratedAsset(string assetPath)
@@ -201,7 +207,7 @@ namespace AvatarVcs.Editor.History
             if (string.IsNullOrEmpty(assetPath)) return false;
             var normalized = assetPath.Replace('\\', '/');
             if (normalized.StartsWith("Assets/AvatarVCS_Generated/")) return true;
-            return Path.GetFileNameWithoutExtension(normalized).Contains("_avatarvcs");
+            return GeneratedNamePattern.IsMatch(Path.GetFileNameWithoutExtension(normalized));
         }
 
         /// <summary>
