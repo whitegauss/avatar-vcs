@@ -100,6 +100,16 @@ namespace AvatarVcs.Editor.MaterialSettings
             // same canonical instance that later AssetDatabase lookups see.
             duplicate = AssetDatabase.LoadAssetAtPath<Material>(assetPath);
 
+            // If that reload came back null (import failure), fail loudly
+            // before recording generatedGuid or pointing the renderer slot
+            // at it -- otherwise the slot ends up referencing a null
+            // material and the commit remembers a guid for an asset that
+            // isn't really there. CheckoutOperation catches
+            // InvalidOperationException and warn-continues, so this still
+            // doesn't abort a checkout.
+            if (duplicate == null)
+                throw new InvalidOperationException($"Generated material at '{assetPath}' could not be loaded after creation.");
+
             state.generatedGuid = AssetDatabase.AssetPathToGUID(assetPath);
             PointRendererAt(renderer, state.slot, state.targetPath, duplicate);
 
@@ -108,16 +118,6 @@ namespace AvatarVcs.Editor.MaterialSettings
 
         private static void ApplyProperties(Material material, List<MaterialPropertyValue> properties)
         {
-            // A null material here means the just-created/reused duplicate
-            // failed to load (line ~101). Now that the per-property loop also
-            // swallows NullReferenceException, an unchecked null would make
-            // material.HasProperty NRE, silently skip every property, and let
-            // the caller point the renderer slot at a null material. Fail
-            // loudly instead -- CheckoutOperation catches InvalidOperationException
-            // and warn-continues, so this still doesn't abort a checkout.
-            if (material == null)
-                throw new InvalidOperationException("Generated material could not be loaded; cannot apply properties.");
-
             foreach (var property in properties)
             {
                 if (!material.HasProperty(property.name))
