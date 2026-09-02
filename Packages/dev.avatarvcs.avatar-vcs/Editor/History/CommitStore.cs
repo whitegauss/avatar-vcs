@@ -175,8 +175,23 @@ namespace AvatarVcs.Editor.History
             foreach (var guid in plan.AssetGuidsToDelete)
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
-                if (!string.IsNullOrEmpty(path))
-                    AssetDatabase.DeleteAsset(path);
+                if (string.IsNullOrEmpty(path)) continue;
+
+                // generatedAssets comes from commit JSON, which this repo
+                // treats as hand-editable / corruptible everywhere else
+                // (TryLoadJson, SnapshotDiffer's SafeToDictionary, ...) --
+                // but this is the one path that hits AssetDatabase.DeleteAsset
+                // on a user's real asset. Only delete something that matches
+                // how MaterialSettingsApplier actually names its duplicates.
+                if (!IsAvatarVcsGeneratedAsset(path))
+                {
+                    Debug.LogWarning($"[AvatarVCS] Not deleting '{path}': it's listed in a commit's generatedAssets but "
+                        + "doesn't look AvatarVCS-generated (no '_avatarvcs' in the name, not under Assets/AvatarVCS_Generated/). "
+                        + "A corrupt or hand-edited commit can name any GUID here.");
+                    continue;
+                }
+
+                AssetDatabase.DeleteAsset(path);
             }
 
             foreach (var commitId in plan.CommitsToDelete)
@@ -187,6 +202,29 @@ namespace AvatarVcs.Editor.History
 
             CommitIndexOps.Remove(index, new HashSet<string>(plan.CommitsToDelete));
             SaveIndex(avatarGuid, index);
+        }
+
+        // The filename MaterialSettingsApplier.Apply produces:
+        // "<source>_avatarvcs", optionally + AssetDatabase.GenerateUniqueAssetPath's
+        // " 1", " 2", ... uniquifier, anchored to the end. Deliberately NOT
+        // a substring match -- a user's "Coat_avatarvcs_backup.mat" must not
+        // qualify as deletable.
+        private static readonly System.Text.RegularExpressions.Regex GeneratedNamePattern =
+            new(@"_avatarvcs( \d+)?$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>
+        /// Whether assetPath is something MaterialSettingsApplier.Apply
+        /// generated: its filename matches GeneratedNamePattern, or it lives
+        /// in the Assets/AvatarVCS_Generated/ folder that method falls back
+        /// to for read-only source locations. Keep both in sync with
+        /// MaterialSettingsApplier.Apply.
+        /// </summary>
+        private static bool IsAvatarVcsGeneratedAsset(string assetPath)
+        {
+            if (string.IsNullOrEmpty(assetPath)) return false;
+            var normalized = assetPath.Replace('\\', '/');
+            if (normalized.StartsWith("Assets/AvatarVCS_Generated/")) return true;
+            return GeneratedNamePattern.IsMatch(Path.GetFileNameWithoutExtension(normalized));
         }
 
         /// <summary>

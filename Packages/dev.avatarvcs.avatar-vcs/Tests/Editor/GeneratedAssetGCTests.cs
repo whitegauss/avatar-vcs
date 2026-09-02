@@ -5,6 +5,7 @@ using AvatarVcs.Core.Model;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace AvatarVcs.Tests.Editor
 {
@@ -157,6 +158,37 @@ namespace AvatarVcs.Tests.Editor
             CommitStore.DeleteCommit(avatarGuid, second.commitId, force: true);
 
             Assert.IsFalse(AssetStillLoads(sharedGuid), "once no commit references it, deleting the last one should clean it up");
+        }
+
+        // A user's own asset whose GUID a corrupt / hand-edited commit names
+        // in generatedAssets. None of these match the "<name>_avatarvcs" (+
+        // optional " N") suffix MaterialSettingsApplier produces, so
+        // deletion must be refused even as the commit around it is deleted.
+        // "Coat_avatarvcs_backup" specifically guards against a substring
+        // match; "clip_avatarvcs v2" against " " + non-digits.
+        [TestCase("UserOwned")]
+        [TestCase("Coat_avatarvcs_backup")]
+        [TestCase("clip_avatarvcs v2")]
+        public void DeleteCommit_DoesNotDeleteNonAvatarVcsAssetListedInGeneratedAssets(string assetName)
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+
+            var innocentPath = $"{TestAssetDir}/{assetName}.mat";
+            AssetDatabase.CreateAsset(new Material(Shader.Find("Standard")), innocentPath);
+            var innocentGuid = AssetDatabase.AssetPathToGUID(innocentPath);
+
+            var commit = CommitBuilder.CreateCommit(avatarRoot, "corrupt generatedAssets", "main", null);
+            commit.generatedAssets.Add(innocentGuid);
+            CommitStore.SaveCommit(avatarGuid, commit);
+
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex($"Not deleting .*{System.Text.RegularExpressions.Regex.Escape(assetName)}"));
+            CommitStore.DeleteCommit(avatarGuid, commit.commitId, force: true);
+
+            Assert.IsTrue(AssetStillLoads(innocentGuid), "a non-AvatarVCS asset named in generatedAssets must survive");
+            Assert.IsNull(CommitStore.LoadCommit(avatarGuid, commit.commitId), "the commit itself is still deleted");
+
+            AssetDatabase.DeleteAsset(innocentPath);
         }
 
         [Test]
