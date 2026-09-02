@@ -13,6 +13,10 @@ Thumbs.db
 obj/
 bin/
 
+# Built package zips -- release.yml builds these in CI and attaches them
+# to the GitHub Release; they don't belong in the repo.
+*.zip
+
 # Internal-only docs -- kept locally, not published (README.md is the
 # only markdown file meant to be public)
 DesignDoc_avatar-vcs.md

@@ -20,11 +20,8 @@
           "zipSHA256": "ad531a33900e3fff43aac2d3d929e75275c0a273dfc3451ce4a56b58c50a72de",
           "license": "MIT",
           "licenseUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/LICENSE",
-          "documentationUrl": "",
-          "changelogUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/CHANGELOG.md",
-          "vpmDependencies": {
-            "com.vrchat.avatars": "^3.4.0"
-          }
+          "documentationUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/README.md",
+          "changelogUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/CHANGELOG.md"
         },
         "0.2.0-poc": {
           "name": "dev.avatarvcs.avatar-vcs",
@@ -38,11 +35,8 @@
           },
           "license": "MIT",
           "licenseUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/LICENSE",
-          "documentationUrl": "",
+          "documentationUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/README.md",
           "changelogUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/CHANGELOG.md",
-          "vpmDependencies": {
-            "com.vrchat.avatars": "^3.4.0"
-          },
           "url": "https://github.com/whitegauss/avatar-vcs/releases/download/v0.2.0-poc/dev.avatarvcs.avatar-vcs-0.2.0-poc.zip",
           "zipSHA256": "627917e4f47cf4e6ae602f7b7fdabd2422c207263d57b6d81d986d85d1c5e2bf"
         }

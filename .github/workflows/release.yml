@@ -18,10 +18,13 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout main
+      - name: Checkout the pushed tag
         uses: actions/checkout@v4
         with:
-          ref: main
+          # The commit the tag points at, not main's HEAD -- otherwise a tag
+          # that doesn't sit on main's tip would ship an artifact whose
+          # contents don't match its name. The version check below guards it.
+          ref: ${{ github.ref }}
           fetch-depth: 0
 
       - name: Read package version
@@ -30,11 +33,11 @@ jobs:
           version=$(python3 -c "import json; print(json.load(open('${{ env.PACKAGE_DIR }}/package.json'))['version'])")
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Verify tag matches package.json version on main
+      - name: Verify tag matches the checked-out package.json version
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
           if [ "$tag_version" != "${{ steps.package.outputs.version }}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${{ steps.package.outputs.version }} on main."
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${{ steps.package.outputs.version }} at that tag."
             exit 1
           fi
 
