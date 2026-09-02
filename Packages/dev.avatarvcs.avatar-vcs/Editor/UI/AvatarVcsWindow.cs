@@ -73,11 +73,19 @@ namespace AvatarVcs.Editor.UI
         // Compare mode (design doc 5.2): toggle between two commits without
         // an auto-commit per flip. compareReturnCommitId is the safety-net
         // auto-commit taken once, right before entering compare mode.
-        private bool compareModeActive;
-        private string compareCommitAId;
-        private string compareCommitBId;
-        private bool compareShowingB;
-        private string compareReturnCommitId;
+        // [SerializeField] so the state survives a domain reload -- OnDisable
+        // deliberately does NOT restore the scene during one (see there), so
+        // the window must come back still in compare mode to let the user
+        // exit cleanly rather than leave the scene silently on a compare side.
+        [SerializeField] private bool compareModeActive;
+        [SerializeField] private string compareCommitAId;
+        [SerializeField] private string compareCommitBId;
+        [SerializeField] private bool compareShowingB;
+        [SerializeField] private string compareReturnCommitId;
+
+        // Set once the editor signals an imminent assembly reload (script
+        // recompile, entering play mode, quit) -- all of which run OnDisable.
+        [NonSerialized] private bool domainReloadImminent;
 
         [MenuItem("Window/AvatarVCS")]
         public static void Open() => GetWindow<AvatarVcsWindow>("AvatarVCS");
@@ -102,18 +110,30 @@ namespace AvatarVcs.Editor.UI
             // drag would be wasteful.
             EditorApplication.hierarchyChanged += OnSceneMaybeChanged;
             Undo.postprocessModifications += OnPostprocessModifications;
+            AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
         }
 
         private void OnDisable()
         {
             EditorApplication.hierarchyChanged -= OnSceneMaybeChanged;
             Undo.postprocessModifications -= OnPostprocessModifications;
+            AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
+
+            // A domain reload (recompile / enter play mode / quit) also runs
+            // OnDisable, but a checkout here is unsafe mid-teardown: it
+            // mutates the scene and can pop a modal dialog. The serialized
+            // compare fields survive the reload, so OnEnable comes back still
+            // in compare mode with the scene untouched and the user can exit
+            // cleanly then. Only restore when this is a genuine window close.
+            if (domainReloadImminent) return;
 
             // Closing the window mid-compare would otherwise strand the
             // scene showing whichever side was last toggled to.
             if (compareModeActive && avatarRoot != null)
                 ExitCompare(keepCurrent: false);
         }
+
+        private void OnBeforeAssemblyReload() => domainReloadImminent = true;
 
         private void OnSceneMaybeChanged()
         {
@@ -257,13 +277,20 @@ namespace AvatarVcs.Editor.UI
             {
                 result = checkout();
             }
-            catch (InvalidOperationException e)
+            catch (Exception e) when (e is InvalidOperationException or ArgumentException)
             {
-                // The safety-net auto-commit taken before a checkout runs
-                // the same container validation as a manual Commit, so a
-                // pre-existing structural problem (duplicate/nested
-                // containers) surfaces here too -- before anything gets
-                // destroyed, not after.
+                // InvalidOperationException: the safety-net auto-commit taken
+                // before a checkout runs the same container validation as a
+                // manual Commit, so a pre-existing structural problem
+                // (duplicate/nested containers) surfaces here too -- before
+                // anything gets destroyed, not after. It's also what the
+                // compare-mode entry points throw for a commit id that no
+                // longer loads.
+                // ArgumentException: last-ditch guard for a null/blank commit
+                // reaching a CheckoutOperation call anyway (e.g. a
+                // since-deleted id still selected in a popup) -- a UI action
+                // should report that in a dialog, not leak a stack trace and
+                // wreck the IMGUI layout.
                 EditorUtility.DisplayDialog("Checkout Failed", e.Message, "OK");
                 return;
             }

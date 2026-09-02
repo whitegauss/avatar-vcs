@@ -373,5 +373,36 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsTrue(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarker(deep),
                 "an opted-out object still won't round-trip, so it stays flagged");
         }
+
+        [Test]
+        public void HierarchyTrackingStatusIcon_MarkerCache_HoldsDecisionUntilInvalidated()
+        {
+            // L1 (KAN-16): the hierarchy hook memoizes its per-row decision
+            // for the frame instead of re-walking ancestors on every repaint.
+            HierarchyTrackingStatusIcon.InvalidateCache();
+
+            ContainerManager.EnsureRoot(avatarRoot);
+            avatarRoot.AddComponent<AvatarVcsTrackedReference>();
+
+            var outfit = new GameObject("Outfit");
+            outfit.transform.SetParent(avatarRoot.transform, false);
+            var untracked = outfit.AddComponent<AvatarVcsUntracked>();
+            var id = outfit.GetInstanceID();
+
+            Assert.IsTrue(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarkerCached(id),
+                "an opted-out object inside a managed avatar is flagged");
+
+            // The opt-out is gone -- the uncached decision flips immediately,
+            // but the cached one holds the old answer until invalidation.
+            Object.DestroyImmediate(untracked);
+            Assert.IsFalse(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarker(outfit),
+                "sanity: uncached decision already reflects the removed marker");
+            Assert.IsTrue(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarkerCached(id),
+                "cached decision is retained within the frame");
+
+            HierarchyTrackingStatusIcon.InvalidateCache();
+            Assert.IsFalse(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarkerCached(id),
+                "after invalidation the decision is recomputed");
+        }
     }
 }
