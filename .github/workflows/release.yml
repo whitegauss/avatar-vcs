@@ -18,10 +18,13 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout main
+      - name: Checkout the pushed tag
         uses: actions/checkout@v4
         with:
-          ref: main
+          # The commit the tag points at, not main's HEAD -- otherwise a tag
+          # that doesn't sit on main's tip would ship an artifact whose
+          # contents don't match its name. The version check below guards it.
+          ref: ${{ github.ref }}
           fetch-depth: 0
 
       - name: Read package version
@@ -30,29 +33,47 @@ jobs:
           version=$(python3 -c "import json; print(json.load(open('${{ env.PACKAGE_DIR }}/package.json'))['version'])")
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Verify tag matches package.json version on main
+      - name: Verify tag matches the checked-out package.json version
+        env:
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
-          if [ "$tag_version" != "${{ steps.package.outputs.version }}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${{ steps.package.outputs.version }} on main."
+          if [ "$tag_version" != "$PACKAGE_VERSION" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${PACKAGE_VERSION} at that tag."
             exit 1
           fi
 
       - name: Build package zip
         id: zip
+        env:
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
-          zip_name="${{ env.PACKAGE_ID }}-${{ steps.package.outputs.version }}.zip"
+          zip_name="${{ env.PACKAGE_ID }}-${PACKAGE_VERSION}.zip"
           (cd "${{ env.PACKAGE_DIR }}" && zip -r "$OLDPWD/${zip_name}" .)
           sha256=$(sha256sum "${zip_name}" | cut -d ' ' -f1)
           echo "zip_name=${zip_name}" >> "$GITHUB_OUTPUT"
           echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
 
-      - name: Update index.json with this version's entry
+      # The zip was built from the tag's tree (above). The VPM index lives on
+      # main, so update and push THAT -- keep the tag's package.json aside and
+      # apply its entry onto main's index.json. Never push the tag's tree to
+      # main (a tag off main's tip would rewrite it).
+      - name: Stash the tag's package.json
+        run: cp "${{ env.PACKAGE_DIR }}/package.json" "${RUNNER_TEMP}/tagged-package.json"
+
+      - name: Switch to main
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+
+      - name: Update main's index.json with this version's entry
+        env:
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ steps.zip.outputs.zip_name }}
         run: |
           python3 .github/scripts/update_index_json.py \
-            "${{ env.PACKAGE_DIR }}/package.json" \
+            "${RUNNER_TEMP}/tagged-package.json" \
             "index.json" \
-            "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${{ steps.zip.outputs.zip_name }}" \
+            "$RELEASE_URL" \
             "${{ steps.zip.outputs.sha256 }}"
 
       - name: Commit updated index.json to main
