@@ -100,7 +100,24 @@ namespace AvatarVcs.Editor.History
         {
             if (!CommitIdentifier.IsValidShape(commitId)) return null;
             var path = CommitPaths.CommitFile(avatarGuid, commitId);
-            return File.Exists(path) ? TryLoadJson<Commit>(path) : null;
+            if (!File.Exists(path)) return null;
+
+            var commit = TryLoadJson<Commit>(path);
+
+            // A commit written by a newer AvatarVCS may carry fields this
+            // build doesn't deserialize; restoring it would silently drop
+            // them. Treat it as unreadable (same as a corrupt file) rather
+            // than half-apply it. A file with no schemaVersion key keeps the
+            // field's default (CurrentSchemaVersion) after JsonUtility, so
+            // pre-versioning files still load.
+            if (commit != null && commit.schemaVersion > Commit.CurrentSchemaVersion)
+            {
+                Debug.LogWarning($"[AvatarVCS] Commit '{commitId}' has schemaVersion {commit.schemaVersion}, "
+                    + $"newer than this build supports ({Commit.CurrentSchemaVersion}); treating as unreadable. Update the AvatarVCS package.");
+                return null;
+            }
+
+            return commit;
         }
 
         public static CommitIndex LoadIndex(string avatarGuid)

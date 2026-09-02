@@ -10,7 +10,18 @@ namespace AvatarVcs.Core.Model
     [Serializable]
     public class Commit
     {
-        public int schemaVersion = 2;
+        /// <summary>
+        /// Highest commit schemaVersion this build understands.
+        /// CommitStore.LoadCommit refuses (warn + null) anything higher, so a
+        /// commit written by a future build isn't silently restored with
+        /// fields this build can't see. Bump this ONLY for a change an older
+        /// build cannot safely fall back from -- a new field whose absence an
+        /// old reader already handles (e.g. BlendShapeRef.path defaulting to
+        /// the target itself) is additive and does NOT bump it.
+        /// </summary>
+        public const int CurrentSchemaVersion = 2;
+
+        public int schemaVersion = CurrentSchemaVersion;
         public string commitId;
         public string parentCommitId;
         public string branch;

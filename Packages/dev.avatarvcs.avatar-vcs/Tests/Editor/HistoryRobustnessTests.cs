@@ -133,6 +133,26 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void CommitStore_CommitFromNewerSchema_ReturnsNullWithWarning()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var commit = BranchManager.Commit(avatar, "init");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            var commitPath = $"{CommitStore.GetAvatarDir(avatarGuid)}/commits/{commit.commitId}.json";
+
+            var json = System.IO.File.ReadAllText(commitPath)
+                .Replace($"\"schemaVersion\": {Commit.CurrentSchemaVersion}", "\"schemaVersion\": 99");
+            System.IO.File.WriteAllText(commitPath, json);
+
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex("schemaVersion 99, newer than this build supports"));
+
+            Commit loaded = null;
+            Assert.DoesNotThrow(() => loaded = CommitStore.LoadCommit(avatarGuid, commit.commitId));
+            Assert.IsNull(loaded);
+        }
+
+        [Test]
         public void CommitStore_CorruptIndexFile_ReturnsEmptyIndexInsteadOfThrowing()
         {
             var avatar = SpawnAvatar("Avatar");
