@@ -40,6 +40,11 @@ namespace AvatarVcs.Editor.AvatarReferences
             // two AvatarReferenceState rows with no new information. Only the
             // outermost tracked marker in any tracked/tracked chain runs.
             var trackedTargets = avatarRoot.GetComponentsInChildren<AvatarVcsTrackedReference>(includeInactive: true)
+                // An AvatarVcsUntracked on the marker's own object or an
+                // ancestor overrides it (KAN-11): AvatarReferenceCapture would
+                // walk the marked subtree and skip every node, leaving an
+                // empty AvatarReferenceState row. Drop the marker here.
+                .Where(t => t.GetComponentInParent<AvatarVcsUntracked>(includeInactive: true) == null)
                 .Where(t => t.transform.parent == null
                     || t.transform.parent.GetComponentInParent<AvatarVcsTrackedReference>(includeInactive: true) == null)
                 .ToList();

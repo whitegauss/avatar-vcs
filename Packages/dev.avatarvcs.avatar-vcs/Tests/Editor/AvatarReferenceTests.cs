@@ -376,6 +376,26 @@ namespace AvatarVcs.Tests.Editor
             }
         }
 
+        [Test]
+        public void CollectFromTrackedTargets_TrackedMarkerInsideUntrackedSubtree_ProducesNoEntry()
+        {
+            // A tracked marker whose whole ancestor chain has no *other*
+            // tracked marker but does carry AvatarVcsUntracked (here both on
+            // the same object): it passes the outermost-marker filter, but
+            // AvatarReferenceCapture would skip every node and leave an empty
+            // AvatarReferenceState row. The collector must drop it.
+            var avatarRoot = Spawn("Avatar"); // deliberately NOT tracked
+            var outfit = Spawn("Outfit", avatarRoot.transform);
+            outfit.AddComponent<SkinnedMeshRenderer>().sharedMesh = testMesh;
+            outfit.AddComponent<AvatarVcsTrackedReference>();
+            outfit.AddComponent<AvatarVcsUntracked>();
+
+            var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot);
+
+            Assert.IsEmpty(avatarReferences, "no entry for a marker inside its own AvatarVcsUntracked subtree");
+            Assert.IsEmpty(materialSettings);
+        }
+
         // Broadened tracking (design doc 1.4, revised): a marked target's
         // whole subtree, not just its own BlendShape/material, is captured
         // generically (same ComponentCapturer/ComponentApplier containers
