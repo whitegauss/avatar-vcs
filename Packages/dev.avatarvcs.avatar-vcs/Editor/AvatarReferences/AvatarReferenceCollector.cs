@@ -57,6 +57,10 @@ namespace AvatarVcs.Editor.AvatarReferences
                 foreach (var node in target.GetComponentsInChildren<Transform>(includeInactive: true))
                 {
                     if (vcsRoot != null && node.IsChildOf(vcsRoot)) continue;
+                    // Mirror AvatarReferenceCapture's AvatarVcsUntracked skip
+                    // (KAN-11): an opted-out subtree contributes no
+                    // materialSettings either.
+                    if (node.GetComponentInParent<AvatarVcsUntracked>(includeInactive: true) != null) continue;
 
                     var renderer = node.GetComponent<Renderer>();
                     if (renderer == null) continue;

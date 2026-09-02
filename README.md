@@ -23,7 +23,7 @@ CI (`.github/workflows/tests.yml`) で [game-ci/unity-test-runner](https://githu
 
 このツールは**アセット実体（Prefab/Material の中身）を保持しません**。「過去のバージョンの Prefab に戻す」ことは原理的にできず、あくまで「どの構成がどのアセットを参照していたか」を記録・復元するのみです。アセット自体のバックアップは別途ユーザー側で行ってください。
 
-またボーン自体の pose（Transform）はスコープ外で、変更しても管理対象になりません（ボーンは実体を持たず、コミットの JSON から安全に復元する手段がないためです）。それ以外——Body / Armature / アバタールート自身や、その配下の既存コンポーネントが持つ BlendShape・マテリアル参照・各種フィールド値——はデフォルトで追跡対象です（`Track Properties`、`GameObject > AvatarVCS > Untrack Properties Here` で個別に除外可）。Armature に直接配置したアクセサリ等の Prefab インスタンスであれば、その位置（Transform）も記録されます。ただし Prefab の追加・削除・入れ替えという「構造」の変更自体を管理できるのは `[AvatarVCS]` ルート配下のコンテナのみです。
+またボーン自体の pose（Transform）はスコープ外で、変更しても管理対象になりません（ボーンは実体を持たず、コミットの JSON から安全に復元する手段がないためです）。それ以外——Body / Armature / アバタールート自身や、その配下の既存コンポーネントが持つ BlendShape・マテリアル参照・各種フィールド値——はデフォルトで追跡対象です。特定のサブツリー（例：この衣装だけ）を追跡から外したい場合は、対象を選択して `GameObject > AvatarVCS > Untrack Properties Here` を実行すると除外マーカー（`AvatarVcsUntracked`）が付き、そのサブツリー全体がコミットに含まれなくなります（`Track Properties Here` で解除）。Armature に直接配置したアクセサリ等の Prefab インスタンスであれば、その位置（Transform）も記録されます。ただし Prefab の追加・削除・入れ替えという「構造」の変更自体を管理できるのは `[AvatarVCS]` ルート配下のコンテナのみです。
 
 ## インストール
 

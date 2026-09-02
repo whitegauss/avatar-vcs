@@ -98,33 +98,96 @@ namespace AvatarVcs.Editor.Menu
         private static void TrackReferenceMenuItem()
         {
             var target = Selection.activeGameObject;
-            if (target == null || target.GetComponent<AvatarVcsTrackedReference>() != null) return;
-            Undo.AddComponent<AvatarVcsTrackedReference>(target);
+            if (target == null) return;
+
+            // Clear an exclusion marker first: "track this" and "don't track
+            // this" on the same object is contradictory, and re-tracking a
+            // previously excluded subtree is the natural undo of Untrack.
+            var untracked = target.GetComponent<AvatarVcsUntracked>();
+            if (untracked != null) Undo.DestroyObjectImmediate(untracked);
+
+            if (target.GetComponent<AvatarVcsTrackedReference>() == null)
+                Undo.AddComponent<AvatarVcsTrackedReference>(target);
         }
 
         [MenuItem("GameObject/AvatarVCS/Track Properties Here", true)]
         private static bool ValidateTrackReferenceMenuItem()
         {
             var selection = Selection.activeGameObject;
-            if (selection == null || selection.GetComponent<AvatarVcsTrackedReference>() != null) return false;
+            if (selection == null) return false;
 
             // A container-managed subtree is destroyed and regenerated on
             // every checkout, so tracking would just be silently wiped every
             // time -- block it here rather than let the user discover that
             // as "why did my tracking disappear".
-            return selection.GetComponentInParent<AvatarVcsRoot>(includeInactive: true) == null;
+            if (selection.GetComponentInParent<AvatarVcsRoot>(includeInactive: true) != null) return false;
+
+            // Lifting an exclusion marker on this very object is always
+            // offered -- that's the natural undo of Untrack.
+            if (selection.GetComponent<AvatarVcsUntracked>() != null) return true;
+
+            // An *ancestor's* AvatarVcsUntracked makes a fresh marker here
+            // inert: capture skips the whole excluded subtree regardless of a
+            // AvatarVcsTrackedReference placed inside it, so adding one would
+            // be a silent no-op (KAN-11). Don't offer it where it can't take
+            // effect -- re-track at the marker instead.
+            if (selection.GetComponentInParent<AvatarVcsUntracked>(includeInactive: true) != null) return false;
+
+            // Otherwise offer it when there's a marker to add.
+            return selection.GetComponent<AvatarVcsTrackedReference>() == null;
         }
 
         [MenuItem("GameObject/AvatarVCS/Untrack Properties Here", false, 4)]
         private static void UntrackReferenceMenuItem()
         {
-            var marker = Selection.activeGameObject?.GetComponent<AvatarVcsTrackedReference>();
-            if (marker != null) Undo.DestroyObjectImmediate(marker);
+            var target = Selection.activeGameObject;
+            if (target == null) return;
+
+            // Drop an own tracked marker if present, and add the exclusion
+            // marker so an ancestor's recursive capture (the default Ensure
+            // Root config marks the avatar root) skips this subtree too --
+            // removing AvatarVcsTrackedReference alone did nothing in that
+            // config (KAN-11).
+            // Excluding the avatar root itself would strip the marker Ensure
+            // Root seeds and turn OFF all property capture avatar-wide --
+            // that is "disable the tool", not "exclude this subtree". Guarded
+            // here too, not just in validate, since the handler is the real
+            // boundary.
+            if (ContainerManager.FindRoot(target) != null)
+            {
+                Debug.LogWarning("[AvatarVCS] Untrack Properties Here on the avatar root would disable all property "
+                    + "capture for the whole avatar. Untrack a specific child (e.g. an outfit) instead.");
+                return;
+            }
+
+            var tracked = target.GetComponent<AvatarVcsTrackedReference>();
+            if (tracked != null) Undo.DestroyObjectImmediate(tracked);
+
+            // GetComponentInParent, not GetComponent: an ancestor marker
+            // already excludes this subtree, so a second marker here would
+            // be redundant.
+            if (target.GetComponentInParent<AvatarVcsUntracked>(includeInactive: true) == null)
+                Undo.AddComponent<AvatarVcsUntracked>(target);
         }
 
         [MenuItem("GameObject/AvatarVCS/Untrack Properties Here", true)]
-        private static bool ValidateUntrackReferenceMenuItem() =>
-            Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<AvatarVcsTrackedReference>() != null;
+        private static bool ValidateUntrackReferenceMenuItem()
+        {
+            var selection = Selection.activeGameObject;
+            // GetComponentInParent: pointless when this object or any ancestor
+            // is already excluded by an AvatarVcsUntracked marker.
+            if (selection == null
+                || selection.GetComponentInParent<AvatarVcsUntracked>(includeInactive: true) != null) return false;
+
+            // Not on the avatar root itself: that would turn capture off
+            // avatar-wide (see the handler), not exclude a subtree.
+            if (ContainerManager.FindRoot(selection) != null) return false;
+
+            // Pointless under [AvatarVCS] (already excluded structurally) or
+            // outside any managed avatar (nothing captures it anyway).
+            return selection.GetComponentInParent<AvatarVcsRoot>(includeInactive: true) == null
+                && ContainerManager.IsUnderManagedAvatar(selection);
+        }
 
         // Issue #58: standalone BlendShape preset export/import, entirely
         // separate from the commit/checkout system -- for sharing a

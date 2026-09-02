@@ -336,6 +336,46 @@ namespace AvatarVcs.Tests.Editor
             }
         }
 
+        [Test]
+        public void DefaultEnsureRootConfig_AvatarVcsUntrackedSubtree_IsExcludedFromCapture()
+        {
+            // KAN-11: with the avatar root tracked (default config), removing
+            // a child's own marker did nothing -- the root's recursive walk
+            // still reached it. AvatarVcsUntracked opts a subtree back out.
+            var avatarRoot = Spawn("Avatar");
+            var body = Spawn("Body", avatarRoot.transform);
+            var bodyRenderer = body.AddComponent<SkinnedMeshRenderer>();
+            bodyRenderer.sharedMesh = testMesh;
+
+            ContainerManager.EnsureRootWithDefaults(avatarRoot);
+
+            // Added after Ensure Root, so it only carries the exclusion marker.
+            var outfit = Spawn("Outfit", avatarRoot.transform);
+            var outfitRenderer = outfit.AddComponent<SkinnedMeshRenderer>();
+            outfitRenderer.sharedMesh = testMesh;
+            var deep = Spawn("Trim", outfit.transform);
+            deep.AddComponent<ExtraComponent>().value = 7f;
+            outfit.AddComponent<AvatarVcsUntracked>();
+
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            try
+            {
+                var commit = BranchManager.Commit(avatarRoot, "with an untracked outfit");
+                var rootRef = CommitStore.LoadCommit(avatarGuid, commit.commitId).avatarReferences.Single();
+
+                Assert.IsTrue(rootRef.blendShapes.Any(b => b.path == "Body"), "Body is still captured");
+                Assert.IsFalse(
+                    rootRef.blendShapes.Any(b => b.path == "Outfit" || b.path.StartsWith("Outfit/"))
+                    || rootRef.objectStates.Any(s => s.path == "Outfit" || s.path.StartsWith("Outfit/"))
+                    || rootRef.components.Any(c => c.path == "Outfit" || c.path.StartsWith("Outfit/")),
+                    "nothing in the AvatarVcsUntracked subtree may be captured");
+            }
+            finally
+            {
+                CommitStore.DeleteAvatarHistory(avatarGuid);
+            }
+        }
+
         // Broadened tracking (design doc 1.4, revised): a marked target's
         // whole subtree, not just its own BlendShape/material, is captured
         // generically (same ComponentCapturer/ComponentApplier containers

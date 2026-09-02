@@ -327,5 +327,29 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsFalse(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarker(untrackedChild),
                 "once tracked, no longer the exception");
         }
+
+        [Test]
+        public void HierarchyTrackingStatusIcon_AvatarVcsUntracked_OverridesAncestorTrackedReference()
+        {
+            ContainerManager.EnsureRoot(avatarRoot);
+            avatarRoot.AddComponent<AvatarVcsTrackedReference>();
+
+            var outfit = new GameObject("Outfit");
+            outfit.transform.SetParent(avatarRoot.transform, false);
+            var deep = new GameObject("Trim");
+            deep.transform.SetParent(outfit.transform, false);
+
+            Assert.AreEqual(HierarchyTrackingStatus.TrackedReference,
+                HierarchyTrackingStatusIcon.GetTrackingStatus(deep), "covered via the avatar root's marker");
+
+            outfit.AddComponent<AvatarVcsUntracked>();
+
+            Assert.AreEqual(HierarchyTrackingStatus.Untracked,
+                HierarchyTrackingStatusIcon.GetTrackingStatus(outfit));
+            Assert.AreEqual(HierarchyTrackingStatus.Untracked,
+                HierarchyTrackingStatusIcon.GetTrackingStatus(deep), "the whole subtree is opted out");
+            Assert.IsTrue(HierarchyTrackingStatusIcon.ShouldShowUntrackedMarker(deep),
+                "an opted-out object still won't round-trip, so it stays flagged");
+        }
     }
 }
