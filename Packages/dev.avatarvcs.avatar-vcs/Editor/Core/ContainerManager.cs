@@ -47,8 +47,9 @@ namespace AvatarVcs.Editor.Core
         }
 
         /// <summary>
-        /// Name of the container seeded by EnsureRootAndDefaultContainer's
-        /// (and EnsureRootWithDefaults') first-ever run for a given avatar.
+        /// Name of the container seeded by EnsureRootAndDefaultContainer on
+        /// its first-ever run for a given avatar. (EnsureRootWithDefaults no
+        /// longer seeds one -- KAN-71.)
         /// </summary>
         public const string DefaultContainerId = "container_1";
 
