@@ -158,8 +158,23 @@ namespace AvatarVcs.Editor.History
             foreach (var guid in plan.AssetGuidsToDelete)
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
-                if (!string.IsNullOrEmpty(path))
-                    AssetDatabase.DeleteAsset(path);
+                if (string.IsNullOrEmpty(path)) continue;
+
+                // generatedAssets comes from commit JSON, which this repo
+                // treats as hand-editable / corruptible everywhere else
+                // (TryLoadJson, SnapshotDiffer's SafeToDictionary, ...) --
+                // but this is the one path that hits AssetDatabase.DeleteAsset
+                // on a user's real asset. Only delete something that matches
+                // how MaterialSettingsApplier actually names its duplicates.
+                if (!IsAvatarVcsGeneratedAsset(path))
+                {
+                    Debug.LogWarning($"[AvatarVCS] Not deleting '{path}': it's listed in a commit's generatedAssets but "
+                        + "doesn't look AvatarVCS-generated (no '_avatarvcs' in the name, not under Assets/AvatarVCS_Generated/). "
+                        + "A corrupt or hand-edited commit can name any GUID here.");
+                    continue;
+                }
+
+                AssetDatabase.DeleteAsset(path);
             }
 
             foreach (var commitId in plan.CommitsToDelete)
@@ -170,6 +185,23 @@ namespace AvatarVcs.Editor.History
 
             CommitIndexOps.Remove(index, new HashSet<string>(plan.CommitsToDelete));
             SaveIndex(avatarGuid, index);
+        }
+
+        /// <summary>
+        /// Whether assetPath looks like something MaterialSettingsApplier
+        /// generated: its filename carries the "_avatarvcs" suffix that
+        /// method appends (AssetDatabase.GenerateUniqueAssetPath may add a
+        /// " 1" etc. after it, hence Contains not EndsWith), or it lives in
+        /// the Assets/AvatarVCS_Generated/ folder that method falls back to
+        /// for read-only source locations. Keep both checks in sync with
+        /// MaterialSettingsApplier.Apply.
+        /// </summary>
+        private static bool IsAvatarVcsGeneratedAsset(string assetPath)
+        {
+            if (string.IsNullOrEmpty(assetPath)) return false;
+            var normalized = assetPath.Replace('\\', '/');
+            if (normalized.StartsWith("Assets/AvatarVCS_Generated/")) return true;
+            return Path.GetFileNameWithoutExtension(normalized).Contains("_avatarvcs");
         }
 
         /// <summary>
