@@ -181,6 +181,49 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void Diff_BlendShapeKey_DistinguishesPathAndNameEvenWithSlashesInEither()
+        {
+            // The diff key joins (path, name); a "/"-readable join would let
+            // path "Hair" + name "Brow/Up" collide with path "Hair/Brow" +
+            // name "Up". Both entries must survive and diff independently.
+            var before = new Commit
+            {
+                avatarReferences =
+                {
+                    new AvatarReferenceState
+                    {
+                        path = "Body",
+                        blendShapes =
+                        {
+                            new BlendShapeRef { path = "Hair", name = "Brow/Up", weight = 0f },
+                            new BlendShapeRef { path = "Hair/Brow", name = "Up", weight = 0f },
+                        },
+                    },
+                },
+            };
+            var after = new Commit
+            {
+                avatarReferences =
+                {
+                    new AvatarReferenceState
+                    {
+                        path = "Body",
+                        blendShapes =
+                        {
+                            new BlendShapeRef { path = "Hair", name = "Brow/Up", weight = 10f },
+                            new BlendShapeRef { path = "Hair/Brow", name = "Up", weight = 20f },
+                        },
+                    },
+                },
+            };
+
+            var bodyDiff = SnapshotDiffer.Diff(before, after).Single(d => d.containerId == "avatarRef:Body");
+
+            Assert.IsTrue(bodyDiff.changeNotes.Any(n => n.Contains("10")), "the 0 -> 10 change must show");
+            Assert.IsTrue(bodyDiff.changeNotes.Any(n => n.Contains("20")), "the 0 -> 20 change must show separately");
+        }
+
+        [Test]
         public void Diff_DetectsActiveTagAndLayerChange_InAvatarReferences()
         {
             var before = new Commit
