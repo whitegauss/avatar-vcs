@@ -99,3 +99,9 @@ TestProject/                          # ローカル/CI 用の検証用 Unity �
 ### テストの実行
 
 `TestProject` を Unity 2022.3 系で開き、Test Runner (EditMode) から `Tests/Editor/` 配下のテストを実行してください。CI でも同じテストが push / PR ごとに走ります。
+
+### 設計ドキュメントの所在
+
+コード中のコメントは「design doc section N」「設計書 N.N」という形で設計書の節を参照します。この設計書 (`DesignDoc_avatar-vcs.md`) と関連ドキュメント (`PRD_avatar-vcs.md` / `CODE_REVIEW.md` / `TODO.md` / `plan.md`) は `.gitignore` の "Internal-only docs" 規約により**リポジトリには含まれず**、メンテナ（[@whitegauss](https://github.com/whitegauss)）がローカルで管理しています。公開物は `README.md` と `CHANGELOG.md` のみです。
+
+これらを持たないクローンから作業する場合、設計上の根拠が必要になったらメンテナに設計書を依頼してください。Jira の各タスクは設計書なしでも作業できるよう文面を自己完結させています。
