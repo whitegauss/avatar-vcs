@@ -12,6 +12,7 @@ using AvatarVcs.Editor.UI;
 using AvatarVcs.Runtime;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
 namespace AvatarVcs.Tests.Editor
@@ -175,6 +176,25 @@ namespace AvatarVcs.Tests.Editor
             {
                 Object.DestroyImmediate(plainGo);
             }
+        }
+
+        [Test]
+        public void ContainerCapture_SameNameSiblingsInContainer_LogsWarning()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            new GameObject("Dup").transform.SetParent(container.transform);
+            new GameObject("Dup").transform.SetParent(container.transform);
+
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex("'outfit_a' has 2 children named 'Dup'"));
+            // The two plain children also trip the existing non-prefab warning.
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex("'Dup' inside container 'outfit_a' is not a prefab instance"));
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex("'Dup' inside container 'outfit_a' is not a prefab instance"));
+
+            Assert.DoesNotThrow(() => ContainerCapture.CaptureContainer(container.transform));
         }
 
         [Test]
