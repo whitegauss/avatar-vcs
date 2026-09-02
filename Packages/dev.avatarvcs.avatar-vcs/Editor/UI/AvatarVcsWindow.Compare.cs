@@ -70,6 +70,8 @@ namespace AvatarVcs.Editor.UI
             RunCheckout(() =>
             {
                 var commit = CommitStore.LoadCommit(avatarGuid, commitA);
+                if (commit == null)
+                    throw new InvalidOperationException($"Commit '{commitA}' could not be loaded.");
 
                 // Only take the safety-net auto-commit if there's actually
                 // uncommitted work to protect; otherwise "Restore Original"
@@ -129,6 +131,8 @@ namespace AvatarVcs.Editor.UI
             RunCheckout(() =>
             {
                 var target = CommitStore.LoadCommit(avatarGuid, targetId);
+                if (target == null)
+                    throw new InvalidOperationException($"Commit '{targetId}' could not be loaded.");
                 var result = CheckoutOperation.CheckoutWithoutAutoCommit(target, avatarRoot);
                 if (result.IsSuccess)
                     compareShowingB = !compareShowingB;

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Runtime;
 using UnityEditor;
@@ -36,9 +37,46 @@ namespace AvatarVcs.Editor.UI
     {
         private static readonly Color UntrackedColor = new(0.4f, 0.4f, 0.4f, 0.6f);
 
+        // Per-editor-frame memo of the marker decision, keyed by instance id.
+        // hierarchyWindowItemOnGUI fires for every visible row on every
+        // repaint, and each decision walks ancestors (GetComponentInParent
+        // x3, plus IsUnderManagedAvatar's FindRoot) -- O(depth) per row per
+        // repaint, which bites on a deep Armature during a hover/drag repaint
+        // storm. The decision only changes on a hierarchy or marker edit, so
+        // computing it at most once per row per frame is safe. Cleared on
+        // EditorApplication.update (a frame boundary -- many repaints can
+        // happen within one, none between) and on hierarchyChanged.
+        private static readonly Dictionary<int, bool> markerCache = new();
+
         static HierarchyTrackingStatusIcon()
         {
             EditorApplication.hierarchyWindowItemOnGUI += OnHierarchyItemGUI;
+            EditorApplication.update += InvalidateCache;
+            EditorApplication.hierarchyChanged += InvalidateCache;
+        }
+
+        /// <summary>
+        /// Drops the per-frame marker memo. Called on every editor tick and
+        /// on any hierarchy change; also exposed so a test can drive the
+        /// cache lifecycle deterministically.
+        /// </summary>
+        public static void InvalidateCache()
+        {
+            if (markerCache.Count > 0) markerCache.Clear();
+        }
+
+        /// <summary>
+        /// <see cref="ShouldShowUntrackedMarker"/> memoized for the current
+        /// editor frame (see <see cref="markerCache"/>). The hierarchy hook
+        /// is the only production caller; public for tests.
+        /// </summary>
+        public static bool ShouldShowUntrackedMarkerCached(int instanceId)
+        {
+            if (markerCache.TryGetValue(instanceId, out var cached)) return cached;
+            var go = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+            var show = ShouldShowUntrackedMarker(go);
+            markerCache[instanceId] = show;
+            return show;
         }
 
         /// <summary>
@@ -86,8 +124,7 @@ namespace AvatarVcs.Editor.UI
 
         private static void OnHierarchyItemGUI(int instanceId, Rect selectionRect)
         {
-            var go = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
-            if (!ShouldShowUntrackedMarker(go)) return;
+            if (!ShouldShowUntrackedMarkerCached(instanceId)) return;
 
             var markerRect = new Rect(selectionRect.xMax - 16f, selectionRect.y + 2f, 10f, 10f);
             EditorGUI.DrawRect(markerRect, UntrackedColor);

@@ -39,11 +39,11 @@ namespace AvatarVcs.Editor.UI
             // Run the branch switch -- which can throw and pop a dialog -- only
             // after the layout group is closed, for the same reason the Create
             // and Commit handlers below defer their work past EndHorizontal:
-            // RunCheckout only catches InvalidOperationException, so anything
-            // else (corrupt config, deleted avatar root, a Unity prefab-API
-            // exception) would unwind straight out of OnGUI through this
-            // EndHorizontal and leave IMGUI spewing "Invalid GUILayout state"
-            // until the window was reopened.
+            // RunCheckout only catches InvalidOperationException/ArgumentException,
+            // so anything else (corrupt config, a Unity prefab-API exception)
+            // would unwind straight out of OnGUI through this EndHorizontal and
+            // leave IMGUI spewing "Invalid GUILayout state" until the window
+            // was reopened.
             if (switchTarget != null
                 && ConfirmDiscardIfUncommitted("Switch Branch", $"Switch from '{config.currentBranch}' to '{switchTarget}'?"))
                 RunCheckout(() => BranchManager.SwitchBranch(avatarRoot, switchTarget));
