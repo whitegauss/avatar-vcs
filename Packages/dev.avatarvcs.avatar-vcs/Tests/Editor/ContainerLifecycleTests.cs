@@ -289,13 +289,16 @@ namespace AvatarVcs.Tests.Editor
                 ContainerManager.CreateContainer(root, "outfit_a"));
         }
 
+        /// <summary>
+        /// CreateContainerWithUniqueName disambiguates a repeated base name
+        /// ("new_container", "new_container_1", ...) instead of throwing --
+        /// the "Create Container" menu command passes a fixed base name and
+        /// its second invocation used to hit CreateContainer's duplicate-name
+        /// InvalidOperationException with nothing to catch it (KAN-8).
+        /// </summary>
         [Test]
         public void CreateContainerWithUniqueName_RepeatedSameBaseName_AutoNumbersInsteadOfThrowing()
         {
-            // The "Create Container" menu command passes a fixed base name;
-            // its second invocation used to hit CreateContainer's
-            // duplicate-name InvalidOperationException with nothing to catch
-            // it (KAN-8).
             var root = ContainerManager.EnsureRoot(avatarRoot);
 
             GameObject first = null, second = null, third = null;
@@ -312,12 +315,15 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual(3, ContainerManager.GetContainers(root).Length);
         }
 
+        /// <summary>
+        /// The disambiguation candidate set is every direct child, not just
+        /// containers: CreateContainer's uniqueness check is by child name,
+        /// so a plain (non-container) child called "new_container" still
+        /// forces the new container to "new_container_1".
+        /// </summary>
         [Test]
         public void CreateContainerWithUniqueName_DisambiguatesAgainstNonContainerChildToo()
         {
-            // CreateContainer's uniqueness check is by child name, not by
-            // marker, so a plain child called "new_container" would still
-            // collide -- the candidate set has to be every child.
             var root = ContainerManager.EnsureRoot(avatarRoot);
             var plainChild = new GameObject("new_container");
             plainChild.transform.SetParent(root.transform, false);
