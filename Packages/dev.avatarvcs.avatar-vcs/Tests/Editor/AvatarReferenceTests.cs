@@ -31,6 +31,11 @@ namespace AvatarVcs.Tests.Editor
         private Material materialB;
         private string materialAGuid;
         private GameObject accessoryPrefab;
+        // A prefab (SkinnedMeshRenderer + asset mesh with Shape_A + materialA
+        // in slot 0) used by the KAN-72 idempotency tests, which need a real
+        // prefab instance to observe prefab-instance overrides. The mesh must
+        // be a saved asset -- SaveAsPrefabAsset can't reference a scene mesh.
+        private GameObject trackedBodyPrefab;
 
         [OneTimeSetUp]
         public void OneTimeSetUp()
@@ -55,6 +60,21 @@ namespace AvatarVcs.Tests.Editor
             var accessorySource = new GameObject("Accessory");
             accessoryPrefab = PrefabUtility.SaveAsPrefabAsset(accessorySource, $"{TestAssetDir}/Accessory.prefab");
             Object.DestroyImmediate(accessorySource);
+
+            var bodyMesh = new Mesh
+            {
+                vertices = new[] { Vector3.zero, Vector3.right, Vector3.up },
+                triangles = new[] { 0, 1, 2 },
+            };
+            bodyMesh.AddBlendShapeFrame("Shape_A", 100f, new[] { Vector3.zero, Vector3.zero, Vector3.zero }, null, null);
+            AssetDatabase.CreateAsset(bodyMesh, $"{TestAssetDir}/TrackedBodyMesh.asset");
+
+            var bodySource = new GameObject("TrackedBody");
+            var bodySmr = bodySource.AddComponent<SkinnedMeshRenderer>();
+            bodySmr.sharedMesh = bodyMesh;
+            bodySmr.sharedMaterials = new[] { materialA };
+            trackedBodyPrefab = PrefabUtility.SaveAsPrefabAsset(bodySource, $"{TestAssetDir}/TrackedBody.prefab");
+            Object.DestroyImmediate(bodySource);
         }
 
         [OneTimeTearDown]
@@ -164,6 +184,57 @@ namespace AvatarVcs.Tests.Editor
 
             var appliedGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(renderer.sharedMaterials[0]));
             Assert.AreEqual(materialAGuid, appliedGuid);
+        }
+
+        [Test]
+        public void Apply_ValuesMatchingLiveState_AddsNoPrefabInstanceOverrides()
+        {
+            // KAN-72: capture records every blend shape / material slot on
+            // every renderer in the tracked subtree. Re-applying a state that
+            // already matches the live values (the common case on every
+            // checkout) must not stamp a prefab-instance override onto every
+            // renderer -- that made "Apply Modifications To Prefab" and the
+            // Overrides dropdown unusable.
+            var avatarRoot = Spawn("Avatar");
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(trackedBodyPrefab, avatarRoot.transform);
+            spawned.Add(instance);
+            var renderer = instance.GetComponent<SkinnedMeshRenderer>();
+
+            var state = new AvatarReferenceState { path = "TrackedBody" };
+            state.blendShapes.Add(new BlendShapeRef { name = "Shape_A", weight = renderer.GetBlendShapeWeight(0) });
+            state.materials.Add(new MaterialRef { slot = 0, guid = materialAGuid });
+
+            Assert.IsFalse(PrefabUtility.HasPrefabInstanceAnyOverrides(instance, false),
+                "sanity: a freshly instantiated prefab has no overrides");
+
+            AvatarReferenceApplier.Apply(state, avatarRoot.transform);
+
+            Assert.IsFalse(PrefabUtility.HasPrefabInstanceAnyOverrides(instance, false),
+                "applying values that already match the live state must not add overrides");
+        }
+
+        [Test]
+        public void Apply_DriftedBlendShapeAndMaterial_IsStillRestored_OnAPrefabInstance()
+        {
+            // The KAN-72 diff guard must not over-skip: a genuine drift on a
+            // prefab instance still gets written back.
+            var avatarRoot = Spawn("Avatar");
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(trackedBodyPrefab, avatarRoot.transform);
+            spawned.Add(instance);
+            var renderer = instance.GetComponent<SkinnedMeshRenderer>();
+
+            var state = new AvatarReferenceState { path = "TrackedBody" };
+            state.blendShapes.Add(new BlendShapeRef { name = "Shape_A", weight = 65f });
+            state.materials.Add(new MaterialRef { slot = 0, guid = materialAGuid });
+
+            renderer.SetBlendShapeWeight(0, 10f);            // drift
+            renderer.sharedMaterials = new[] { materialB };  // drift
+
+            AvatarReferenceApplier.Apply(state, avatarRoot.transform);
+
+            Assert.AreEqual(65f, renderer.GetBlendShapeWeight(0), 0.0001f);
+            Assert.AreEqual(materialAGuid,
+                AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(renderer.sharedMaterials[0])));
         }
 
         // AvatarReferenceCollector is the piece that used to be entirely

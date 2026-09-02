@@ -30,11 +30,27 @@ namespace AvatarVcs.Editor.History
         /// guarantee, and a truncated JSON file permanently broke every
         /// future load for that avatar (JsonUtility.FromJson throwing, see
         /// TryLoadJson below).
+        ///
+        /// The temp file's bytes are flushed all the way to disk before the
+        /// rename (KAN-18). File.WriteAllText returns once the data is in the
+        /// OS page cache, so a power loss in the window before the rename
+        /// commits can reorder them -- the rename reaching disk first -- and
+        /// leave a zero-length or partial file at path, the exact truncated-
+        /// JSON failure this method exists to prevent.
         /// </summary>
         private static void WriteAtomically(string path, string content)
         {
             var tempPath = $"{path}.tmp";
-            File.WriteAllText(tempPath, content);
+
+            // StreamWriter(string) defaults to UTF-8 with no BOM, matching
+            // File.WriteAllText. BaseStream is the underlying FileStream.
+            using (var writer = new StreamWriter(tempPath, append: false))
+            {
+                writer.Write(content);
+                writer.Flush();
+                ((FileStream)writer.BaseStream).Flush(flushToDisk: true);
+            }
+
             if (File.Exists(path))
                 File.Replace(tempPath, path, null);
             else
