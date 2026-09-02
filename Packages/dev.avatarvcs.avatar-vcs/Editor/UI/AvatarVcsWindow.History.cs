@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Linq;
-using AvatarVcs.Editor.History;
 using AvatarVcs.Core.Diff;
 using AvatarVcs.Core.Model;
 using UnityEditor;
@@ -10,6 +7,7 @@ using UnityEngine;
 namespace AvatarVcs.Editor.UI
 {
     // Commit history panel, the diff panel next to it, and commit deletion.
+    // All decisions are the presenter's; this file only draws and dispatches.
     public partial class AvatarVcsWindow
     {
         private void DrawHistoryPanel()
@@ -19,71 +17,50 @@ namespace AvatarVcs.Editor.UI
             EditorGUILayout.LabelField("* = current branch head (can't be deleted)", EditorStyles.miniLabel);
 
             historyScroll = EditorGUILayout.BeginScrollView(historyScroll);
-            var headId = CurrentHeadId();
-            foreach (var entry in commits.ToList())
+            var headId = presenter.CurrentHeadId;
+            foreach (var entry in presenter.Commits.ToList())
             {
                 var label = entry.commitId == headId ? $"* {entry.message}" : $"  {entry.message}";
-                var selected = entry.commitId == selectedCommitId;
+                var selected = entry.commitId == presenter.SelectedCommitId;
 
                 EditorGUILayout.BeginHorizontal();
 
-                // Checkbox for bulk delete. Left enabled even on the current
-                // head for the same reason the "x" button below is -- a
-                // checked-then-blocked head just surfaces in the bulk
-                // delete's failure summary instead of silently refusing to
-                // check, which would look like a UI glitch.
-                var checkedForDeletion = selectedForBulkDelete.Contains(entry.commitId);
+                var checkedForDeletion = presenter.SelectedForBulkDelete.Contains(entry.commitId);
                 var newChecked = EditorGUILayout.Toggle(checkedForDeletion, GUILayout.Width(16));
                 if (newChecked != checkedForDeletion)
-                {
-                    if (newChecked) selectedForBulkDelete.Add(entry.commitId);
-                    else selectedForBulkDelete.Remove(entry.commitId);
-                }
+                    presenter.SetBulkDeleteSelected(entry.commitId, newChecked);
 
                 var prevBg = GUI.backgroundColor;
                 if (selected) GUI.backgroundColor = new Color(0.6f, 0.8f, 1f);
-                // A long commit message must not be allowed to expand past
-                // this panel's width -- without a bound here, IMGUI would
-                // widen this button to fit the text and push the delete
-                // button below out of the visible/scrollable area, which
-                // looks exactly like "there's no delete button".
+                // A long commit message must not widen this button past the
+                // panel and push the delete button out of view.
                 if (GUILayout.Button(label, GUILayout.MaxWidth(164)) && !selected)
-                {
-                    selectedCommitId = entry.commitId;
-                    RecomputeSelectedDiff();
-                }
+                    presenter.SelectCommit(entry.commitId);
                 GUI.backgroundColor = prevBg;
 
-                // Deleting a branch head would leave that branch pointing at
-                // nothing. The button stays enabled rather than disabled --
-                // IMGUI doesn't reliably show tooltips on disabled controls
-                // -- so clicking it while it's the head always gets an
-                // explicit, actionable explanation instead of doing nothing.
+                // The button stays enabled even on the head -- IMGUI tooltips
+                // on disabled controls are unreliable -- so clicking it while
+                // it's the head gets an explicit explanation (from the
+                // presenter) rather than doing nothing.
                 var isHead = entry.commitId == headId;
                 var deleteContent = new GUIContent("x", isHead
                     ? "This is the current branch's head. Checkout a different commit first to move the head away, then delete it."
                     : "Delete this commit (and any duplicate assets generated only for it).");
                 if (GUILayout.Button(deleteContent, GUILayout.Width(20)))
-                {
-                    if (isHead)
-                        EditorUtility.DisplayDialog("Can't Delete",
-                            "This commit is the current branch's head. Checkout a different commit first to move the head away, then delete it.",
-                            "OK");
-                    else
-                        DeleteCommit(entry.commitId);
-                }
+                    presenter.DeleteCommit(entry.commitId);
 
                 EditorGUILayout.EndHorizontal();
             }
             EditorGUILayout.EndScrollView();
 
             EditorGUILayout.BeginHorizontal();
-            GUI.enabled = selectedForBulkDelete.Count > 0;
-            if (GUILayout.Button($"Delete Selected ({selectedForBulkDelete.Count})"))
-                DeleteCommits(selectedForBulkDelete.ToList());
+            var bulkCount = presenter.SelectedForBulkDelete.Count;
+            GUI.enabled = bulkCount > 0;
+            if (GUILayout.Button($"Delete Selected ({bulkCount})"))
+                presenter.DeleteSelected();
             GUI.enabled = true;
-            if (selectedForBulkDelete.Count > 0 && GUILayout.Button("Clear", GUILayout.Width(50)))
-                selectedForBulkDelete.Clear();
+            if (bulkCount > 0 && GUILayout.Button("Clear", GUILayout.Width(50)))
+                presenter.ClearBulkDelete();
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.EndVertical();
@@ -93,28 +70,26 @@ namespace AvatarVcs.Editor.UI
         {
             EditorGUILayout.BeginVertical();
 
-            var baseLabel = diffBaseCommitId == null ? "current scene" : CommitMessage(diffBaseCommitId);
+            var baseLabel = presenter.DiffBaseCommitId == null
+                ? "current scene"
+                : presenter.CommitMessageOf(presenter.DiffBaseCommitId);
             EditorGUILayout.LabelField($"Diff (selected commit -> {baseLabel})", EditorStyles.boldLabel);
 
             EditorGUILayout.BeginHorizontal();
-            var options = new[] { "Current Scene" }.Concat(commits.Select(CommitLabel)).ToArray();
-            var ids = new string[] { null }.Concat(commits.Select(c => c.commitId)).ToArray();
-            var currentIndex = Array.IndexOf(ids, diffBaseCommitId);
-            var newIndex = EditorGUILayout.Popup("Diff against", currentIndex < 0 ? 0 : currentIndex, options);
-            var newBaseId = ids[Mathf.Clamp(newIndex, 0, ids.Length - 1)];
-            if (newBaseId != diffBaseCommitId)
-            {
-                diffBaseCommitId = newBaseId;
-                RecomputeSelectedDiff();
-            }
+            var options = presenter.DiffBaseOptions().ToList();
+            var labels = options.Select(o => o.label).ToArray();
+            var currentIndex = options.FindIndex(o => o.id == presenter.DiffBaseCommitId);
+            var newIndex = EditorGUILayout.Popup("Diff against", currentIndex < 0 ? 0 : currentIndex, labels);
+            if (newIndex != currentIndex)
+                presenter.SelectDiffBaseByIndex(newIndex);
             if (GUILayout.Button("Refresh", GUILayout.Width(70)))
-                RecomputeSelectedDiff();
+                presenter.RecomputeSelectedDiff();
             EditorGUILayout.EndHorizontal();
 
             diffScroll = EditorGUILayout.BeginScrollView(diffScroll);
-            foreach (var diff in selectedDiff)
+            foreach (var diff in presenter.SelectedDiff)
                 DrawDiffEntry(diff);
-            if (selectedDiff.Count == 0)
+            if (presenter.SelectedDiff.Count == 0)
                 EditorGUILayout.LabelField("No containers.");
             EditorGUILayout.EndScrollView();
             EditorGUILayout.EndVertical();
@@ -155,69 +130,6 @@ namespace AvatarVcs.Editor.UI
             }
 
             GUI.color = prevColor;
-        }
-
-        private void DeleteCommit(string commitId)
-        {
-            if (!EditorUtility.DisplayDialog("Delete Commit",
-                    "Delete this commit and its generated assets (e.g. duplicate materials)? This cannot be undone.",
-                    "Delete", "Cancel"))
-                return;
-
-            try
-            {
-                CommitStore.DeleteCommit(avatarGuid, commitId);
-            }
-            catch (InvalidOperationException e)
-            {
-                // The underlying message mentions a "force" escape hatch
-                // that only exists in the C# API, not this window; steer
-                // the user at the one path actually available here.
-                EditorUtility.DisplayDialog("Delete Failed",
-                    e.Message + "\n\nSwitch to that branch, checkout a different commit on it, then come back and delete this one.",
-                    "OK");
-                return;
-            }
-
-            if (selectedCommitId == commitId) selectedCommitId = null;
-            Reload();
-        }
-
-        // Bulk counterpart to DeleteCommit: one confirmation up front, then
-        // best-effort -- a mix of deletable and head-blocked commits in the
-        // same selection shouldn't abort the whole batch, it should delete
-        // what it can and report what it couldn't. Goes through
-        // CommitStore.DeleteCommits (one shared-asset scan for the whole
-        // batch) rather than calling CommitStore.DeleteCommit in a loop
-        // (which reloads every other commit from disk per call).
-        private void DeleteCommits(List<string> commitIds)
-        {
-            if (commitIds.Count == 0) return;
-
-            if (!EditorUtility.DisplayDialog("Delete Selected Commits",
-                    $"Delete {commitIds.Count} commit(s) and their generated assets (e.g. duplicate materials)? This cannot be undone.",
-                    "Delete", "Cancel"))
-                return;
-
-            // Commit messages for any blocked ids are only available before
-            // Reload() replaces `commits` with the post-delete state.
-            var blocked = CommitStore.DeleteCommits(avatarGuid, commitIds);
-            var blockedMessages = blocked.Select(id => $"{CommitMessage(id)}: is the head of its branch.").ToList();
-
-            foreach (var commitId in commitIds)
-            {
-                if (blocked.Contains(commitId)) continue;
-                selectedForBulkDelete.Remove(commitId);
-                if (selectedCommitId == commitId) selectedCommitId = null;
-            }
-
-            Reload();
-
-            if (blockedMessages.Count > 0)
-                EditorUtility.DisplayDialog("Some Commits Could Not Be Deleted",
-                    string.Join("\n\n", blockedMessages)
-                        + "\n\nSwitch to the relevant branch, checkout a different commit on it, then come back and delete it.",
-                    "OK");
         }
     }
 }
