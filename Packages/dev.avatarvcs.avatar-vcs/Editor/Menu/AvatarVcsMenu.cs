@@ -46,8 +46,10 @@ namespace AvatarVcs.Editor.Menu
                 return;
             }
 
-            var containerId = "new_container";
-            var container = ContainerManager.CreateContainer(root, containerId);
+            // Auto-numbers ("new_container", "new_container_1", ...) so a
+            // second invocation doesn't hit CreateContainer's duplicate-name
+            // InvalidOperationException with nothing here to catch it.
+            var container = ContainerManager.CreateContainerWithUniqueName(root, "new_container");
             Selection.activeGameObject = container;
         }
 

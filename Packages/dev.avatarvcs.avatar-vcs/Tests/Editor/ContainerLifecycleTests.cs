@@ -290,6 +290,44 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void CreateContainerWithUniqueName_RepeatedSameBaseName_AutoNumbersInsteadOfThrowing()
+        {
+            // The "Create Container" menu command passes a fixed base name;
+            // its second invocation used to hit CreateContainer's
+            // duplicate-name InvalidOperationException with nothing to catch
+            // it (KAN-8).
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+
+            GameObject first = null, second = null, third = null;
+            Assert.DoesNotThrow(() =>
+            {
+                first = ContainerManager.CreateContainerWithUniqueName(root, "new_container");
+                second = ContainerManager.CreateContainerWithUniqueName(root, "new_container");
+                third = ContainerManager.CreateContainerWithUniqueName(root, "new_container");
+            });
+
+            Assert.AreEqual("new_container", first.name);
+            Assert.AreEqual("new_container_1", second.name);
+            Assert.AreEqual("new_container_2", third.name);
+            Assert.AreEqual(3, ContainerManager.GetContainers(root).Length);
+        }
+
+        [Test]
+        public void CreateContainerWithUniqueName_DisambiguatesAgainstNonContainerChildToo()
+        {
+            // CreateContainer's uniqueness check is by child name, not by
+            // marker, so a plain child called "new_container" would still
+            // collide -- the candidate set has to be every child.
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var plainChild = new GameObject("new_container");
+            plainChild.transform.SetParent(root.transform, false);
+
+            var container = ContainerManager.CreateContainerWithUniqueName(root, "new_container");
+
+            Assert.AreEqual("new_container_1", container.name);
+        }
+
+        [Test]
         public void ValidateContainers_DetectsDuplicateNameFromManualRename()
         {
             // CreateContainer itself already rejects this; the case that

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Core.Naming;
 using AvatarVcs.Runtime;
@@ -294,6 +295,37 @@ namespace AvatarVcs.Editor.Core
             return containerGo;
         }
 
+        /// <summary>
+        /// Like CreateContainer, but disambiguates desiredContainerId against
+        /// the names already under root ("new_container", "new_container_1",
+        /// ...) instead of throwing when it's taken. For the "Create
+        /// Container" menu command, which passes a fixed base name and would
+        /// otherwise surface a raw InvalidOperationException on its second
+        /// use. Uses the same SiblingNamer.MakeUnique as
+        /// AdoptLoosePrefabInstancesAsContainers; CreateContainer's own
+        /// uniqueness check compares against every child by name, so the
+        /// candidate set is every child, not just containers.
+        /// </summary>
+        public static GameObject CreateContainerWithUniqueName(GameObject root, string desiredContainerId)
+        {
+            if (root == null) throw new ArgumentNullException(nameof(root));
+            if (string.IsNullOrEmpty(desiredContainerId))
+                throw new ArgumentException("desiredContainerId must not be empty.", nameof(desiredContainerId));
+            if (root.GetComponent<AvatarVcsRoot>() == null)
+                throw new ArgumentException("root must be an AvatarVCS root GameObject (see EnsureRoot).", nameof(root));
+
+            return CreateContainer(root, SiblingNamer.MakeUnique(DirectChildNames(root), desiredContainerId));
+        }
+
+        /// <summary>
+        /// The names of every direct child of root, as the candidate set for
+        /// SiblingNamer.MakeUnique -- CreateContainer's uniqueness check is by
+        /// child name (not by marker), so a unique container name has to avoid
+        /// every child, not just the containers.
+        /// </summary>
+        private static HashSet<string> DirectChildNames(GameObject root) =>
+            root.transform.Cast<Transform>().Select(t => t.name).ToHashSet();
+
         public static Transform[] GetContainers(GameObject root)
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
@@ -387,8 +419,7 @@ namespace AvatarVcs.Editor.Core
                 // needlessly disambiguate against its own name.
                 Undo.SetTransformParent(child, wrapper.transform, "Adopt Prefab As Container");
 
-                var existingNames = root.transform.Cast<Transform>().Select(t => t.name).ToHashSet();
-                wrapper.name = SiblingNamer.MakeUnique(existingNames, child.name);
+                wrapper.name = SiblingNamer.MakeUnique(DirectChildNames(root), child.name);
                 Undo.SetTransformParent(wrapper.transform, root.transform, "Adopt Prefab As Container");
                 wrapper.transform.localPosition = Vector3.zero;
                 wrapper.transform.localRotation = Quaternion.identity;
