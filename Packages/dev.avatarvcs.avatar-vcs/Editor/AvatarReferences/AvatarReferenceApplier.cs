@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Core.Model;
@@ -34,29 +35,39 @@ namespace AvatarVcs.Editor.AvatarReferences
             ApplyObjectStates(state, target);
         }
 
+        // blendShapes/materials are grouped by BlendShapeRef.path /
+        // MaterialRef.path -- "" (or a pre-KAN-10 commit's absent key,
+        // which JsonUtility leaves null) means the tracked target itself,
+        // otherwise a descendant renderer. Each group resolves its own
+        // renderer under target.
         private static void ApplyBlendShapes(AvatarReferenceState state, Transform target)
         {
             if (state.blendShapes.Count == 0) return;
 
-            var renderer = target.GetComponent<SkinnedMeshRenderer>();
-            if (renderer == null || renderer.sharedMesh == null)
+            foreach (var group in state.blendShapes.GroupBy(b => b.path ?? string.Empty))
             {
-                Debug.LogWarning($"[AvatarVCS] '{state.path}' has no SkinnedMeshRenderer with a mesh; blend shapes skipped.");
-                return;
-            }
-
-            var mesh = renderer.sharedMesh;
-            Undo.RecordObject(renderer, "AvatarVCS Apply BlendShapes");
-
-            foreach (var shape in state.blendShapes)
-            {
-                var index = mesh.GetBlendShapeIndex(shape.name);
-                if (index < 0)
+                var where = JoinPath(state.path, group.Key);
+                var node = ReferenceResolver.ResolvePath(group.Key, target);
+                var renderer = node == null ? null : node.GetComponent<SkinnedMeshRenderer>();
+                if (renderer == null || renderer.sharedMesh == null)
                 {
-                    Debug.LogWarning($"[AvatarVCS] Blend shape '{shape.name}' not found on '{state.path}'; skipped.");
+                    Debug.LogWarning($"[AvatarVCS] '{where}' has no SkinnedMeshRenderer with a mesh; blend shapes skipped.");
                     continue;
                 }
-                renderer.SetBlendShapeWeight(index, shape.weight);
+
+                var mesh = renderer.sharedMesh;
+                Undo.RecordObject(renderer, "AvatarVCS Apply BlendShapes");
+
+                foreach (var shape in group)
+                {
+                    var index = mesh.GetBlendShapeIndex(shape.name);
+                    if (index < 0)
+                    {
+                        Debug.LogWarning($"[AvatarVCS] Blend shape '{shape.name}' not found on '{where}'; skipped.");
+                        continue;
+                    }
+                    renderer.SetBlendShapeWeight(index, shape.weight);
+                }
             }
         }
 
@@ -64,40 +75,45 @@ namespace AvatarVcs.Editor.AvatarReferences
         {
             if (state.materials.Count == 0) return;
 
-            var renderer = target.GetComponent<Renderer>();
-            if (renderer == null)
+            foreach (var group in state.materials.GroupBy(m => m.path ?? string.Empty))
             {
-                Debug.LogWarning($"[AvatarVCS] '{state.path}' has no Renderer; material references skipped.");
-                return;
-            }
-
-            var materials = renderer.sharedMaterials;
-            var changed = false;
-
-            foreach (var materialRef in state.materials)
-            {
-                if (materialRef.slot < 0 || materialRef.slot >= materials.Length)
+                var where = JoinPath(state.path, group.Key);
+                var node = ReferenceResolver.ResolvePath(group.Key, target);
+                var renderer = node == null ? null : node.GetComponent<Renderer>();
+                if (renderer == null)
                 {
-                    Debug.LogWarning($"[AvatarVCS] Material slot {materialRef.slot} out of range on '{state.path}'; skipped.");
+                    Debug.LogWarning($"[AvatarVCS] '{where}' has no Renderer; material references skipped.");
                     continue;
                 }
 
-                var assetPath = AssetDatabase.GUIDToAssetPath(GuidRemapper.Resolve(materialRef.guid));
-                var material = string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.LoadAssetAtPath<Material>(assetPath);
-                if (material == null)
+                var materials = renderer.sharedMaterials;
+                var changed = false;
+
+                foreach (var materialRef in group)
                 {
-                    Debug.LogWarning($"[AvatarVCS] Material GUID '{materialRef.guid}' could not be resolved for slot {materialRef.slot} on '{state.path}'; skipped.");
-                    continue;
+                    if (materialRef.slot < 0 || materialRef.slot >= materials.Length)
+                    {
+                        Debug.LogWarning($"[AvatarVCS] Material slot {materialRef.slot} out of range on '{where}'; skipped.");
+                        continue;
+                    }
+
+                    var assetPath = AssetDatabase.GUIDToAssetPath(GuidRemapper.Resolve(materialRef.guid));
+                    var material = string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.LoadAssetAtPath<Material>(assetPath);
+                    if (material == null)
+                    {
+                        Debug.LogWarning($"[AvatarVCS] Material GUID '{materialRef.guid}' could not be resolved for slot {materialRef.slot} on '{where}'; skipped.");
+                        continue;
+                    }
+
+                    materials[materialRef.slot] = material;
+                    changed = true;
                 }
 
-                materials[materialRef.slot] = material;
-                changed = true;
-            }
-
-            if (changed)
-            {
-                Undo.RecordObject(renderer, "AvatarVCS Apply Materials");
-                renderer.sharedMaterials = materials;
+                if (changed)
+                {
+                    Undo.RecordObject(renderer, "AvatarVCS Apply Materials");
+                    renderer.sharedMaterials = materials;
+                }
             }
         }
 
@@ -116,6 +132,14 @@ namespace AvatarVcs.Editor.AvatarReferences
                     Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{state.path}': {result.Message}");
             }
         }
+
+        // "Body" + "" -> "Body"; "" + "Chest" -> "Chest"; "Body" + "Chest"
+        // -> "Body/Chest". Only used to build a readable location for a
+        // warning, never for resolution.
+        private static string JoinPath(string a, string b) =>
+            string.IsNullOrEmpty(a) ? b ?? string.Empty
+            : string.IsNullOrEmpty(b) ? a
+            : $"{a}/{b}";
 
         private static void ApplyObjectStates(AvatarReferenceState state, Transform target)
         {

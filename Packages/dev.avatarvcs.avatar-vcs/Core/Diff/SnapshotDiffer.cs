@@ -150,15 +150,20 @@ namespace AvatarVcs.Core.Diff
         {
             var notes = new List<string>();
 
+            // Keyed by (path, name) / (path, slot), not name / slot alone:
+            // a tracked subtree can now hold several renderers (KAN-10), and
+            // two of them can legitimately share a blend-shape name or a slot
+            // number. path "" (or a pre-KAN-10 commit's null) is the target
+            // itself and stays displayed bare.
             notes.AddRange(DiffMap(
-                SafeToDictionary(before.blendShapes, s => s.name, s => s.weight),
-                SafeToDictionary(after.blendShapes, s => s.name, s => s.weight),
-                (name, b, a) => $"blendShape '{name}': {b} -> {a}"));
+                SafeToDictionary(before.blendShapes, BlendShapeKey, s => s.weight),
+                SafeToDictionary(after.blendShapes, BlendShapeKey, s => s.weight),
+                (key, b, a) => $"blendShape '{key}': {b} -> {a}"));
 
             notes.AddRange(DiffMap(
-                SafeToDictionary(before.materials, m => m.slot, m => m.guid),
-                SafeToDictionary(after.materials, m => m.slot, m => m.guid),
-                (slot, b, a) => $"material slot {slot}: '{b}' -> '{a}'"));
+                SafeToDictionary(before.materials, MaterialKey, m => m.guid),
+                SafeToDictionary(after.materials, MaterialKey, m => m.guid),
+                (key, b, a) => $"material {key}: '{b}' -> '{a}'"));
 
             notes.AddRange(DiffMap(FlattenFields(before.components), FlattenFields(after.components),
                 (key, b, a) => $"{key}: '{b}' -> '{a}'"));
@@ -180,6 +185,12 @@ namespace AvatarVcs.Core.Diff
 
             return notes;
         }
+
+        private static string BlendShapeKey(BlendShapeRef s) =>
+            string.IsNullOrEmpty(s.path) ? s.name : $"{s.path}/{s.name}";
+
+        private static string MaterialKey(MaterialRef m) =>
+            string.IsNullOrEmpty(m.path) ? $"slot {m.slot}" : $"{m.path} slot {m.slot}";
 
         private static List<string> DescribeMaterialSettingsChanges(MaterialSettingsState before, MaterialSettingsState after)
         {

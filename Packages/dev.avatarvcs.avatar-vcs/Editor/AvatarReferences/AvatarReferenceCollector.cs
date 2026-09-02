@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.MaterialSettings;
 using AvatarVcs.Core.MaterialSettings;
 using AvatarVcs.Core.Model;
@@ -42,36 +43,47 @@ namespace AvatarVcs.Editor.AvatarReferences
                 .Where(t => t.transform.parent == null
                     || t.transform.parent.GetComponentInParent<AvatarVcsTrackedReference>(includeInactive: true) == null)
                 .ToList();
+            var vcsRoot = ContainerManager.FindRoot(avatarRoot)?.transform;
             foreach (var tracked in trackedTargets)
             {
                 var target = tracked.transform;
                 avatarReferences.Add(AvatarReferenceCapture.Capture(target, avatarRoot.transform));
 
-                var renderer = target.GetComponent<Renderer>();
-                if (renderer == null) continue;
-
-                var path = ReferenceResolver.GetRelativePath(target, avatarRoot.transform);
-                var materials = renderer.sharedMaterials;
-                for (var slot = 0; slot < materials.Length; slot++)
+                // Every renderer in the tracked subtree, not just the target's
+                // own -- the default "Ensure Root" config tracks the avatar
+                // root, whose renderers (if any) are never the ones carrying
+                // lilToon settings; Body/accessories are always descendants.
+                // Mirrors AvatarReferenceCapture's [AvatarVCS]-subtree skip.
+                foreach (var node in target.GetComponentsInChildren<Transform>(includeInactive: true))
                 {
-                    var material = materials[slot];
-                    // Unsaved/missing materials and shaders outside the MVP's
-                    // lilToon-only ShaderPropertyMap are silently skipped here
-                    // (not a warning): materialSettings is a best-effort bonus
-                    // on top of avatarReferences' material *reference* tracking,
-                    // which already covers every slot regardless of shader.
-                    if (material == null || !ShaderPropertyMap.IsSupported(material.shader.name)) continue;
+                    if (vcsRoot != null && node.IsChildOf(vcsRoot)) continue;
 
-                    // Capture throws if material isn't a saved asset (e.g. a
-                    // runtime-only instance); that's a legitimate state for a
-                    // live scene, not a reason to abort the whole commit.
-                    try
+                    var renderer = node.GetComponent<Renderer>();
+                    if (renderer == null) continue;
+
+                    var path = ReferenceResolver.GetRelativePath(node, avatarRoot.transform);
+                    var materials = renderer.sharedMaterials;
+                    for (var slot = 0; slot < materials.Length; slot++)
                     {
-                        materialSettings.Add(MaterialSettingsCapture.Capture(material, material.shader.name, path, slot));
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        // not a saved asset -- skip this slot
+                        var material = materials[slot];
+                        // Unsaved/missing materials and shaders outside the MVP's
+                        // lilToon-only ShaderPropertyMap are silently skipped here
+                        // (not a warning): materialSettings is a best-effort bonus
+                        // on top of avatarReferences' material *reference* tracking,
+                        // which already covers every slot regardless of shader.
+                        if (material == null || !ShaderPropertyMap.IsSupported(material.shader.name)) continue;
+
+                        // Capture throws if material isn't a saved asset (e.g. a
+                        // runtime-only instance); that's a legitimate state for a
+                        // live scene, not a reason to abort the whole commit.
+                        try
+                        {
+                            materialSettings.Add(MaterialSettingsCapture.Capture(material, material.shader.name, path, slot));
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            // not a saved asset -- skip this slot
+                        }
                     }
                 }
             }
