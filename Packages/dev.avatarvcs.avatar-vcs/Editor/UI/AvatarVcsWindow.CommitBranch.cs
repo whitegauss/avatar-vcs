@@ -13,6 +13,13 @@ namespace AvatarVcs.Editor.UI
     // Branch switcher/creation, commit, and checkout-selected-commit.
     public partial class AvatarVcsWindow
     {
+        /// <summary>
+        /// The branch dropdown, "+ New Branch" toggle, and (when open) the
+        /// new-branch name field. Switch and create both run their actual
+        /// work -- which can throw and pop a dialog -- only after the
+        /// EditorGUILayout horizontal group is closed, so a failure can't
+        /// unwind through an open IMGUI layout group (KAN-7).
+        /// </summary>
         private void DrawBranchBar()
         {
             EditorGUILayout.BeginHorizontal();
@@ -89,6 +96,14 @@ namespace AvatarVcs.Editor.UI
 
         private const string CommitMessageControlName = "AvatarVcsCommitMessageField";
 
+        /// <summary>
+        /// The commit message field and Commit button (Enter in the field
+        /// commits too). The commit itself -- which can throw, show a
+        /// "Commit Failed" dialog, and early-return -- runs only after the
+        /// EditorGUILayout horizontal group is closed, so a failed commit
+        /// can't skip EndHorizontal and leave IMGUI in an invalid layout
+        /// state (KAN-7).
+        /// </summary>
         private void DrawCommitBar()
         {
             EditorGUILayout.BeginHorizontal();
