@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Editor.Apply;
+using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Core.Model;
+using AvatarVcs.Editor.Reflection;
 using AvatarVcs.Runtime;
 using UnityEditor;
 using UnityEngine;
@@ -126,6 +128,49 @@ namespace AvatarVcs.Editor.Operations
                     Debug.LogError($"[AvatarVCS] Unexpected error restoring component '{componentState.type}' on '{snapshot.containerId}'; "
                         + $"skipped to keep the checkout from aborting mid-regenerate: {e}");
                 }
+            }
+
+            ApplyInnerProperties(snapshot, containerGo, avatarRoot);
+        }
+
+        /// <summary>
+        /// KAN-70: after the prefab instances are regenerated clean, re-apply
+        /// the BlendShape weights / material slots / active-tag-layer the user
+        /// tweaked inside them. Reuses AvatarReferenceApplier -- the snapshot's
+        /// blendShapes/materials/objectStates are path-relative to the
+        /// container, and a state whose `path` locates the container under the
+        /// avatar makes that applier resolve each entry correctly. Empty on a
+        /// pre-KAN-70 commit -> no-op.
+        /// </summary>
+        private static void ApplyInnerProperties(ContainerSnapshot snapshot, GameObject containerGo, GameObject avatarRoot)
+        {
+            // Null-safe, not just .Count: a hand-edited or corrupt commit can
+            // carry an explicit `null` for any of these lists. Dereferencing it
+            // here -- outside the try below -- would throw an NRE that escapes
+            // ApplyContainerComponents and aborts the checkout mid-regenerate,
+            // which is exactly what the catch below exists to prevent.
+            var blendShapes = snapshot.blendShapes ?? new List<BlendShapeRef>();
+            var materials = snapshot.materials ?? new List<MaterialRef>();
+            var objectStates = snapshot.objectStates ?? new List<ObjectStateRef>();
+
+            if (blendShapes.Count == 0 && materials.Count == 0 && objectStates.Count == 0)
+                return;
+
+            try
+            {
+                var state = new AvatarReferenceState
+                {
+                    path = ReferenceResolver.GetRelativePath(containerGo.transform, avatarRoot.transform),
+                    blendShapes = blendShapes,
+                    materials = materials,
+                    objectStates = objectStates,
+                };
+                AvatarReferenceApplier.Apply(state, avatarRoot.transform);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[AvatarVCS] Failed to re-apply inner properties on container '{snapshot.containerId}' "
+                    + $"after regeneration; skipped to keep the checkout from aborting: {e}");
             }
         }
 

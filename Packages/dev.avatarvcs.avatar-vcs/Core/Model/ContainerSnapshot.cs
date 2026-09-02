@@ -31,5 +31,17 @@ namespace AvatarVcs.Core.Model
         public bool activeSelf = true;
         public int layer;
         public List<ComponentState> components = new();
+
+        // Property versioning for the container's regenerated subtree
+        // (KAN-70). A container is destroy-and-regenerate from prefabGuids,
+        // so per-object BlendShape weights / material slots / active-tag-layer
+        // that the user tweaked inside a prefab instance would otherwise be
+        // lost on checkout. These re-apply them on top after regeneration
+        // (same "regenerate then overwrite" order as MaterialSettings).
+        // Paths are relative to the container root. Absent in older commits
+        // -> empty -> nothing re-applied -> pre-KAN-70 behaviour.
+        public List<BlendShapeRef> blendShapes = new();
+        public List<MaterialRef> materials = new();
+        public List<ObjectStateRef> objectStates = new();
     }
 }

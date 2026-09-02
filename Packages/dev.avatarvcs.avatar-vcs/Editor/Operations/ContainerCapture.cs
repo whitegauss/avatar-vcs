@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Core.Model;
@@ -62,6 +64,30 @@ namespace AvatarVcs.Editor.Operations
                 .Select(c => ComponentCapturer.Capture(c, container, avatarRoot))
                 .ToList();
 
+            // KAN-70: containers regenerate their prefab instances clean on
+            // checkout, so any BlendShape weight / material slot / active-tag-
+            // layer the user adjusted inside one would be lost. Record them
+            // (name/GUID-resolved, path-relative to the container) so
+            // ContainerRestore can re-apply them after regeneration. Generic
+            // component fields inside a prefab instance are deliberately NOT
+            // recorded here -- that's structural territory the prefab owns.
+            var blendShapes = new List<BlendShapeRef>();
+            var materials = new List<MaterialRef>();
+            var objectStates = new List<ObjectStateRef>();
+            foreach (var node in container.GetComponentsInChildren<Transform>(includeInactive: true))
+            {
+                if (node == container) continue; // container root's own tag/active/layer is the snapshot's top-level fields
+                var relPath = ReferenceResolver.GetRelativePath(node, container);
+                objectStates.Add(new ObjectStateRef
+                {
+                    path = relPath,
+                    activeSelf = node.gameObject.activeSelf,
+                    tag = node.gameObject.tag,
+                    layer = node.gameObject.layer,
+                });
+                AvatarReferenceCapture.CaptureRenderersInto(node, relPath, blendShapes, materials);
+            }
+
             return new ContainerSnapshot
             {
                 containerId = container.name,
@@ -74,6 +100,9 @@ namespace AvatarVcs.Editor.Operations
                 activeSelf = container.gameObject.activeSelf,
                 layer = container.gameObject.layer,
                 components = components,
+                blendShapes = blendShapes,
+                materials = materials,
+                objectStates = objectStates,
             };
         }
     }

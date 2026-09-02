@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Containers now version the BlendShape weights, material slots, and active/tag/layer state you adjust *inside* their prefab instances. On checkout the container is still regenerated from the prefab, then those recorded adjustments are re-applied on top — so "swap this outfit prefab" history and "keep my tweaks to it" no longer conflict.
+
 ## [0.3.0-poc] - 2026-09-02
 
 ### Fixed

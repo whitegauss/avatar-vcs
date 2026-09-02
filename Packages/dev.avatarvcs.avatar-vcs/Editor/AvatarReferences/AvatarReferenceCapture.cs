@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Core.Model;
@@ -35,14 +36,15 @@ namespace AvatarVcs.Editor.AvatarReferences
         }
 
         /// <summary>
-        /// Blend shape weights and material slot references for one renderer
-        /// in the tracked subtree, tagged with its path relative to target
-        /// ("" = target itself). The default "Ensure Root" config tracks the
-        /// avatar root, so the renderers that actually matter (Body,
-        /// accessories, ...) are always descendants, never the target -- the
-        /// pre-KAN-10 target-only capture recorded nothing for them.
+        /// Blend shape weights and material slot references for one renderer,
+        /// tagged with relPath, appended to the given lists. Shared by the
+        /// tracked-subtree walk here and ContainerCapture (KAN-70): the
+        /// default "Ensure Root" config tracks the avatar root, so the
+        /// renderers that actually matter (Body, accessories, ...) are always
+        /// descendants, never the walk's starting node.
         /// </summary>
-        private static void CaptureRenderersAt(Transform node, string relPath, AvatarReferenceState state)
+        internal static void CaptureRenderersInto(Transform node, string relPath,
+            List<BlendShapeRef> blendShapes, List<MaterialRef> materials)
         {
             var skinnedRenderer = node.GetComponent<SkinnedMeshRenderer>();
             if (skinnedRenderer != null && skinnedRenderer.sharedMesh != null)
@@ -58,7 +60,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                 // all, not about values within one that already is.)
                 for (var i = 0; i < mesh.blendShapeCount; i++)
                 {
-                    state.blendShapes.Add(new BlendShapeRef
+                    blendShapes.Add(new BlendShapeRef
                     {
                         path = relPath,
                         name = mesh.GetBlendShapeName(i),
@@ -70,17 +72,17 @@ namespace AvatarVcs.Editor.AvatarReferences
             var renderer = node.GetComponent<Renderer>();
             if (renderer != null)
             {
-                var materials = renderer.sharedMaterials;
-                for (var slot = 0; slot < materials.Length; slot++)
+                var sharedMats = renderer.sharedMaterials;
+                for (var slot = 0; slot < sharedMats.Length; slot++)
                 {
-                    var material = materials[slot];
+                    var material = sharedMats[slot];
                     if (material == null) continue;
 
                     var assetPath = AssetDatabase.GetAssetPath(material);
                     var guid = string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.AssetPathToGUID(assetPath);
                     if (string.IsNullOrEmpty(guid)) continue;
 
-                    state.materials.Add(new MaterialRef { path = relPath, slot = slot, guid = guid });
+                    materials.Add(new MaterialRef { path = relPath, slot = slot, guid = guid });
                 }
             }
         }
@@ -131,7 +133,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                 // the generic Renderer capture -- now correctly, because this
                 // narrow path finally covers every descendant, not just the
                 // target).
-                CaptureRenderersAt(descendant, relPath, state);
+                CaptureRenderersInto(descendant, relPath, state.blendShapes, state.materials);
 
                 foreach (var component in descendant.GetComponents<Component>())
                 {
@@ -203,7 +205,7 @@ namespace AvatarVcs.Editor.AvatarReferences
 
         /// <summary>
         /// m_BlendShapeWeights/m_Materials are already captured robustly (by
-        /// name / by GUID with GuidRemapper support) by CaptureRenderersAt,
+        /// name / by GUID with GuidRemapper support) by CaptureRenderersInto,
         /// which now runs for every descendant renderer, not just the
         /// target's; capturing them again here as fragile index-based array
         /// entries would double-manage the same data. Scoped to `is
