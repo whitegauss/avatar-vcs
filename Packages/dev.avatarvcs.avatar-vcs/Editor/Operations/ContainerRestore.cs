@@ -103,9 +103,29 @@ namespace AvatarVcs.Editor.Operations
 
             foreach (var componentState in snapshot.components)
             {
-                var result = ComponentApplier.Apply(componentState, containerGo, avatarRoot, createIfMissing: true);
-                if (!result.IsSuccess)
-                    Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{snapshot.containerId}': {result.Message}");
+                // ComponentApplier.Apply reports expected failures via
+                // ApplyResult. A corrupt commit can still surface an
+                // unforeseen exception mid-apply (FieldCodec is hardened
+                // against the known null/parse cases; this is the last line
+                // of defense). By the time this runs a checkout has already
+                // destroyed and is regenerating every container, so one bad
+                // component must not abort the loop and strand the avatar
+                // half-restored -- swallow, but at LogError, not LogWarning:
+                // nothing this catch sees is expected, so a regression that
+                // starts throwing here on a *valid* commit must stay loud in
+                // the console (and fail any test asserting a clean log)
+                // rather than degrade silently to a green checkout.
+                try
+                {
+                    var result = ComponentApplier.Apply(componentState, containerGo, avatarRoot, createIfMissing: true);
+                    if (!result.IsSuccess)
+                        Debug.LogWarning($"[AvatarVCS] Failed to restore component '{componentState.type}' on '{snapshot.containerId}': {result.Message}");
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[AvatarVCS] Unexpected error restoring component '{componentState.type}' on '{snapshot.containerId}'; "
+                        + $"skipped to keep the checkout from aborting mid-regenerate: {e}");
+                }
             }
         }
 

@@ -288,6 +288,43 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsFalse(FieldCodec.TryDecode(prop, "int", null));
         }
 
+        [Test]
+        public void FieldCodec_TryDecode_NullValue_CompositeTypes_ReturnFalseInsteadOfThrowing()
+        {
+            // "int"/"float" funnel a null value into Parse(null) ->
+            // ArgumentNullException, but the component-wise types reach
+            // value.Split(',') (or a codec) first and would NRE. A missing
+            // "value" key in commit JSON leaves FieldValue.value null
+            // (JsonUtility), so every one of these must warn-and-skip, not
+            // abort an in-flight checkout.
+            var go = Spawn("CompositeNullHolder");
+            var allTypes = go.AddComponent<AllTypesHolder>();
+            var curveGradient = go.AddComponent<CurveAndGradientFieldHolder>();
+            var so = new SerializedObject(allTypes);
+            var soCg = new SerializedObject(curveGradient);
+
+            void AssertNullRejected(SerializedObject o, string field, string type)
+            {
+                var prop = o.FindProperty(field);
+                Assert.DoesNotThrow(() => FieldCodec.TryDecode(prop, type, null), $"{type} + null must not throw");
+                Assert.IsFalse(FieldCodec.TryDecode(prop, type, null), $"{type} + null must return false");
+            }
+
+            AssertNullRejected(so, nameof(AllTypesHolder.colorField), "color");
+            AssertNullRejected(so, nameof(AllTypesHolder.vector2Field), "vector2");
+            AssertNullRejected(so, nameof(AllTypesHolder.vector3Field), "vector3");
+            AssertNullRejected(so, nameof(AllTypesHolder.vector4Field), "vector4");
+            AssertNullRejected(so, nameof(AllTypesHolder.vector2IntField), "vector2Int");
+            AssertNullRejected(so, nameof(AllTypesHolder.vector3IntField), "vector3Int");
+            AssertNullRejected(so, nameof(AllTypesHolder.rectField), "rect");
+            AssertNullRejected(so, nameof(AllTypesHolder.rectIntField), "rectInt");
+            AssertNullRejected(so, nameof(AllTypesHolder.boundsField), "bounds");
+            AssertNullRejected(so, nameof(AllTypesHolder.boundsIntField), "boundsInt");
+            AssertNullRejected(so, nameof(AllTypesHolder.quaternionField), "quaternion");
+            AssertNullRejected(soCg, nameof(CurveAndGradientFieldHolder.curve), "animationCurve");
+            AssertNullRejected(soCg, nameof(CurveAndGradientFieldHolder.gradient), "gradient");
+        }
+
         private class ArrayFieldHolder : MonoBehaviour
         {
             public int[] items = new int[3];

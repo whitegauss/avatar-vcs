@@ -462,6 +462,35 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsNotNull(duplicate);
         }
 
+        [Test]
+        public void MaterialSettingsApplier_NullValuedColorProperty_LogsWarningAndSkips()
+        {
+            var root = Spawn("Avatar");
+            var body = Spawn("Body", root.transform);
+            var mr = body.AddComponent<MeshRenderer>();
+            mr.sharedMaterials = new[] { testMat };
+
+            var state = new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = testMatGuid,
+                shader = "lilToon",
+                properties =
+                {
+                    // A missing "value" key leaves this null (JsonUtility);
+                    // ParseColor(null) NREs in value.Split(',') before
+                    // float.Parse can throw ArgumentNullException.
+                    new MaterialPropertyValue { name = "_Color", type = "color", value = null },
+                },
+            };
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Could not parse material property '_Color'"));
+            Material duplicate = null;
+            Assert.DoesNotThrow(() => duplicate = MaterialSettingsApplier.Apply(state, root));
+            Assert.IsNotNull(duplicate);
+        }
+
         #endregion
     }
 }
