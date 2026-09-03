@@ -1,4 +1,5 @@
 using System.Linq;
+using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.Operations;
@@ -136,16 +137,72 @@ namespace AvatarVcs.Tests.Editor
                 snapshot.blendShapes = null;
                 snapshot.materials = null;
                 snapshot.objectStates = null;
+                snapshot.materialSettings = null;
             }
             else
             {
                 snapshot.blendShapes.Clear();
                 snapshot.materials.Clear();
                 snapshot.objectStates.Clear();
+                snapshot.materialSettings.Clear();
             }
 
             Assert.DoesNotThrow(() => ContainerRestore.InstantiateContainer(snapshot, root));
             Assert.IsNotNull(ContainerManager.GetContainers(root).Single(c => c.name == "outfit_a").Find("Outfit"));
+        }
+
+        // KAN-73: a Standard-shader material is not in ShaderPropertyMap's
+        // supported set, so capture records no materialSettings for it -- the
+        // loop runs, the guard holds, nothing is captured. (A real lilToon
+        // round-trip needs lilToon in the project; the restore half below
+        // covers the apply path shader-independently.)
+        [Test]
+        public void ContainerCapture_UnsupportedShaderMaterial_RecordsNoMaterialSettings()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            PrefabUtility.InstantiatePrefab(prefabSource, container.transform);
+
+            var snapshot = ContainerCapture.CaptureContainer(container.transform, avatarRoot.transform);
+
+            Assert.IsEmpty(snapshot.materialSettings);
+        }
+
+        // KAN-73: ContainerRestore re-applies recorded shader settings onto
+        // the regenerated prefab instance -- a duplicated material carrying
+        // the recorded value, the source asset untouched -- the same
+        // contract MaterialSettingsApplier already has for Track Properties,
+        // now reached via the container path with a rebased targetPath.
+        // shader is set to "lilToon" independently of matA's real shader,
+        // exactly as MaterialSettingsTests does, so this runs without lilToon.
+        [Test]
+        public void ContainerInnerProperties_MaterialSettings_RoundTripThroughRestore()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            PrefabUtility.InstantiatePrefab(prefabSource, container.transform);
+            var snapshot = ContainerCapture.CaptureContainer(container.transform, avatarRoot.transform);
+
+            var green = "0,1,0,1";
+            snapshot.materialSettings.Add(new MaterialSettingsState
+            {
+                targetPath = "Outfit",             // the renderer node, relative to the container
+                slot = 0,
+                sourceMaterialGuid = AssetDatabase.AssetPathToGUID(MatPath(matA)),
+                shader = "lilToon",
+                properties = { new MaterialPropertyValue { name = "_Color", type = "color", value = green } },
+            });
+
+            ContainerRestore.InstantiateContainer(snapshot, root);
+
+            var freshOutfit = ContainerManager.GetContainers(root).Single(c => c.name == "outfit_a").Find("Outfit").gameObject;
+            var applied = freshOutfit.GetComponent<SkinnedMeshRenderer>().sharedMaterials[0];
+
+            StringAssert.Contains("_avatarvcs", applied.name, "slot points at the generated duplicate, not the source");
+            Assert.Less(Vector4.Distance(new Color(0f, 1f, 0f, 1f), applied.GetColor("_Color")), 0.001f,
+                "recorded main color re-applied onto the duplicate");
+            Assert.AreNotEqual(new Color(0f, 1f, 0f, 1f), matA.GetColor("_Color"),
+                "the source material asset is never mutated");
         }
     }
 }
