@@ -116,15 +116,20 @@ namespace AvatarVcs.Core.Diff
             return diffs;
         }
 
+        // Every `?? new List<>()` below is the same defence SafeToDictionary
+        // documents and ContainerRestore.ApplyInnerProperties already applies:
+        // an explicit `null` in commit JSON must degrade the diff, not throw.
+        private static List<string> Safe(List<string> list) => list ?? new List<string>();
+
         private static string DescribePrefabs(ContainerSnapshot snapshot) =>
-            string.Join(",", snapshot.prefabGuids);
+            string.Join(",", Safe(snapshot.prefabGuids));
 
         private static List<string> DescribeContainerChanges(ContainerSnapshot before, ContainerSnapshot after)
         {
             var notes = new List<string>();
 
-            if (!before.prefabGuids.SequenceEqual(after.prefabGuids))
-                notes.Add($"prefabGuids: [{string.Join(",", before.prefabGuids)}] -> [{string.Join(",", after.prefabGuids)}]");
+            if (!Safe(before.prefabGuids).SequenceEqual(Safe(after.prefabGuids)))
+                notes.Add($"prefabGuids: [{string.Join(",", Safe(before.prefabGuids))}] -> [{string.Join(",", Safe(after.prefabGuids))}]");
 
             if (before.localPosition != after.localPosition
                 || before.localRotation != after.localRotation
@@ -154,10 +159,8 @@ namespace AvatarVcs.Core.Diff
             // (activeSelf=false, tag=null, weight=0, guid=null) would diff
             // against a full post-KAN-70 capture and flood the row with
             // spurious "changed" lines for objects the user never touched.
-            var beforeHasInner = before.blendShapes.Count > 0 || before.materials.Count > 0
-                || before.objectStates.Count > 0 || before.materialSettings.Count > 0;
-            var afterHasInner = after.blendShapes.Count > 0 || after.materials.Count > 0
-                || after.objectStates.Count > 0 || after.materialSettings.Count > 0;
+            var beforeHasInner = HasInnerProperties(before);
+            var afterHasInner = HasInnerProperties(after);
             if (beforeHasInner || !afterHasInner)
             {
                 notes.AddRange(DiffMap(
@@ -195,6 +198,10 @@ namespace AvatarVcs.Core.Diff
 
             return notes;
         }
+
+        private static bool HasInnerProperties(ContainerSnapshot s) =>
+            (s.blendShapes?.Count ?? 0) > 0 || (s.materials?.Count ?? 0) > 0
+            || (s.objectStates?.Count ?? 0) > 0 || (s.materialSettings?.Count ?? 0) > 0;
 
         private static string MaterialSettingsInnerKey(MaterialSettingsState ms) =>
             $"'{ms.targetPath ?? string.Empty}'[{ms.slot}]";
@@ -299,14 +306,25 @@ namespace AvatarVcs.Core.Diff
         private static Dictionary<string, string> FlattenFields(List<ComponentState> components)
         {
             var result = new Dictionary<string, string>();
+            if (components == null) return result;
             foreach (var component in components)
             {
-                foreach (var field in component.fields)
+                if (component == null) continue;
+                foreach (var field in component.fields ?? new List<FieldValue>())
+                {
+                    if (field == null) continue;
                     result[$"{component.type}@{component.path}.{field.key}"] = field.value;
-                foreach (var assetRef in component.assetRefs)
+                }
+                foreach (var assetRef in component.assetRefs ?? new List<AssetRef>())
+                {
+                    if (assetRef == null) continue;
                     result[$"{component.type}@{component.path}.{assetRef.key}"] = assetRef.guid;
-                foreach (var sceneRef in component.sceneRefs)
+                }
+                foreach (var sceneRef in component.sceneRefs ?? new List<SceneRef>())
+                {
+                    if (sceneRef == null) continue;
                     result[$"{component.type}@{component.path}.{sceneRef.key}"] = $"{sceneRef.path} ({sceneRef.type})";
+                }
             }
             return result;
         }
@@ -317,6 +335,14 @@ namespace AvatarVcs.Core.Diff
         /// built from commit JSON, which can be hand-edited or corrupted.
         /// A duplicate containerId/path/name/slot must degrade the diff view
         /// (last one wins) rather than throw and break it entirely.
+        ///
+        /// Same reasoning for a null source list or a null element: JsonUtility
+        /// keeps a field's `= new()` initializer only when the key is *absent*,
+        /// so an explicit `"blendShapes": null` (a bad hand-edit, a botched
+        /// merge) really does arrive here as null, and `[null]` really does
+        /// arrive as a one-element list of nulls. Skipping beats throwing --
+        /// see AvatarVcsPresenter.HasUncommittedChanges, which has no catch and
+        /// gates every checkout / branch switch.
         /// </summary>
         private static Dictionary<TKey, TValue> SafeToDictionary<TSource, TKey, TValue>(
             IEnumerable<TSource> source,
@@ -324,8 +350,10 @@ namespace AvatarVcs.Core.Diff
             System.Func<TSource, TValue> valueSelector)
         {
             var result = new Dictionary<TKey, TValue>();
+            if (source == null) return result;
             foreach (var item in source)
             {
+                if (item == null) continue;
                 var key = keySelector(item);
                 if (key == null) continue;
                 result[key] = valueSelector(item);
