@@ -67,6 +67,35 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
+        public void NeedsAdoptionConfirmation_TrueForLooseObject_FalseForNullOrManaged()
+        {
+            // KAN-21 phase 4-6: the pure decision behind
+            // ResolveAvatarRootWithConfirmation's dialog.
+            Assert.IsFalse(ContainerManager.NeedsAdoptionConfirmation(null));
+
+            var loose = new GameObject("LooseOutfit");
+            try
+            {
+                Assert.IsTrue(ContainerManager.NeedsAdoptionConfirmation(loose),
+                    "a GameObject with no AvatarVCS structure anywhere above it needs a confirm");
+
+                ContainerManager.EnsureRoot(avatarRoot);
+                Assert.IsFalse(ContainerManager.NeedsAdoptionConfirmation(avatarRoot),
+                    "the avatar root itself resolves with no prompt");
+
+                var container = ContainerManager.CreateContainer(ContainerManager.FindRoot(avatarRoot), "outfit");
+                var inside = new GameObject("Inside");
+                inside.transform.SetParent(container.transform, false);
+                Assert.IsFalse(ContainerManager.NeedsAdoptionConfirmation(inside),
+                    "something inside an existing container resolves to its owning avatar with no prompt");
+            }
+            finally
+            {
+                Object.DestroyImmediate(loose);
+            }
+        }
+
+        [Test]
         public void CheckoutOperation_NullCommit_ThrowsArgumentNullException()
         {
             Assert.Throws<ArgumentNullException>(() =>
