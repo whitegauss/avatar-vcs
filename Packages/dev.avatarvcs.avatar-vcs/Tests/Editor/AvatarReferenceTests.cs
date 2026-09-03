@@ -276,6 +276,44 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual(0, materialSettings.Count);
         }
 
+        // KAN-78: a material whose shader asset was deleted / failed to import
+        // has a null shader. The collector dereferenced material.shader.name
+        // without checking, so one such material anywhere under a tracked
+        // target took down the whole commit. (ContainerCapture's copy of the
+        // same loop already guarded it; both now share one implementation.)
+        [Test]
+        public void CollectFromTrackedTargets_MaterialWithNullShader_DoesNotAbortTheCollect()
+        {
+            var avatarRoot = Spawn("Avatar");
+            avatarRoot.AddComponent<AvatarVcsTrackedReference>();
+            var body = Spawn("Body", avatarRoot.transform);
+            var renderer = body.AddComponent<MeshRenderer>();
+
+            var broken = new Material(Shader.Find("Standard"));
+            try
+            {
+                // Unity logs its own error for this; we only care that our
+                // code survives whatever state it leaves behind.
+                LogAssert.ignoreFailingMessages = true;
+                broken.shader = null;
+                if (broken.shader != null)
+                    Assert.Ignore("This Unity version refuses to leave Material.shader null; nothing to exercise.");
+
+                renderer.sharedMaterials = new[] { broken };
+
+                (List<AvatarReferenceState> avatarReferences, List<MaterialSettingsState> materialSettings) collected = default;
+                Assert.DoesNotThrow(() => collected = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot));
+
+                Assert.AreEqual(1, collected.avatarReferences.Count, "the tracked target is still collected");
+                Assert.IsEmpty(collected.materialSettings, "the shader-less slot contributes nothing, rather than throwing");
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = false;
+                Object.DestroyImmediate(broken);
+            }
+        }
+
         [Test]
         public void CollectFromTrackedTargets_SkipsDescendantWhenAncestorAlreadyTracked()
         {

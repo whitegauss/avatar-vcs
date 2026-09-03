@@ -4,8 +4,6 @@ using System.Linq;
 using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.Diagnostics;
-using AvatarVcs.Editor.MaterialSettings;
-using AvatarVcs.Core.MaterialSettings;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
 using AvatarVcs.Runtime;
@@ -87,33 +85,12 @@ namespace AvatarVcs.Editor.AvatarReferences
                     // materialSettings either.
                     if (node.GetComponentInParent<AvatarVcsUntracked>(includeInactive: true) != null) continue;
 
-                    var renderer = node.GetComponent<Renderer>();
-                    if (renderer == null) continue;
-
                     var path = ReferenceResolver.GetRelativePath(node, avatarRoot.transform);
-                    var materials = renderer.sharedMaterials;
-                    for (var slot = 0; slot < materials.Length; slot++)
-                    {
-                        var material = materials[slot];
-                        // Unsaved/missing materials and shaders outside the MVP's
-                        // lilToon-only ShaderPropertyMap are silently skipped here
-                        // (not a warning): materialSettings is a best-effort bonus
-                        // on top of avatarReferences' material *reference* tracking,
-                        // which already covers every slot regardless of shader.
-                        if (material == null || !ShaderPropertyMap.IsSupported(material.shader.name)) continue;
-
-                        // Capture throws if material isn't a saved asset (e.g. a
-                        // runtime-only instance); that's a legitimate state for a
-                        // live scene, not a reason to abort the whole commit.
-                        try
-                        {
-                            materialSettings.Add(MaterialSettingsCapture.Capture(material, material.shader.name, path, slot));
-                        }
-                        catch (InvalidOperationException)
-                        {
-                            // not a saved asset -- skip this slot
-                        }
-                    }
+                    // Shared with ContainerCapture (KAN-78). This used to be a
+                    // second copy of the same loop that omitted the
+                    // material.shader null check, so a material whose shader
+                    // asset had been deleted aborted the entire commit.
+                    AvatarReferenceCapture.CaptureMaterialSettingsInto(node, path, materialSettings);
                 }
             }
 

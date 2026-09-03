@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using AvatarVcs.Core.Diagnostics;
+using AvatarVcs.Core.MaterialSettings;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.Diagnostics;
+using AvatarVcs.Editor.MaterialSettings;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
 using AvatarVcs.Runtime;
@@ -97,6 +99,48 @@ namespace AvatarVcs.Editor.AvatarReferences
                     if (string.IsNullOrEmpty(guid)) continue;
 
                     materials.Add(new MaterialRef { path = relPath, slot = slot, guid = guid });
+                }
+            }
+        }
+
+        /// <summary>
+        /// Shader property values (lilToon/Poiyomi/MToon Color/Float) for every
+        /// supported-shader slot on one renderer, tagged with relPath, appended
+        /// to the given list.
+        ///
+        /// Shared by AvatarReferenceCollector (Track Properties targets) and
+        /// ContainerCapture (a container's regenerated prefab instances) --
+        /// they had a copy each and only ContainerCapture's guarded
+        /// material.shader, so a material whose shader asset had been deleted
+        /// took down the whole commit through the other one (KAN-78).
+        ///
+        /// A material that isn't a saved asset, and any shader outside the
+        /// supported set, are skipped silently on purpose: materialSettings is
+        /// a best-effort bonus on top of material *reference* tracking, which
+        /// already covers every slot regardless of shader.
+        /// </summary>
+        internal static void CaptureMaterialSettingsInto(Transform node, string relPath, List<MaterialSettingsState> into)
+        {
+            var renderer = node.GetComponent<Renderer>();
+            if (renderer == null) return;
+
+            var sharedMats = renderer.sharedMaterials;
+            for (var slot = 0; slot < sharedMats.Length; slot++)
+            {
+                var material = sharedMats[slot];
+                // shader can be null for a material whose shader asset was
+                // deleted or failed to import -- dereferencing it here used to
+                // abort BranchManager.Commit outright.
+                if (material == null || material.shader == null) continue;
+                if (!ShaderPropertyMap.IsSupported(material.shader.name)) continue;
+
+                try
+                {
+                    into.Add(MaterialSettingsCapture.Capture(material, material.shader.name, relPath, slot));
+                }
+                catch (InvalidOperationException)
+                {
+                    // not a saved asset -- nothing to duplicate from, skip
                 }
             }
         }

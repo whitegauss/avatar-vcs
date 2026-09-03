@@ -2,12 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Core.Diagnostics;
-using AvatarVcs.Core.MaterialSettings;
 using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Capture;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.Diagnostics;
-using AvatarVcs.Editor.MaterialSettings;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
 using AvatarVcs.Runtime;
@@ -107,7 +105,7 @@ namespace AvatarVcs.Editor.Operations
                     layer = node.gameObject.layer,
                 });
                 AvatarReferenceCapture.CaptureRenderersInto(node, relPath, blendShapes, materials);
-                CaptureMaterialSettingsInto(node, relPath, materialSettings);
+                AvatarReferenceCapture.CaptureMaterialSettingsInto(node, relPath, materialSettings);
             }
 
             return new ContainerSnapshot
@@ -129,35 +127,5 @@ namespace AvatarVcs.Editor.Operations
             };
         }
 
-        // KAN-73: lilToon/poiyomi/MToon shader property values for every
-        // supported-shader slot on this node's renderer, tagged with the
-        // container-relative path. Mirrors AvatarReferenceCollector's
-        // materialSettings loop, including its policy of silently skipping a
-        // runtime-only / unsaved material (there's no asset to duplicate
-        // from) and any shader outside the supported set -- material *slot*
-        // tracking already covers every slot regardless.
-        private static void CaptureMaterialSettingsInto(Transform node, string relPath, List<MaterialSettingsState> into)
-        {
-            var renderer = node.GetComponent<Renderer>();
-            if (renderer == null) return;
-
-            var sharedMats = renderer.sharedMaterials;
-            for (var slot = 0; slot < sharedMats.Length; slot++)
-            {
-                var material = sharedMats[slot];
-                if (material == null || material.shader == null) continue;
-                if (!ShaderPropertyMap.IsSupported(material.shader.name)) continue;
-
-                try
-                {
-                    into.Add(MaterialSettingsCapture.Capture(material, material.shader.name, relPath, slot));
-                }
-                catch (InvalidOperationException)
-                {
-                    // not a saved asset -- skip this slot (same as the Track
-                    // Properties path)
-                }
-            }
-        }
     }
 }
