@@ -155,9 +155,9 @@ namespace AvatarVcs.Core.Diff
             // against a full post-KAN-70 capture and flood the row with
             // spurious "changed" lines for objects the user never touched.
             var beforeHasInner = before.blendShapes.Count > 0 || before.materials.Count > 0
-                || before.objectStates.Count > 0;
+                || before.objectStates.Count > 0 || before.materialSettings.Count > 0;
             var afterHasInner = after.blendShapes.Count > 0 || after.materials.Count > 0
-                || after.objectStates.Count > 0;
+                || after.objectStates.Count > 0 || after.materialSettings.Count > 0;
             if (beforeHasInner || !afterHasInner)
             {
                 notes.AddRange(DiffMap(
@@ -184,10 +184,29 @@ namespace AvatarVcs.Core.Diff
                     SafeToDictionary(before.objectStates, s => s.path, s => s.layer),
                     SafeToDictionary(after.objectStates, s => s.path, s => s.layer),
                     (path, b, a) => $"layer '{path}': {b} -> {a}"));
+
+                // KAN-73: shader settings (lilToon etc.) tweaked inside the
+                // container's prefab instances.
+                notes.AddRange(DiffMap(
+                    SafeToDictionary(before.materialSettings, MaterialSettingsInnerKey, MaterialSettingsInnerValue),
+                    SafeToDictionary(after.materialSettings, MaterialSettingsInnerKey, MaterialSettingsInnerValue),
+                    (key, b, a) => $"material settings {key}: {b} -> {a}"));
             }
 
             return notes;
         }
+
+        private static string MaterialSettingsInnerKey(MaterialSettingsState ms) =>
+            $"'{ms.targetPath ?? string.Empty}'[{ms.slot}]";
+
+        private static string MaterialSettingsInnerValue(MaterialSettingsState ms) =>
+            $"shader={ms.shader ?? string.Empty};" +
+            (ms.properties == null || ms.properties.Count == 0
+                ? "(none)"
+                : string.Join(",", ms.properties
+                    .Where(p => p != null)
+                    .OrderBy(p => p.name, System.StringComparer.Ordinal)
+                    .Select(p => $"{p.name}:{p.type}={p.value}")));
 
         private static List<string> DescribeAvatarReferenceChanges(AvatarReferenceState before, AvatarReferenceState after)
         {

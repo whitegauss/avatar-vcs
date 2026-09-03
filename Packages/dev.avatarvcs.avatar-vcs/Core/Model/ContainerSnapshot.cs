@@ -43,5 +43,14 @@ namespace AvatarVcs.Core.Model
         public List<BlendShapeRef> blendShapes = new();
         public List<MaterialRef> materials = new();
         public List<ObjectStateRef> objectStates = new();
+
+        // Shader property values (lilToon/poiyomi/MToon Color/Float) the user
+        // tweaked on a supported-shader material inside a prefab instance
+        // here (KAN-73). `materials` above only restores WHICH .mat sits in a
+        // slot; this restores the duplicated-and-modified settings on top,
+        // the same way Commit.materialSettings does for a Track Properties
+        // target. targetPath is relative to the container root. Absent in
+        // pre-KAN-73 commits -> empty -> nothing re-applied.
+        public List<MaterialSettingsState> materialSettings = new();
     }
 }

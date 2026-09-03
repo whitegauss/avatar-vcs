@@ -70,6 +70,7 @@ namespace AvatarVcs.Editor.History
             // so a later checkout can warn if it's since changed in place.
             var referencedGuids = containers.SelectMany(c => c.prefabGuids)
                 .Concat(materialSettingsList.Select(m => m.sourceMaterialGuid))
+                .Concat(containers.SelectMany(c => c.materialSettings.Select(m => m.sourceMaterialGuid))) // KAN-73
                 .Concat(avatarReferencesList.SelectMany(r => r.materials.Select(m => m.guid)));
 
             return new Commit

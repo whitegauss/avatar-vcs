@@ -114,8 +114,20 @@ namespace AvatarVcs.Editor.History
             return missing;
         }
 
+        // Every generatedGuid a checkout can populate/reuse: the Track
+        // Properties materialSettings plus, since KAN-73, each container's own
+        // inner materialSettings. Snapshotted before apply and re-read after
+        // to decide whether the commit needs re-persisting.
+        private static List<string> AllGeneratedMaterialGuids(Commit commit) =>
+            commit.materialSettings.Select(m => m.generatedGuid)
+                .Concat(commit.containers.SelectMany(c =>
+                    (c.materialSettings ?? new List<MaterialSettingsState>()).Select(m => m.generatedGuid)))
+                .ToList();
+
         private static List<string> ApplyCommitToScene(Commit commit, GameObject avatarRoot, GameObject configRoot, string avatarGuid, DiagnosticLog log)
         {
+            var priorGeneratedGuids = AllGeneratedMaterialGuids(commit);
+
             foreach (var existing in ContainerManager.GetContainers(configRoot).ToList())
                 Undo.DestroyObjectImmediate(existing.gameObject);
 
@@ -136,7 +148,6 @@ namespace AvatarVcs.Editor.History
             foreach (var reference in commit.avatarReferences)
                 AvatarReferenceApplier.Apply(reference, avatarRoot.transform, log);
 
-            var priorGeneratedGuids = commit.materialSettings.Select(m => m.generatedGuid).ToList();
             foreach (var materialSetting in commit.materialSettings)
             {
                 // One slot failing (unsupported shader, an out-of-range slot
@@ -155,14 +166,15 @@ namespace AvatarVcs.Editor.History
                 }
             }
 
-            // Apply populates/reuses each entry's generatedGuid in place; if
-            // any of them are new, persist the commit so future checkouts of
-            // it reuse the same duplicates instead of generating more.
-            var generatedChanged = !commit.materialSettings.Select(m => m.generatedGuid).SequenceEqual(priorGeneratedGuids);
-            if (generatedChanged)
+            // Apply (Track Properties and, since KAN-73, container-inner)
+            // populates/reuses each entry's generatedGuid in place; if any of
+            // them are new, persist the commit so future checkouts reuse the
+            // same duplicates instead of generating more, and so DeleteCommit
+            // can GC them.
+            var generatedGuidsAfter = AllGeneratedMaterialGuids(commit);
+            if (!generatedGuidsAfter.SequenceEqual(priorGeneratedGuids))
             {
-                commit.generatedAssets = commit.materialSettings
-                    .Select(m => m.generatedGuid)
+                commit.generatedAssets = generatedGuidsAfter
                     .Where(g => !string.IsNullOrEmpty(g))
                     .Distinct()
                     .ToList();

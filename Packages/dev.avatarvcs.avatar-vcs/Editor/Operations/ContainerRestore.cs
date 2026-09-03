@@ -6,6 +6,7 @@ using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.History;
+using AvatarVcs.Editor.MaterialSettings;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Reflection;
 using AvatarVcs.Runtime;
@@ -175,13 +176,12 @@ namespace AvatarVcs.Editor.Operations
         }
 
         /// <summary>
-        /// KAN-70: after the prefab instances are regenerated clean, re-apply
-        /// the BlendShape weights / material slots / active-tag-layer the user
-        /// tweaked inside them. Reuses AvatarReferenceApplier -- the snapshot's
-        /// blendShapes/materials/objectStates are path-relative to the
-        /// container, and a state whose `path` locates the container under the
-        /// avatar makes that applier resolve each entry correctly. Empty on a
-        /// pre-KAN-70 commit -> no-op.
+        /// KAN-70/73: after the prefab instances are regenerated clean, re-apply
+        /// the BlendShape weights / material slots / active-tag-layer / shader
+        /// settings the user tweaked inside them. Reuses AvatarReferenceApplier
+        /// and MaterialSettingsApplier -- the snapshot's entries are path-relative
+        /// to the container, so they're rebased onto the container's own path
+        /// under the avatar. Empty on a pre-KAN-70/73 commit -> no-op.
         /// </summary>
         private static void ApplyInnerProperties(ContainerSnapshot snapshot, GameObject containerGo, GameObject avatarRoot, DiagnosticLog log)
         {
@@ -193,15 +193,18 @@ namespace AvatarVcs.Editor.Operations
             var blendShapes = snapshot.blendShapes ?? new List<BlendShapeRef>();
             var materials = snapshot.materials ?? new List<MaterialRef>();
             var objectStates = snapshot.objectStates ?? new List<ObjectStateRef>();
+            var materialSettings = snapshot.materialSettings ?? new List<MaterialSettingsState>();
 
-            if (blendShapes.Count == 0 && materials.Count == 0 && objectStates.Count == 0)
+            if (blendShapes.Count == 0 && materials.Count == 0 && objectStates.Count == 0 && materialSettings.Count == 0)
                 return;
+
+            var containerPath = ReferenceResolver.GetRelativePath(containerGo.transform, avatarRoot.transform);
 
             try
             {
                 var state = new AvatarReferenceState
                 {
-                    path = ReferenceResolver.GetRelativePath(containerGo.transform, avatarRoot.transform),
+                    path = containerPath,
                     blendShapes = blendShapes,
                     materials = materials,
                     objectStates = objectStates,
@@ -212,6 +215,33 @@ namespace AvatarVcs.Editor.Operations
             {
                 Debug.LogError($"[AvatarVCS] Failed to re-apply inner properties on container '{snapshot.containerId}' "
                     + $"after regeneration; skipped to keep the checkout from aborting: {e}");
+            }
+
+            // KAN-73: shader settings (lilToon etc.), one duplicated material
+            // per slot, same as the Track Properties path. targetPath is
+            // rebased from container-relative to avatar-relative; generatedGuid
+            // is written back so CheckoutOperation persists the reuse and GC.
+            foreach (var ms in materialSettings)
+            {
+                try
+                {
+                    var rebased = new MaterialSettingsState
+                    {
+                        targetPath = string.IsNullOrEmpty(ms.targetPath) ? containerPath : $"{containerPath}/{ms.targetPath}",
+                        slot = ms.slot,
+                        sourceMaterialGuid = ms.sourceMaterialGuid,
+                        shader = ms.shader,
+                        properties = ms.properties,
+                        generatedGuid = ms.generatedGuid,
+                    };
+                    MaterialSettingsApplier.Apply(rebased, avatarRoot, log);
+                    ms.generatedGuid = rebased.generatedGuid;
+                }
+                catch (Exception e) when (e is InvalidOperationException or NotSupportedException)
+                {
+                    log.Warn($"[AvatarVCS] Failed to re-apply material settings for slot {ms.slot} inside container "
+                        + $"'{snapshot.containerId}' at '{ms.targetPath}': {e.Message}");
+                }
             }
         }
 
