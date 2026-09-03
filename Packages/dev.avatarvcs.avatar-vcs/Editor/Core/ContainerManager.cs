@@ -228,6 +228,20 @@ namespace AvatarVcs.Editor.Core
         }
 
         /// <summary>
+        /// True when turning <paramref name="selection"/> into an avatar root
+        /// would be adopting a GameObject that has no existing AvatarVCS
+        /// structure anywhere in its ancestor chain -- so the caller should
+        /// confirm first (it could just as easily be a single outfit item as
+        /// the avatar itself). False for null, and for a selection that's
+        /// already the avatar root or sits under one (that resolves with no
+        /// prompt). KAN-21 phase 4-6: the pure decision, split out from the
+        /// dialog in ResolveAvatarRootWithConfirmation so it can be tested
+        /// headlessly.
+        /// </summary>
+        public static bool NeedsAdoptionConfirmation(GameObject selection) =>
+            selection != null && FindEnclosingAvatarRoot(selection) == null;
+
+        /// <summary>
         /// Resolves the avatar to operate on from a raw Hierarchy selection,
         /// for any entry point that turns "whatever's selected" into an
         /// avatarRoot (the GameObject menu, the window's avatar picker). If
@@ -235,19 +249,21 @@ namespace AvatarVcs.Editor.Core
         /// container, something inside one, or the "[AvatarVCS]" root
         /// itself), walks up to the actual owning avatar automatically via
         /// FindEnclosingAvatarRoot. If selection has no existing structure
-        /// at all, confirms with the user before treating it as a brand new
-        /// avatar root -- it could just as easily be a single outfit item as
-        /// the avatar itself. Returns null if selection is null or the user
-        /// cancels; callers decide what "cancel" means for them (abort vs.
-        /// keep whatever was previously selected).
+        /// at all (see NeedsAdoptionConfirmation), confirms with the user
+        /// before treating it as a brand new avatar root. Returns null if
+        /// selection is null or the user cancels; callers decide what
+        /// "cancel" means for them (abort vs. keep whatever was previously
+        /// selected).
+        ///
+        /// The one modal in this class: a thin Editor-side wrapper over the
+        /// pure FindEnclosingAvatarRoot / NeedsAdoptionConfirmation pair.
         /// </summary>
         public static GameObject ResolveAvatarRootWithConfirmation(GameObject selection, string actionDescription)
         {
             if (selection == null) return null;
 
             // FindEnclosingAvatarRoot is self-inclusive: if selection is
-            // already the avatar root itself, it comes back here too, no
-            // separate FindRoot(selection) check needed.
+            // already the avatar root itself, it comes back here too.
             var enclosing = FindEnclosingAvatarRoot(selection);
             if (enclosing != null) return enclosing;
 
