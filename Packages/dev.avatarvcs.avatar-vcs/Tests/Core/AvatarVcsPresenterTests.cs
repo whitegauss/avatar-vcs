@@ -451,5 +451,38 @@ namespace AvatarVcs.Tests.Editor
             presenter.ExitCompare(keepCurrent: false);
             Assert.AreEqual("auto-x", gateway.Restored.Last(), "otherwise restores compareReturnCommitId");
         }
+
+        // KAN-77: HasUncommittedChanges has no try/catch and gates SwitchBranch
+        // and CheckoutSelected, so an NRE inside SnapshotDiffer.Diff didn't just
+        // break the diff view -- it locked the user out of both. A commit whose
+        // lists arrived as explicit JSON null (hand-edit / botched merge) used
+        // to do exactly that.
+        [Test]
+        public void SwitchBranch_StillWorks_WhenTheHeadCommitHasExplicitlyNullLists()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+            // A container survives into the diff (so DescribePrefabs and the
+            // inner-property walk both run) but every list under it is null.
+            store.Commits["c1"].containers = new List<ContainerSnapshot>
+            {
+                new()
+                {
+                    containerId = "hair",
+                    prefabGuids = null,
+                    components = null,
+                    blendShapes = null,
+                    materials = null,
+                    objectStates = null,
+                    materialSettings = null,
+                },
+            };
+            store.Commits["c1"].avatarReferences = null;
+            store.Commits["c1"].materialSettings = null;
+            presenter.SetAvatarGuid(Guid);
+
+            Assert.DoesNotThrow(() => presenter.SwitchBranch("dev"));
+            Assert.AreEqual("dev", gateway.SwitchedBranches.Single());
+        }
     }
 }
