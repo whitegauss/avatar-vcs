@@ -85,6 +85,15 @@ namespace AvatarVcs.Tests.Editor
             return !string.IsNullOrEmpty(path) && AssetDatabase.LoadAssetAtPath<Material>(path) != null;
         }
 
+        // Same check, but type-agnostic: the false-positive tests below name
+        // non-Material assets, which LoadAssetAtPath<Material> would report as
+        // gone even when the guard correctly left them alone.
+        private static bool AnyAssetStillLoads(string guid)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(guid);
+            return !string.IsNullOrEmpty(path) && AssetDatabase.LoadMainAssetAtPath(path) != null;
+        }
+
         [Test]
         public void CheckoutSameCommitTwice_ReusesGeneratedMaterial_DoesNotProliferate()
         {
@@ -212,7 +221,7 @@ namespace AvatarVcs.Tests.Editor
             LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Not deleting .*Hair_avatarvcs"));
             CommitStore.DeleteCommit(avatarGuid, commit.commitId, force: true);
 
-            Assert.IsTrue(AssetStillLoads(prefabGuid), "a .prefab is never something this package generated");
+            Assert.IsTrue(AnyAssetStillLoads(prefabGuid), "a .prefab is never something this package generated");
 
             AssetDatabase.DeleteAsset(prefabPath);
         }
