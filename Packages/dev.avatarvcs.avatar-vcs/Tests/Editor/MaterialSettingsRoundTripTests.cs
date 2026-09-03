@@ -27,6 +27,7 @@ namespace AvatarVcs.Tests.Editor
         private Mesh mesh;
         private Material coat;
         private GameObject outfitPrefab;
+        private GameObject nestedOutfitPrefab;
         private GameObject avatarRoot;
         private string avatarGuid;
 
@@ -57,6 +58,16 @@ namespace AvatarVcs.Tests.Editor
             renderer.sharedMaterials = new[] { coat };
             outfitPrefab = PrefabUtility.SaveAsPrefabAsset(src, $"{Dir}/Outfit.prefab");
             Object.DestroyImmediate(src);
+
+            // The usual shape of a real outfit: the renderer lives on a child,
+            // not on the prefab root.
+            var nested = new GameObject("NestedOutfit");
+            var body = new GameObject("Body");
+            body.transform.SetParent(nested.transform, false);
+            body.AddComponent<MeshFilter>().sharedMesh = mesh;
+            body.AddComponent<MeshRenderer>().sharedMaterials = new[] { coat };
+            nestedOutfitPrefab = PrefabUtility.SaveAsPrefabAsset(nested, $"{Dir}/NestedOutfit.prefab");
+            Object.DestroyImmediate(nested);
         }
 
         [OneTimeTearDown]
@@ -156,6 +167,107 @@ namespace AvatarVcs.Tests.Editor
             var onDisk = AssetDatabase.LoadAssetAtPath<Material>($"{Dir}/Coat.mat");
             Assert.AreEqual(Color.red, onDisk.GetColor("_Color"),
                 "the source asset keeps whatever the user last set; only the generated duplicate carries recorded values");
+        }
+
+        // Track Properties, not containers: a renderer sitting outside
+        // [AvatarVCS] under the tracked avatar root. Reported separately as
+        // "ルートでアバターの髪型でも起こってた", and it runs through
+        // AvatarReferenceCollector + the commit's top-level materialSettings,
+        // which is different code from the container path above.
+        [Test]
+        public void TrackedRenderer_CheckingOutAnEarlierCommit_RestoresTheRecordedShaderColour()
+        {
+            var hair = new GameObject("Hair");
+            hair.transform.SetParent(avatarRoot.transform, false);
+            var filter = hair.AddComponent<MeshFilter>();
+            filter.sharedMesh = mesh;
+            hair.AddComponent<MeshRenderer>().sharedMaterials = new[] { coat };
+
+            ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+
+            var first = BranchManager.Commit(avatarRoot, "initial, hair is white");
+
+            var recorded = first.materialSettings
+                .SelectMany(ms => ms.properties)
+                .FirstOrDefault(p => p.name == "_Color");
+            Assert.IsNotNull(recorded, "the first commit must record the tracked renderer's lilToon _Color");
+            Assert.AreEqual("1,1,1,1", recorded.value, "recorded as white");
+
+            coat.SetColor("_Color", Color.red);
+            EditorUtility.SetDirty(coat);
+            AssetDatabase.SaveAssets();
+
+            BranchManager.Commit(avatarRoot, "hair turned red");
+
+            var result = BranchManager.RestoreToCommit(avatarRoot, first.commitId);
+            Assert.IsTrue(result.IsSuccess, $"checkout failed: {result.Kind}");
+
+            var live = avatarRoot.transform.Find("Hair").GetComponent<Renderer>().sharedMaterials[0];
+            Assert.AreEqual(Color.white, live.GetColor("_Color"),
+                "checking out the first commit must put the hair back to white");
+        }
+
+        // The second and later checkouts, which take MaterialSettingsApplier's
+        // "reuse the existing duplicate" branch instead of creating one. By
+        // then the renderer slot holds the generated duplicate, so the colour
+        // the user edits in the Inspector is the duplicate's.
+        [Test]
+        public void SecondCheckoutOfTheSameCommit_StillRestoresTheRecordedShaderColour()
+        {
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
+
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "initial, coat is white");
+
+            // First checkout: generates the duplicate and puts it in the slot.
+            Assert.IsTrue(BranchManager.RestoreToCommit(avatarRoot, first.commitId).IsSuccess);
+
+            // Now the user edits what the renderer actually points at.
+            var inSlot = LiveCoatRenderer().sharedMaterials[0];
+            inSlot.SetColor("_Color", Color.red);
+            EditorUtility.SetDirty(inSlot);
+            AssetDatabase.SaveAssets();
+
+            BranchManager.Commit(avatarRoot, "coat turned red");
+
+            Assert.IsTrue(BranchManager.RestoreToCommit(avatarRoot, first.commitId).IsSuccess);
+
+            Assert.AreEqual(Color.white, LiveCoatRenderer().sharedMaterials[0].GetColor("_Color"),
+                "re-checking out the first commit must put the coat back to white");
+        }
+
+        // A renderer one level below the prefab root -- the usual shape of a
+        // real outfit (Outfit/Body), unlike the flat prefab the tests above
+        // use. Exercises the container-relative targetPath rebasing in
+        // ContainerRestore.ApplyInnerProperties.
+        [Test]
+        public void NestedRenderer_CheckingOutAnEarlierCommit_RestoresTheRecordedShaderColour()
+        {
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(nestedOutfitPrefab, root.transform);
+
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "initial, coat is white");
+
+            var recorded = first.containers
+                .SelectMany(c => c.materialSettings)
+                .SelectMany(ms => ms.properties)
+                .FirstOrDefault(p => p.name == "_Color");
+            Assert.IsNotNull(recorded, "the first commit must record the nested renderer's lilToon _Color");
+
+            coat.SetColor("_Color", Color.red);
+            EditorUtility.SetDirty(coat);
+            AssetDatabase.SaveAssets();
+
+            BranchManager.Commit(avatarRoot, "coat turned red");
+
+            var result = BranchManager.RestoreToCommit(avatarRoot, first.commitId);
+            Assert.IsTrue(result.IsSuccess, $"checkout failed: {result.Kind}");
+
+            Assert.AreEqual(Color.white, LiveCoatRenderer().sharedMaterials[0].GetColor("_Color"),
+                "checking out the first commit must put the nested renderer back to white");
         }
     }
 }
