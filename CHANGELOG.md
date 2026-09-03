@@ -5,6 +5,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1-poc] - 2026-09-03
+
+### Fixed
+
+- **Shader settings on a material inside a container now survive a checkout.** An outfit or hairstyle dropped under `[AvatarVCS]` is auto-wrapped into a container, and containers regenerate their prefab instances from the prefab on every checkout — so a lilToon/Poiyomi/MToon main colour (or any other recorded Color/Float property) tweaked on one of those materials reverted to the prefab default. Containers now record those values alongside the BlendShape weights, material slots, and active/tag/layer they already versioned, and re-apply them onto a duplicated material after regeneration. The source `.mat` asset is still never modified.
+- Duplicate materials generated for a container's inner slots are now listed in the commit's `generatedAssets`, so they are reused across checkouts of the same commit instead of piling up, and are cleaned up when that commit is deleted.
+- The diff view now shows a `material settings …` line when a shader value inside a container changes, instead of reporting the container as unchanged.
+
 ## [0.4.0-poc] - 2026-09-03
 
 ### Added
