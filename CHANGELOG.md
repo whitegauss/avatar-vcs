@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A prefab dropped loose under `[AvatarVCS]` no longer jumps when it is auto-wrapped into a container at commit time. The wrapper was zeroed *after* the prefab was already inside it, so on an avatar not standing at the world origin every adopted prefab was displaced by the avatar's own offset. (#73)
+
 ## [0.4.1-poc] - 2026-09-03
 
 ### Fixed
