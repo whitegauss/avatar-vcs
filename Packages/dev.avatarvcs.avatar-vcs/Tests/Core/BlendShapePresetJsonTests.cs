@@ -34,12 +34,25 @@ namespace AvatarVcs.Tests.Core
         }
 
         [Test]
-        public void TryParse_LiteralNull_SucceedsButYieldsANullPresetForTheCallerToCheck()
+        public void TryParse_LiteralNull_IsRejectedLikeMalformedInput()
         {
+            // Unity's JsonUtility.FromJson<T>("null") throws rather than
+            // returning null, so TryParse surfaces it as (false, error).
             var ok = BlendShapePresetJson.TryParse("null", out var preset, out var error);
+            Assert.IsFalse(ok);
+            Assert.IsNull(preset);
+            Assert.IsNotNull(error);
+        }
+
+        [Test]
+        public void TryParse_EmptyObject_SucceedsWithADefaultedPresetForTheCallerToCheck()
+        {
+            var ok = BlendShapePresetJson.TryParse("{}", out var preset, out var error);
             Assert.IsTrue(ok);
             Assert.IsNull(error);
-            Assert.IsNull(preset);
+            Assert.IsNotNull(preset);
+            Assert.IsNull(preset.meshName, "name absent from the JSON");
+            Assert.IsEmpty(preset.blendShapes);
         }
 
         [Test]
