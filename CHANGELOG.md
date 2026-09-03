@@ -5,13 +5,30 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-- Checkout no longer stamps a prefab-instance override onto every tracked renderer. `AvatarReferenceApplier` now writes a BlendShape weight or material slot only when it actually differs from the live value (matching `GameObjectStateApplier`), so restoring a commit whose values already match leaves the prefab instance clean and keeps the Inspector's Overrides dropdown usable.
-- `Ensure Root` no longer creates an empty `[AvatarVCS]/container_1`. Default property tracking already covers the common case, and a loose prefab dropped under `[AvatarVCS]` is auto-wrapped into a container at commit time. README clarified: containers are for prefab add/remove/swap; property tracking is for BlendShape/material/field values.
+## [0.4.0-poc] - 2026-09-03
+
+### Added
+
 - Containers now version the BlendShape weights, material slots, and active/tag/layer state you adjust *inside* their prefab instances. On checkout the container is still regenerated from the prefab, then those recorded adjustments are re-applied on top — so "swap this outfit prefab" history and "keep my tweaks to it" no longer conflict.
+
+### Fixed
+
+- Checkout no longer stamps a prefab-instance override onto every tracked renderer. `AvatarReferenceApplier` now writes a BlendShape weight or material slot only when it actually differs from the live value (matching `GameObjectStateApplier`), so restoring a commit whose values already match leaves the prefab instance clean and keeps the Inspector's Overrides dropdown usable.
 - Commit/index/config writes now flush to disk before the atomic rename, so a power loss right after a commit can no longer leave a truncated JSON file that breaks history loading for that avatar.
-- Hierarchy "untracked" markers are now memoized per editor frame instead of re-walking every row's ancestors on every repaint — noticeably lighter with a deep Armature open in the Hierarchy.
 - Compare mode no longer leaks an unhandled exception when a selected commit can't be loaded (deleted or corrupt); it reports a "Checkout Failed" dialog like every other checkout path.
 - Closing the AvatarVCS window during a script recompile / play-mode switch no longer runs a scene-mutating checkout mid-domain-reload; compare state is preserved and the window reopens still in compare mode so you can exit it cleanly.
+
+### Changed
+
+- `Ensure Root` no longer creates an empty `[AvatarVCS]/container_1`. Default property tracking already covers the common case, and a loose prefab dropped under `[AvatarVCS]` is auto-wrapped into a container at commit time. README clarified: containers are for prefab add/remove/swap; property tracking is for BlendShape/material/field values.
+- Hierarchy "untracked" markers are now memoized per editor frame instead of re-walking every row's ancestors on every repaint — noticeably lighter with a deep Armature open in the Hierarchy.
+
+### Internal
+
+- Capture/apply diagnostics now flow through a `DiagnosticLog` returned to the caller (one console sink) instead of scattered `Debug.LogWarning` calls; console output is byte-identical.
+- `AvatarVcsWindow` split into a UnityEditor-free `AvatarVcsPresenter` (state + transitions, unit-tested) behind `IHistoryStore` / `IAvatarGateway` / `IUserPrompt` ports, plus thin Editor adapters.
+- New scene-free `AvatarVcs.Tests.Core` assembly with ~70 pure tests; `SnapshotDifferTests` and others relocated there.
+- README's 開発 section records where the (gitignored) design doc lives.
 
 ## [0.3.0-poc] - 2026-09-02
 
