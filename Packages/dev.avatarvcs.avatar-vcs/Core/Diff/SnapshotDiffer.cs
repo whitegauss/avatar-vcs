@@ -200,12 +200,13 @@ namespace AvatarVcs.Core.Diff
             $"'{ms.targetPath ?? string.Empty}'[{ms.slot}]";
 
         private static string MaterialSettingsInnerValue(MaterialSettingsState ms) =>
-            ms.properties == null || ms.properties.Count == 0
+            $"shader={ms.shader ?? string.Empty};" +
+            (ms.properties == null || ms.properties.Count == 0
                 ? "(none)"
                 : string.Join(",", ms.properties
                     .Where(p => p != null)
                     .OrderBy(p => p.name, System.StringComparer.Ordinal)
-                    .Select(p => $"{p.name}={p.value}"));
+                    .Select(p => $"{p.name}:{p.type}={p.value}")));
 
         private static List<string> DescribeAvatarReferenceChanges(AvatarReferenceState before, AvatarReferenceState after)
         {
