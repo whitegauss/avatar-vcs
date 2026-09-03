@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A prefab dropped loose under `[AvatarVCS]` no longer jumps when it is auto-wrapped into a container at commit time. The wrapper was zeroed *after* the prefab was already inside it, so on an avatar not standing at the world origin every adopted prefab was displaced by the avatar's own offset. (#73)
 - A commit whose JSON contains an explicit `null` list (from a hand-edit or a botched merge) no longer throws while diffing. Because the "do you have uncommitted changes?" check runs through the same diff, a single such commit used to make **Switch Branch** and **Checkout** fail outright; both now degrade the diff instead.
 - Committing no longer aborts when a material's shader asset has been deleted or failed to import — the affected slot is skipped, as it already was inside containers.
 
