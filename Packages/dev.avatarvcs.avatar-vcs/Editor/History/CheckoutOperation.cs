@@ -144,17 +144,38 @@ namespace AvatarVcs.Editor.History
             // immediately applying one container's components before the
             // next container is even created would fail to resolve such a
             // reference depending on commit.containers' order.
-            var restoredContainers = commit.containers
+            // Every list below is `?? new List<>()` + a null-element skip for
+            // the reason CommitStore documents: commit JSON is hand-editable
+            // and merge-corruptible, and JsonUtility turns an explicit
+            // `"containers": null` / `[null]` into exactly that. Aborting here
+            // is the worst possible moment -- the old containers are already
+            // destroyed, so the avatar would be left gutted.
+            var restoredContainers = (commit.containers ?? new List<ContainerSnapshot>())
+                .Where(snapshot => snapshot != null)
                 .Select(snapshot => (snapshot, go: ContainerRestore.InstantiateContainerStructure(snapshot, configRoot, log)))
                 .ToList();
             foreach (var (snapshot, go) in restoredContainers)
                 ContainerRestore.ApplyContainerComponents(snapshot, go, avatarRoot, log);
 
-            foreach (var reference in commit.avatarReferences)
-                AvatarReferenceApplier.Apply(reference, avatarRoot.transform, log);
-
-            foreach (var materialSetting in commit.materialSettings)
+            foreach (var reference in commit.avatarReferences ?? new List<AvatarReferenceState>())
             {
+                if (reference == null)
+                {
+                    log.Warn("[AvatarVCS] Null avatarReferences entry in the commit; skipped.");
+                    continue;
+                }
+
+                AvatarReferenceApplier.Apply(reference, avatarRoot.transform, log);
+            }
+
+            foreach (var materialSetting in commit.materialSettings ?? new List<MaterialSettingsState>())
+            {
+                if (materialSetting == null)
+                {
+                    log.Warn("[AvatarVCS] Null materialSettings entry in the commit; skipped.");
+                    continue;
+                }
+
                 // One slot failing (unsupported shader, an out-of-range slot
                 // after the target's material list shrank, an unresolvable
                 // source guid, ...) must not abort the checkout with the
