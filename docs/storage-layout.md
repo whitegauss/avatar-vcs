@@ -30,10 +30,10 @@ ProjectSettings/
 
 ```json
 {
-  "branches": {
-    "main": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
-    "long-hair": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7"
-  },
+  "branches": [
+    { "name": "main", "commitId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6" },
+    { "name": "long-hair", "commitId": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7" }
+  ],
   "currentBranch": "main"
 }
 ```
@@ -43,13 +43,25 @@ ProjectSettings/
 
 ### `index.json`
 
-コミット ID の一覧を保持します。削除・一覧表示 UI はここを参照します。
+コミット履歴の一覧を保持します。削除・一覧表示 UI はここを参照します。
 
 ```json
 {
-  "commitIds": [
-    "a1b2c3...",
-    "b2c3d4..."
+  "entries": [
+    {
+      "commitId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+      "parentCommitId": "e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+      "branch": "main",
+      "message": "初期セットアップ",
+      "timestamp": "2026-09-03T12:00:00Z"
+    },
+    {
+      "commitId": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7",
+      "parentCommitId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+      "branch": "long-hair",
+      "message": "髪ロング版に変更",
+      "timestamp": "2026-09-03T12:30:00Z"
+    }
   ]
 }
 ```
@@ -97,17 +109,22 @@ ProjectSettings/
 !ProjectSettings/AvatarVcs/
 ```
 
-> **注意**: `generatedAssets` に記録される複製マテリアル（`Assets/` 内に生成される）は、checkout ごとに再生成されます。これらは Git に含める必要はありません。
+> **注意**: `generatedAssets` に記録される複製マテリアルはコミットに紐づくアセットです。既存の `generatedGuid` が解決できる場合は複製が再利用され、コミット削除時には不要になった複製マテリアルがクリーンアップされます。
 
 ---
 
 ## 生成アセット
 
-checkout 時に `materialSettings` の内容から複製マテリアルが `Assets/` 内に生成されます。
+`materialSettings` を含む構成を checkout する際、元アセットを変更しないよう複製マテリアルが生成されます。
 
-- 生成先パス: `Assets/AvatarVcs/GeneratedMaterials/{avatarGuid}/{commitId}/{...}.mat`（実装に依存）
-- 生成された GUID は `commit.generatedAssets[]` に記録されます
-- コミットを削除すると、対応する生成アセットも `AssetDatabase.DeleteAsset()` で削除されます（ただし GUID が AvatarVCS 生成のものと確認できた場合のみ）
+- **保存先**:
+  - 通常は元マテリアルと同じディレクトリに `{元マテリアル名}_avatarvcs.mat` として保存されます。
+  - 元マテリアルが `Packages/` 配下などの読み取り専用パッケージ内にある場合は、`Assets/AvatarVCS_Generated/` に保存されます。
+- **再利用**:
+  - コミットの `materialSettings` に既に有効な `generatedGuid` が記録されており、対応するアセットが存在する場合は新しく生成せず再利用されます（記録されたプロパティ値は上書き適用されます）。
+- **クリーンアップ**:
+  - 生成された GUID は `commit.generatedAssets[]` に記録されます。
+  - コミットを削除すると、他のコミットで共有されていない生成マテリアルは `AssetDatabase.DeleteAsset()` で自動削除されます。
 
 ---
 

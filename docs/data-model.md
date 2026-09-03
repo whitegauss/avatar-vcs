@@ -93,7 +93,7 @@ Track Properties の各追跡ターゲット（`AvatarVcsTrackedReference` が�
 
 ### `BlendShapeRef.path` の意味
 
-`path` は **追跡ターゲット自身からの相対パス** で、その GameObjcet が持つ `SkinnedMeshRenderer` を指します。
+`path` は **追跡ターゲット自身からの相対パス** で、その GameObject が持つ `SkinnedMeshRenderer` を指します。
 
 - `""` (空文字列 or absent): 追跡ターゲット自身の SkinnedMeshRenderer
 - `"Face"`: 追跡ターゲット配下の `Face` という GameObject の SkinnedMeshRenderer
@@ -132,17 +132,27 @@ Track Properties の各追跡ターゲット（`AvatarVcsTrackedReference` が�
 
 ## `materialSettings[]` — マテリアル設定
 
-lilToon / Poiyomi / MToon などのサポート対象シェーダーのプロパティ値を保持します。checkout 時にマテリアルを複製して設定を再適用します。
+サポート対象シェーダーの Color / Float プロパティ値を保持します。checkout 時に元マテリアルを複製して設定を再適用します。
+
+サポート対象は `ShaderPropertyMap` の許可リストで、`material.shader.name` が以下と完全一致するものです。Texture プロパティは GUID 管理が必要なアセット参照のため対象外です。
+
+| `shader` の値 | シェーダー |
+|---|---|
+| `lilToon` | lilToon |
+| `.poiyomi/Poiyomi` | Poiyomi（登録名がドット始まり） |
+| `VRM/MToon` | UniVRM 0.x の MToon |
+| `VRM10/MToon10` | UniVRM 1.0 の MToon 1.0 |
 
 ```json
 {
-  "targetPath": "Body",               // 追跡ターゲットからの相対パス
+  "targetPath": "Body",               // アバタールートからの相対パス
   "slot": 0,                          // マテリアルスロット番号
-  "guid": "deadbeef...",             // 元マテリアルの GUID
-  "generatedGuid": "aabbccdd...",    // checkout で生成した複製マテリアルの GUID
+  "sourceMaterialGuid": "deadbeef...", // 元マテリアルの GUID
+  "shader": "lilToon",                // material.shader.name（上表のいずれか）
+  "generatedGuid": "aabbccdd...",    // checkout で生成・再利用される複製マテリアルの GUID
   "properties": [
-    { "name": "_MainColor", "value": "RGBA(1,0,0,1)" },
-    { "name": "_Cutoff", "value": "0.5" }
+    { "name": "_Color", "type": "color", "value": "1,0,0,1" },
+    { "name": "_Cutoff", "type": "float", "value": "0.5" }
   ]
 }
 ```
@@ -166,12 +176,22 @@ checkout 時に警告を出すためのハッシュ記録。コミット後に�
 
 ```json
 {
-  "commitIds": [ "a1b2c3...", "b2c3d4...", ... ],
-  "branches": {
-    "main": "a1b2c3...",
-    "long-hair": "b2c3d4..."
-  },
-  "currentBranch": "main"
+  "entries": [
+    {
+      "commitId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+      "parentCommitId": "e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+      "branch": "main",
+      "message": "初期セットアップ",
+      "timestamp": "2026-09-03T12:00:00Z"
+    },
+    {
+      "commitId": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7",
+      "parentCommitId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+      "branch": "long-hair",
+      "message": "髪ロング版に変更",
+      "timestamp": "2026-09-03T12:30:00Z"
+    }
+  ]
 }
 ```
 
@@ -179,9 +199,10 @@ checkout 時に警告を出すためのハッシュ記録。コミット後に�
 
 ```json
 {
-  "branches": {
-    "main": "a1b2c3..."
-  },
+  "branches": [
+    { "name": "main", "commitId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6" },
+    { "name": "long-hair", "commitId": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7" }
+  ],
   "currentBranch": "main"
 }
 ```

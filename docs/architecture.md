@@ -8,22 +8,26 @@ avatar-vcs は UnityEditor 依存を持つコードと持たないコードを�
 ┌─────────────────────────────────────────────────────┐
 │                   AvatarVcs.Editor                   │  (Editor-only)
 │  UI / Menu / Apply / Capture / History / Operations  │
-│          ↓ uses ↓                                    │
-├─────────────────────────────────────────────────────┤
-│                   AvatarVcs.Core                     │  (Editor + Tests)
-│   Model / History / Diff / Presentation / Reflection │
-│   Naming / Diagnostics / MaterialSettings / Presets  │
-├─────────────────────────────────────────────────────┤
+└──────────────┬───────────────────────────┬──────────┘
+               │ uses                      │ uses (Runtime marker types:
+               │                           │  AvatarVcsContainer, etc.)
+┌──────────────▼───────────────────────────┐          │
+│                   AvatarVcs.Core         │          │  (Editor + Tests)
+│   Model / History / Diff / Presentation  │          │
+│   Naming / Diagnostics / MaterialSettings│          │
+└──────────────┬───────────────────────────┘          │
+               │ uses                                 │
+┌──────────────▼──────────────────────────────────────▼┐
 │                  AvatarVcs.Runtime                   │  (Runtime + Editor)
 │            Components (マーカーコンポーネント)          │
-└─────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────┘
 ```
 
 | アセンブリ | 名前空間プレフィックス | 役割 |
 |---|---|---|
 | `AvatarVcs.Runtime` | `AvatarVcs.Runtime` | シーン配置コンポーネント（MonoBehaviour） |
-| `AvatarVcs.Core` | `AvatarVcs.Core.*` | UnityEditor 非依存のロジック・モデル |
-| `AvatarVcs.Editor` | `AvatarVcs.Editor.*` | Unity Editor API を使う実装層 |
+| `AvatarVcs.Core` | `AvatarVcs.Core.*` | UnityEditor 非依存のロジック・モデル（Runtime に依存） |
+| `AvatarVcs.Editor` | `AvatarVcs.Editor.*` | Unity Editor API を使う実装層（Core および Runtime に依存。`ContainerCapture` や `ContainerRestore` が Runtime マーカー型を参照） |
 
 ---
 

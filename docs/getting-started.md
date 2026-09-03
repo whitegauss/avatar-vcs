@@ -13,7 +13,7 @@
 
 1. VCC を開き、**Settings → Packages → Add Repository** を選択
 2. 以下の URL を追加:
-   ```
+   ```text
    https://raw.githubusercontent.com/whitegauss/avatar-vcs/main/index.json
    ```
 3. プロジェクトの **Manage Packages** から **"Avatar VCS (Phase 1 PoC)"** を追加
@@ -22,7 +22,7 @@
 
 Unity の **Window → Package Manager → + → Add package from git URL** に以下を入力:
 
-```
+```text
 https://github.com/whitegauss/avatar-vcs.git?path=Packages/dev.avatarvcs.avatar-vcs
 ```
 

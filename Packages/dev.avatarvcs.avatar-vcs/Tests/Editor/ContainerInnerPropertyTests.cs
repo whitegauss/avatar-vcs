@@ -204,5 +204,33 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreNotEqual(new Color(0f, 1f, 0f, 1f), matA.GetColor("_Color"),
                 "the source material asset is never mutated");
         }
+
+        [Test]
+        public void ContainerInnerProperties_NullMaterialSettingsEntry_DoesNotThrow()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            PrefabUtility.InstantiatePrefab(prefabSource, container.transform);
+            var snapshot = ContainerCapture.CaptureContainer(container.transform, avatarRoot.transform);
+
+            snapshot.materialSettings.Add(null);
+
+            Assert.DoesNotThrow(() => ContainerRestore.InstantiateContainer(snapshot, root));
+        }
+
+        [Test]
+        public void CheckoutOperation_NullMaterialSettingsEntry_DoesNotThrow()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            PrefabUtility.InstantiatePrefab(prefabSource, container.transform);
+
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var commit = BranchManager.Commit(avatarRoot, "commit with null ms");
+            commit.materialSettings.Add(null);
+            commit.containers[0].materialSettings.Add(null);
+
+            Assert.DoesNotThrow(() => CheckoutOperation.Checkout(commit, avatarRoot, "main", null));
+        }
     }
 }

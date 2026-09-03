@@ -119,9 +119,14 @@ namespace AvatarVcs.Editor.History
         // inner materialSettings. Snapshotted before apply and re-read after
         // to decide whether the commit needs re-persisting.
         private static List<string> AllGeneratedMaterialGuids(Commit commit) =>
-            commit.materialSettings.Select(m => m.generatedGuid)
-                .Concat(commit.containers.SelectMany(c =>
-                    (c.materialSettings ?? new List<MaterialSettingsState>()).Select(m => m.generatedGuid)))
+            (commit.materialSettings ?? new List<MaterialSettingsState>())
+                .Where(m => m != null)
+                .Select(m => m.generatedGuid)
+                .Concat((commit.containers ?? new List<ContainerSnapshot>())
+                    .Where(c => c != null)
+                    .SelectMany(c => (c.materialSettings ?? new List<MaterialSettingsState>())
+                        .Where(m => m != null)
+                        .Select(m => m.generatedGuid)))
                 .ToList();
 
         private static List<string> ApplyCommitToScene(Commit commit, GameObject avatarRoot, GameObject configRoot, string avatarGuid, DiagnosticLog log)
