@@ -20,9 +20,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: TestProject/Library
-          key: Library-TestProject-${{ hashFiles('Packages/dev.avatarvcs.avatar-vcs/**') }}
+          # Bump the cache epoch (v2) whenever files are moved/renamed under
+          # Packages/**: a restored Library carries Unity's Bee build graph,
+          # which keeps referencing a source file at its old path after a
+          # rename and fails the compile with CS2001. A fresh epoch forces a
+          # clean Library once; incremental caching resumes from there.
+          key: Library-TestProject-v2-${{ hashFiles('Packages/dev.avatarvcs.avatar-vcs/**') }}
           restore-keys: |
-            Library-TestProject-
+            Library-TestProject-v2-
 
       - name: Run EditMode tests
         uses: game-ci/unity-test-runner@v4
