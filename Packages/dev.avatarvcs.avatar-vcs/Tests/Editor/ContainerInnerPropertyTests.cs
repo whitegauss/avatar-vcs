@@ -1,4 +1,5 @@
 using System.Linq;
+using AvatarVcs.Core.History;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
@@ -203,6 +204,42 @@ namespace AvatarVcs.Tests.Editor
                 "recorded main color re-applied onto the duplicate");
             Assert.AreNotEqual(new Color(0f, 1f, 0f, 1f), matA.GetColor("_Color"),
                 "the source material asset is never mutated");
+        }
+
+        [Test]
+        public void ContainerInnerProperties_NullMaterialSettingsEntry_DoesNotThrow()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            PrefabUtility.InstantiatePrefab(prefabSource, container.transform);
+            var snapshot = ContainerCapture.CaptureContainer(container.transform, avatarRoot.transform);
+
+            snapshot.materialSettings.Add(null);
+
+            Assert.DoesNotThrow(() => ContainerRestore.InstantiateContainer(snapshot, root));
+        }
+
+        [Test]
+        public void CheckoutOperation_NullMaterialSettingsEntry_DoesNotThrow()
+        {
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var container = ContainerManager.CreateContainer(root, "outfit_a");
+            PrefabUtility.InstantiatePrefab(prefabSource, container.transform);
+
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var commit = BranchManager.Commit(avatarRoot, "commit with null ms");
+            commit.materialSettings.Add(null);
+            commit.containers[0].materialSettings.Add(null);
+
+            CheckoutResult result = null;
+            Assert.DoesNotThrow(() => result = CheckoutOperation.Checkout(commit, avatarRoot, "main", null));
+
+            // Not just "didn't throw": the null entries must be skipped and
+            // the rest of the checkout must still complete, because by this
+            // point the old containers are already destroyed.
+            Assert.IsTrue(result.IsSuccess, "the checkout must still succeed with the null entries skipped");
+            Assert.IsNotNull(ContainerManager.GetContainers(root).Single(c => c.name == "outfit_a").Find("Outfit"),
+                "the container was regenerated rather than left gutted");
         }
     }
 }

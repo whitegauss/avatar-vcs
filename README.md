@@ -70,7 +70,7 @@ AvatarVCS には**役割の違う2つの仕組み**があります。
 
 1つの Prefab を差し替え単位にしたいだけなら、その Prefab インスタンスを `[AvatarVCS]` 直下に配置するだけで OK です（コミット時に自動でコンテナに包まれます。`Create Container` を手動で呼ぶ必要はありません）。複数の Prefab をまとめて1つの切り替え単位にしたい場合（例: `hair_long` としてまとめて2つの Prefab を切り替えたい）は、`Create Container` でコンテナを作り、その下に配置してください。
 
-> コンテナは checkout で Prefab から再生成されるため、**コンテナの中で行った BlendShape やマテリアルの調整は現状バージョン管理されません**（Prefab の既定値に戻ります）。そうした調整値も版管理したい場合は、その部分をコンテナに入れず通常の子として置き、Track Properties の対象にしてください。
+> コンテナは checkout で Prefab から再生成されますが、**0.4.0 以降はコンテナ内の Prefab インスタンスに対する BlendShape・マテリアル・アクティブ状態等の調整値もコミット時に記録され、checkout 時に再適用されます**。
 
 ### 3. コミットする
 
@@ -85,6 +85,18 @@ EditorWindow (`Window > AvatarVCS`、またはアバターの GameObject を選�
 - 選択コミットと現在のシーン、または任意の2コミット間の diff 表示
 - **Compare**: 2つのコミットを選んで比較モードに入り、「Show A / Show B」で自動コミットなしに交互 checkout。終了時に「今表示中の状態を採用してコミット」か「比較前の状態に戻す」を選択
 - アセットの再インポートで GUID が変わってしまった場合の再マッピング（missing 状態のプレハブに新しいアセットを割り当てて retry）
+
+## ドキュメント
+
+より詳細な仕様・ガイドラインは [docs/](./docs/index.md) を参照してください。
+
+- [はじめに (Getting Started)](./docs/getting-started.md) — インストール手順・初期セットアップ
+- [コアコンセプト (Concepts)](./docs/concepts.md) — プロパティ追跡とコンテナ管理の仕組み
+- [ユーザーガイド (User Guide)](./docs/user-guide.md) — EditorWindow 各パネル・機能のリファレンス
+- [アーキテクチャ (Architecture)](./docs/architecture.md) — 3層アセンブリ・MVP 設計・テスト構成
+- [データモデル (Data Model)](./docs/data-model.md) — コミット JSON スキーマとシリアライズ仕様
+- [ストレージレイアウト (Storage Layout)](./docs/storage-layout.md) — ProjectSettings 内のファイル配置と永続化
+- [よくある質問 (FAQ)](./docs/faq.md) — トラブルシューティング・FAQ
 
 ## 開発
 
@@ -102,6 +114,5 @@ TestProject/                          # ローカル/CI 用の検証用 Unity �
 
 ### 設計ドキュメントの所在
 
-設計に関する公開ドキュメントは `README.md` と `CHANGELOG.md` のみです。
-
-これらを持たないクローンから作業する場合、設計上の根拠が必要になったらメンテナに設計書を依頼してください。Jira の各タスクは設計書なしでも作業できるよう文面を自己完結させています。
+公開ドキュメントは `README.md`、`CHANGELOG.md`、および `docs/` 配下にまとめられています。
+設計上の根拠が必要になったらメンテナに設計書を依頼してください。Jira の各タスクは設計書なしでも作業できるよう文面を自己完結させています。

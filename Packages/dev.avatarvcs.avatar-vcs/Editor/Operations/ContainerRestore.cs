@@ -223,6 +223,12 @@ namespace AvatarVcs.Editor.Operations
             // is written back so CheckoutOperation persists the reuse and GC.
             foreach (var ms in materialSettings)
             {
+                if (ms == null)
+                {
+                    log.Warn($"[AvatarVCS] Null materialSettings entry in container '{snapshot.containerId}'; skipped.");
+                    continue;
+                }
+
                 try
                 {
                     var rebased = new MaterialSettingsState
