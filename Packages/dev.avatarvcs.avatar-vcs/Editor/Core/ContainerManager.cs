@@ -426,21 +426,31 @@ namespace AvatarVcs.Editor.Core
                 if (child.GetComponent<AvatarVcsContainer>() != null) continue;
                 if (GetPrefabGuid(child.gameObject) == null) continue;
 
-                var wrapper = new GameObject();
+                // Every direct child of root except the one about to move
+                // into the wrapper: checking against it would find the name
+                // the wrapper is taking over and needlessly disambiguate it.
+                // Computed before the wrapper is parented, so the wrapper
+                // doesn't collide with itself either.
+                var siblingNames = root.transform.Cast<Transform>()
+                    .Where(t => t != child)
+                    .Select(t => t.name)
+                    .ToHashSet();
+
+                var wrapper = new GameObject(SiblingNamer.MakeUnique(siblingNames, child.name));
                 Undo.RegisterCreatedObjectUndo(wrapper, "Adopt Prefab As Container");
 
-                // Reparent the child into the wrapper BEFORE computing the
-                // wrapper's name -- child is still directly under root at
-                // this point, so checking for a name collision beforehand
-                // would find the child itself (about to move out) and
-                // needlessly disambiguate against its own name.
-                Undo.SetTransformParent(child, wrapper.transform, "Adopt Prefab As Container");
-
-                wrapper.name = SiblingNamer.MakeUnique(DirectChildNames(root), child.name);
+                // Park the wrapper at root's own origin BEFORE the child moves
+                // in. Undo.SetTransformParent keeps world pose, so resetting
+                // the wrapper's local transform after the child was already
+                // inside dragged the child along with it -- on an avatar not
+                // sitting at the world origin that displaced every adopted
+                // prefab by the avatar's own offset (issue #73).
                 Undo.SetTransformParent(wrapper.transform, root.transform, "Adopt Prefab As Container");
                 wrapper.transform.localPosition = Vector3.zero;
                 wrapper.transform.localRotation = Quaternion.identity;
                 wrapper.transform.localScale = Vector3.one;
+
+                Undo.SetTransformParent(child, wrapper.transform, "Adopt Prefab As Container");
 
                 var marker = Undo.AddComponent<AvatarVcsContainer>(wrapper);
                 marker.AssignGuid(Guid.NewGuid().ToString("N"));

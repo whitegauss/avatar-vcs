@@ -601,5 +601,70 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.DoesNotThrow(() => SnapshotDiffer.Diff(MakeCommit(containerA), MakeCommit(containerB)));
         }
+
+        // KAN-77: JsonUtility keeps a `= new()` initializer only when the key
+        // is *absent*; an explicit `"blendShapes": null` from a hand-edit or a
+        // botched merge really does land here as null. Diff used to NRE on it,
+        // and AvatarVcsPresenter.HasUncommittedChanges has no catch -- so one
+        // corrupt commit locked the user out of every checkout and branch
+        // switch. Every list the differ touches is nulled here at once.
+        [Test]
+        public void Diff_DoesNotThrow_WhenEveryListIsExplicitlyNull()
+        {
+            var before = MakeCommit(NulledOutContainer("hair"));
+            before.avatarReferences = null;
+            before.materialSettings = null;
+
+            var after = MakeCommit(NulledOutContainer("hair"));
+            after.avatarReferences = new List<AvatarReferenceState> { NulledOutReference("Body") };
+            after.materialSettings = new List<MaterialSettingsState>
+            {
+                new() { targetPath = "Body", slot = 0, shader = "lilToon", properties = null },
+            };
+
+            List<ContainerDiff> diffs = null;
+            Assert.DoesNotThrow(() => diffs = SnapshotDiffer.Diff(before, after));
+            Assert.IsNotNull(diffs);
+            // Degraded, not empty: the container is still keyed and classified.
+            Assert.IsTrue(diffs.Any(d => d.containerId == "hair"));
+        }
+
+        // The same corruption one level down: the list exists but holds nulls.
+        [Test]
+        public void Diff_DoesNotThrow_WhenListsHoldNullElements()
+        {
+            var before = MakeCommit(MakeContainer("hair", "guid_a"));
+            var after = MakeCommit(MakeContainer("hair", "guid_a"));
+            after.containers[0].blendShapes = new List<BlendShapeRef> { null };
+            after.containers[0].materials = new List<MaterialRef> { null };
+            after.containers[0].objectStates = new List<ObjectStateRef> { null };
+            after.containers[0].materialSettings = new List<MaterialSettingsState> { null };
+            after.containers[0].components = new List<ComponentState> { null };
+            after.avatarReferences = new List<AvatarReferenceState> { null };
+            after.materialSettings = new List<MaterialSettingsState> { null };
+
+            Assert.DoesNotThrow(() => SnapshotDiffer.Diff(before, after));
+        }
+
+        private static ContainerSnapshot NulledOutContainer(string id) => new()
+        {
+            containerId = id,
+            containerGuid = "guid_" + id,
+            prefabGuids = null,
+            components = null,
+            blendShapes = null,
+            materials = null,
+            objectStates = null,
+            materialSettings = null,
+        };
+
+        private static AvatarReferenceState NulledOutReference(string path) => new()
+        {
+            path = path,
+            blendShapes = null,
+            materials = null,
+            components = null,
+            objectStates = null,
+        };
     }
 }

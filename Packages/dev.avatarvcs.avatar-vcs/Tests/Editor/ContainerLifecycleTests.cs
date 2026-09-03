@@ -233,6 +233,40 @@ namespace AvatarVcs.Tests.Editor
                 "nothing to regenerate a non-prefab-instance child from, so it must be left alone (matches CaptureContainer's existing warning for this case)");
         }
 
+        // KAN-79 / issue #73: the wrapper used to be reset to root's local
+        // origin *after* the child was already inside it, which dragged the
+        // child along. On an avatar at the world origin that was a no-op, so
+        // the bug only ever showed on a real, positioned avatar -- hence the
+        // deliberately non-zero root transform here.
+        [Test]
+        public void AdoptLoosePrefabInstancesAsContainers_OnANonOriginAvatar_LeavesThePrefabWhereItWas()
+        {
+            avatarRoot.transform.position = new Vector3(3f, 1.5f, -2f);
+            avatarRoot.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+
+            var root = ContainerManager.EnsureRoot(avatarRoot);
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(testPrefabSource, root.transform);
+            instance.transform.localPosition = new Vector3(0.2f, 1.4f, 0.05f);
+            instance.transform.localRotation = Quaternion.Euler(10f, 20f, 30f);
+
+            var worldPositionBefore = instance.transform.position;
+            var worldRotationBefore = instance.transform.rotation;
+
+            ContainerManager.AdoptLoosePrefabInstancesAsContainers(root);
+
+            Assert.AreEqual(0f, Vector3.Distance(worldPositionBefore, instance.transform.position), 0.0001f,
+                "adopting a loose prefab must never move it in world space");
+            Assert.AreEqual(0f, Quaternion.Angle(worldRotationBefore, instance.transform.rotation), 0.01f,
+                "...nor rotate it");
+
+            // The wrapper itself is still the identity container the snapshot
+            // model expects (ContainerRestore regenerates it from zeroes).
+            var wrapper = instance.transform.parent;
+            Assert.AreEqual(0f, wrapper.localPosition.magnitude, 0.0001f);
+            Assert.AreEqual(0f, Quaternion.Angle(Quaternion.identity, wrapper.localRotation), 0.01f);
+            Assert.AreEqual(0f, Vector3.Distance(Vector3.one, wrapper.localScale), 0.0001f);
+        }
+
         [Test]
         public void CommitBuilderCreateCommit_LoosePrefabDirectlyUnderRoot_IsAutoAdoptedAndCaptured()
         {

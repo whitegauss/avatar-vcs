@@ -5,6 +5,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.2-poc] - 2026-09-03
+
+### Fixed
+
+- **The commit-deletion cleanup can no longer remove one of your own assets or a whole folder.** Deleting a commit removes the duplicate materials it generated, and the "does this look AvatarVCS-generated?" check ignored the file extension entirely — so a corrupt or badly merged `generatedAssets` list naming a `.prefab`, a `.controller`, or a *folder* GUID would have deleted it (recursively, for a folder). The check now requires a `.mat` and explicitly refuses folders, and is shared with the code that creates the duplicates so the two can't drift apart again.
+- A prefab dropped loose under `[AvatarVCS]` no longer jumps when it is auto-wrapped into a container at commit time. The wrapper was zeroed *after* the prefab was already inside it, so on an avatar not standing at the world origin every adopted prefab was displaced by the avatar's own offset. (#73)
+- A commit whose JSON contains an explicit `null` list (from a hand-edit or a botched merge) no longer throws while diffing. Because the "do you have uncommitted changes?" check runs through the same diff, a single such commit used to make **Switch Branch** and **Checkout** fail outright; both now degrade the diff instead.
+- Committing no longer aborts when a material's shader asset has been deleted or failed to import — the affected slot is skipped, as it already was inside containers.
+
+## [0.4.1-poc] - 2026-09-03
+
+### Fixed
+
+- **Shader settings on a material inside a container now survive a checkout.** An outfit or hairstyle dropped under `[AvatarVCS]` is auto-wrapped into a container, and containers regenerate their prefab instances from the prefab on every checkout — so a lilToon/Poiyomi/MToon main colour (or any other recorded Color/Float property) tweaked on one of those materials reverted to the prefab default. Containers now record those values alongside the BlendShape weights, material slots, and active/tag/layer they already versioned, and re-apply them onto a duplicated material after regeneration. The source `.mat` asset is still never modified.
+- Duplicate materials generated for a container's inner slots are now listed in the commit's `generatedAssets`, so they are reused across checkouts of the same commit instead of piling up, and are cleaned up when that commit is deleted.
+- The diff view now shows a `material settings …` line when a shader value inside a container changes, instead of reporting the container as unchanged.
+
 ## [0.4.0-poc] - 2026-09-03
 
 ### Added

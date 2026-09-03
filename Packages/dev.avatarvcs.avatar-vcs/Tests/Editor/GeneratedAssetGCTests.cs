@@ -85,6 +85,15 @@ namespace AvatarVcs.Tests.Editor
             return !string.IsNullOrEmpty(path) && AssetDatabase.LoadAssetAtPath<Material>(path) != null;
         }
 
+        // Same check, but type-agnostic: the false-positive tests below name
+        // non-Material assets, which LoadAssetAtPath<Material> would report as
+        // gone even when the guard correctly left them alone.
+        private static bool AnyAssetStillLoads(string guid)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(guid);
+            return !string.IsNullOrEmpty(path) && AssetDatabase.LoadMainAssetAtPath(path) != null;
+        }
+
         [Test]
         public void CheckoutSameCommitTwice_ReusesGeneratedMaterial_DoesNotProliferate()
         {
@@ -189,6 +198,56 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsNull(CommitStore.LoadCommit(avatarGuid, commit.commitId), "the commit itself is still deleted");
 
             AssetDatabase.DeleteAsset(innocentPath);
+        }
+
+        // KAN-76: the producer only ever writes a Material, so a user asset
+        // carrying the suffix on any other extension is not ours. The old
+        // guard ignored the extension entirely and would have deleted this.
+        [Test]
+        public void DeleteCommit_DoesNotDeleteASuffixedNonMaterialAsset()
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+
+            var prefabPath = $"{TestAssetDir}/Hair_avatarvcs.prefab";
+            var source = new GameObject("Hair_avatarvcs");
+            PrefabUtility.SaveAsPrefabAsset(source, prefabPath);
+            Object.DestroyImmediate(source);
+            var prefabGuid = AssetDatabase.AssetPathToGUID(prefabPath);
+
+            var commit = CommitBuilder.CreateCommit(avatarRoot, "corrupt generatedAssets", "main", null);
+            commit.generatedAssets.Add(prefabGuid);
+            CommitStore.SaveCommit(avatarGuid, commit);
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Not deleting .*Hair_avatarvcs"));
+            CommitStore.DeleteCommit(avatarGuid, commit.commitId, force: true);
+
+            Assert.IsTrue(AnyAssetStillLoads(prefabGuid), "a .prefab is never something this package generated");
+
+            AssetDatabase.DeleteAsset(prefabPath);
+        }
+
+        // KAN-76: AssetDatabase.GUIDToAssetPath resolves folder GUIDs, and
+        // DeleteAsset removes a folder recursively -- the worst outcome a
+        // corrupt generatedAssets entry could reach.
+        [Test]
+        public void DeleteCommit_DoesNotDeleteAFolder()
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+
+            var folderPath = $"{TestAssetDir}/Stuff_avatarvcs";
+            AssetDatabase.CreateFolder(TestAssetDir, "Stuff_avatarvcs");
+            var folderGuid = AssetDatabase.AssetPathToGUID(folderPath);
+
+            var commit = CommitBuilder.CreateCommit(avatarRoot, "corrupt generatedAssets", "main", null);
+            commit.generatedAssets.Add(folderGuid);
+            CommitStore.SaveCommit(avatarGuid, commit);
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Not deleting .*Stuff_avatarvcs"));
+            CommitStore.DeleteCommit(avatarGuid, commit.commitId, force: true);
+
+            Assert.IsTrue(AssetDatabase.IsValidFolder(folderPath), "a folder must never be recursively deleted by the GC");
+
+            AssetDatabase.DeleteAsset(folderPath);
         }
 
         [Test]
