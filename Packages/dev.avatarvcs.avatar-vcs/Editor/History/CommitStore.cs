@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using AvatarVcs.Core.History;
 using AvatarVcs.Core.Model;
+using AvatarVcs.Core.Naming;
 using UnityEditor;
 using UnityEngine;
 
@@ -202,8 +203,8 @@ namespace AvatarVcs.Editor.History
                 if (!IsAvatarVcsGeneratedAsset(path))
                 {
                     Debug.LogWarning($"[AvatarVCS] Not deleting '{path}': it's listed in a commit's generatedAssets but "
-                        + "doesn't look AvatarVCS-generated (no '_avatarvcs' in the name, not under Assets/AvatarVCS_Generated/). "
-                        + "A corrupt or hand-edited commit can name any GUID here.");
+                        + "doesn't look AvatarVCS-generated (not a '_avatarvcs' .mat, and not under "
+                        + $"{GeneratedAssetNaming.GeneratedFolder}/). A corrupt or hand-edited commit can name any GUID here.");
                     continue;
                 }
 
@@ -220,28 +221,20 @@ namespace AvatarVcs.Editor.History
             SaveIndex(avatarGuid, index);
         }
 
-        // The filename MaterialSettingsApplier.Apply produces:
-        // "<source>_avatarvcs", optionally + AssetDatabase.GenerateUniqueAssetPath's
-        // " 1", " 2", ... uniquifier, anchored to the end. Deliberately NOT
-        // a substring match -- a user's "Coat_avatarvcs_backup.mat" must not
-        // qualify as deletable.
-        private static readonly System.Text.RegularExpressions.Regex GeneratedNamePattern =
-            new(@"_avatarvcs( \d+)?$", System.Text.RegularExpressions.RegexOptions.Compiled);
-
         /// <summary>
-        /// Whether assetPath is something MaterialSettingsApplier.Apply
-        /// generated: its filename matches GeneratedNamePattern, or it lives
-        /// in the Assets/AvatarVCS_Generated/ folder that method falls back
-        /// to for read-only source locations. Keep both in sync with
-        /// MaterialSettingsApplier.Apply.
+        /// Whether assetPath is something MaterialSettingsApplier generated,
+        /// and so may be deleted along with the commit that generated it.
+        /// The naming/placement rules live in Core so the producer and this
+        /// guard share one definition (GeneratedAssetNaming); the extra
+        /// IsValidFolder check is here because it needs the AssetDatabase.
+        ///
+        /// A folder would already fail the .mat check, but ask outright too:
+        /// AssetDatabase.DeleteAsset on a folder removes it *recursively*,
+        /// which is the worst thing a corrupt generatedAssets entry could
+        /// achieve, and a user folder can be named anything at all.
         /// </summary>
-        private static bool IsAvatarVcsGeneratedAsset(string assetPath)
-        {
-            if (string.IsNullOrEmpty(assetPath)) return false;
-            var normalized = assetPath.Replace('\\', '/');
-            if (normalized.StartsWith("Assets/AvatarVCS_Generated/")) return true;
-            return GeneratedNamePattern.IsMatch(Path.GetFileNameWithoutExtension(normalized));
-        }
+        private static bool IsAvatarVcsGeneratedAsset(string assetPath) =>
+            GeneratedAssetNaming.LooksGenerated(assetPath) && !AssetDatabase.IsValidFolder(assetPath);
 
         /// <summary>
         /// Deletes a single commit: its generated assets (design doc

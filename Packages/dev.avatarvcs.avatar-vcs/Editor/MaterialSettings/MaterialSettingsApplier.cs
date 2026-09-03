@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Core.MaterialSettings;
+using AvatarVcs.Core.Naming;
 using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Core.Model;
@@ -100,7 +101,12 @@ namespace AvatarVcs.Editor.MaterialSettings
             }
 
             // Copy-constructing reads sourceMaterial but never writes to it.
-            var duplicate = new Material(sourceMaterial) { name = sourceMaterial.name + "_avatarvcs" };
+            // Name/placement come from GeneratedAssetNaming so the deletion
+            // guard in CommitStore recognises exactly what we emit (KAN-76).
+            var duplicate = new Material(sourceMaterial)
+            {
+                name = GeneratedAssetNaming.DuplicateName(sourceMaterial.name),
+            };
             ApplyProperties(duplicate, state.properties, log);
 
             var directory = System.IO.Path.GetDirectoryName(sourcePath)?.Replace('\\', '/');
@@ -109,11 +115,12 @@ namespace AvatarVcs.Editor.MaterialSettings
                 // A source material inside an immutable/read-only UPM
                 // package (Packages/...) can't have a sibling asset written
                 // next to it -- AssetDatabase.CreateAsset would fail there.
-                directory = "Assets/AvatarVCS_Generated";
+                directory = GeneratedAssetNaming.GeneratedFolder;
                 if (!AssetDatabase.IsValidFolder(directory))
-                    AssetDatabase.CreateFolder("Assets", "AvatarVCS_Generated");
+                    AssetDatabase.CreateFolder("Assets", System.IO.Path.GetFileName(GeneratedAssetNaming.GeneratedFolder));
             }
-            var assetPath = AssetDatabase.GenerateUniqueAssetPath($"{directory}/{duplicate.name}.mat");
+            var assetPath = AssetDatabase.GenerateUniqueAssetPath(
+                $"{directory}/{duplicate.name}{GeneratedAssetNaming.MaterialExtension}");
             AssetDatabase.CreateAsset(duplicate, assetPath);
             AssetDatabase.SaveAssets();
             // CreateAsset can trigger a reimport that leaves the pre-save
