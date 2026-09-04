@@ -105,7 +105,12 @@ namespace AvatarVcs.Editor.UI
             GUI.enabled = unsaved;
             if (GUILayout.Button("Save Note", GUILayout.Width(90)))
             {
-                presenter.SaveNoteOnSelectedCommit(noteDraft);
+                if (presenter.SaveNoteOnSelectedCommit(noteDraft))
+                    // Read back what was actually stored: a whitespace-only
+                    // note is saved as absent, and leaving the draft as typed
+                    // would leave "unsaved" showing forever against a note
+                    // that had in fact been saved.
+                    noteDraft = presenter.SelectedCommitNote();
                 GUI.FocusControl(null);
             }
             if (GUILayout.Button("Revert", GUILayout.Width(70)))
