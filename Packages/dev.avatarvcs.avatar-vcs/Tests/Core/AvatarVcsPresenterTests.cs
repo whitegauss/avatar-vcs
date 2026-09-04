@@ -398,6 +398,49 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsTrue(presenter.CanCreateBranch("feature-2"));
         }
 
+        // CanCreateBranch is the button's enabled state; CreateBranch is what
+        // the button does. Only the first was covered, so the call could have
+        // gone to the wrong gateway method, or skipped the re-read that the
+        // branch popup draws from, without a test moving.
+        [Test]
+        public void CreateBranch_PassesTheNameToTheGateway_AndRereadsHistory()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            // Stands in for what creating a branch writes: something the
+            // presenter can only be holding if it read history again.
+            store.AddCommit("c2", "on the new branch", "2026-01-02T00:00:00Z", "dev");
+
+            Assert.IsTrue(presenter.CreateBranch("dev"), "true lets the view clear its input");
+
+            Assert.AreEqual(new[] { "dev" }, gateway.CreatedBranches.ToArray());
+            Assert.IsTrue(presenter.Commits.Any(c => c.commitId == "c2"), "history is re-read");
+            Assert.IsEmpty(prompt.Alerts);
+        }
+
+        // The name passed the pre-flight but BranchManager still refused it --
+        // another window created it since this config was read, or it is
+        // malformed by a rule the UI doesn't mirror. That arrives as an
+        // exception mid-draw and has to come out as a dialog, not a console
+        // stack trace.
+        [TestCase(typeof(ArgumentException))]
+        [TestCase(typeof(InvalidOperationException))]
+        public void CreateBranch_Rejected_AlertsAndKeepsTheInput(Type thrown)
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            gateway.CreateBranchThrows = (Exception)Activator.CreateInstance(thrown, "branch 'dev' already exists");
+            store.AddCommit("c2", "not reloaded", "2026-01-02T00:00:00Z", "dev");
+
+            Assert.IsFalse(presenter.CreateBranch("dev"), "false keeps the typed name in the field");
+
+            Assert.AreEqual("Create Branch Failed", prompt.Alerts.Single().title);
+            Assert.AreEqual("branch 'dev' already exists", prompt.Alerts.Single().body);
+            Assert.IsFalse(presenter.Commits.Any(c => c.commitId == "c2"), "nothing happened, so nothing to reload");
+        }
+
         // ---- SwitchBranch / checkout plumbing ----
 
         [Test]
@@ -442,6 +485,31 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsNull(presenter.PendingMissingGuids);
         }
 
+        // Cancel is the only way out of the remap prompt. If the retry
+        // survived it, the next checkout the user ran would silently re-run
+        // the one they backed out of.
+        [Test]
+        public void CancelRemap_DropsThePromptAndTheRetry()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            store.AddCommit("c2", "second", "2026-01-02T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            presenter.SelectCommit("c2");
+            gateway.NextResult = CheckoutResult.MissingPrefabs(new List<string> { "guidA" });
+            presenter.CheckoutSelected();
+            presenter.SetRemapSelection("guidA", "newA");
+
+            presenter.CancelRemap();
+
+            Assert.IsNull(presenter.PendingMissingGuids);
+            Assert.IsFalse(presenter.CanApplyRemap());
+
+            presenter.ApplyRemapAndRetry();
+            Assert.IsEmpty(gateway.Remaps, "the cancelled replacement must not be registered later");
+            Assert.AreEqual(1, gateway.Restored.Count, "and the cancelled checkout must not re-run");
+        }
+
         [Test]
         public void RunCheckout_VersionWarnings_ShowsAlert()
         {
@@ -455,6 +523,30 @@ namespace AvatarVcs.Tests.Editor
             presenter.CheckoutSelected();
 
             Assert.AreEqual(WindowMessages.AssetVersionsChangedTitle, prompt.Alerts.Single().title);
+        }
+
+        // A checkout can throw rather than come back unsuccessful: the commit
+        // file was deleted or hand-broken, a container is nested, the branch
+        // moved underneath. RunCheckout is the only thing between that and an
+        // unhandled exception out of OnGUI, which leaves the window throwing
+        // on every repaint instead of saying what went wrong once.
+        [Test]
+        public void RunCheckout_WhenTheCheckoutThrows_AlertsAndChangesNothing()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            store.AddCommit("c2", "second", "2026-01-02T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            presenter.CompareCommitAId = "c2";
+            presenter.CompareCommitBId = "c1";
+            store.Commits.Remove("c2"); // the commit A points at no longer loads
+
+            Assert.DoesNotThrow(() => presenter.StartCompare());
+
+            Assert.AreEqual(WindowMessages.CheckoutFailedTitle, prompt.Alerts.Single().title);
+            StringAssert.Contains("c2", prompt.Alerts.Single().body, "the dialog names the commit that failed");
+            Assert.IsFalse(presenter.CompareModeActive, "a failed entry must not leave compare mode half-on");
+            Assert.IsNull(presenter.PendingMissingGuids, "a throw is not a missing-prefab prompt");
         }
 
         // ---- DeleteSelected ----
@@ -491,6 +583,58 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.IsEmpty(store.Deleted);
             Assert.AreEqual(WindowMessages.CantDeleteHeadTitle, prompt.Alerts.Single().title);
+        }
+
+        [Test]
+        public void DeleteCommit_NonHead_ConfirmsThenDeletesAndMovesTheSelection()
+        {
+            store.AddCommit("c1", "head", "2026-01-01T00:00:00Z");
+            store.AddCommit("c2", "goner", "2026-01-02T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            presenter.SelectCommit("c2");
+
+            presenter.DeleteCommit("c2");
+
+            Assert.AreEqual(WindowMessages.DeleteCommitTitle, prompt.Confirms.Single().title);
+            Assert.AreEqual(new[] { "c2" }, store.Deleted.ToArray());
+            Assert.IsFalse(presenter.Commits.Any(c => c.commitId == "c2"), "the list is re-read");
+            Assert.AreEqual("c1", presenter.SelectedCommitId, "the deleted commit can't stay selected");
+        }
+
+        [Test]
+        public void DeleteCommit_ConfirmDeclined_DeletesNothing()
+        {
+            store.AddCommit("c1", "head", "2026-01-01T00:00:00Z");
+            store.AddCommit("c2", "goner", "2026-01-02T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            prompt.ConfirmAnswers.Enqueue(false);
+
+            presenter.DeleteCommit("c2");
+
+            Assert.IsEmpty(store.Deleted);
+        }
+
+        // The head check above only knows about the *current* branch. A commit
+        // that heads some other branch gets past it and is refused down in the
+        // store, and that refusal has to reach the user with the way out
+        // appended -- the exception message alone says no, not what to do.
+        [Test]
+        public void DeleteCommit_RefusedByTheStore_AlertsWithTheWayOut()
+        {
+            store.AddCommit("c1", "head", "2026-01-01T00:00:00Z");
+            store.AddCommit("c2", "head of dev", "2026-01-02T00:00:00Z", "dev");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            store.DeleteCommitThrows = new InvalidOperationException("Commit is the head of branch 'dev'.");
+
+            presenter.DeleteCommit("c2");
+
+            Assert.AreEqual(WindowMessages.DeleteFailedTitle, prompt.Alerts.Single().title);
+            Assert.AreEqual("Commit is the head of branch 'dev'." + WindowMessages.DeleteBlockedSuffix,
+                prompt.Alerts.Single().body);
+            Assert.IsEmpty(store.Deleted);
         }
 
         // ---- compare ----
@@ -576,6 +720,64 @@ namespace AvatarVcs.Tests.Editor
             presenter.StartCompare();
             presenter.ExitCompare(keepCurrent: false);
             Assert.AreEqual("auto-x", gateway.Restored.Last(), "otherwise restores compareReturnCommitId");
+        }
+
+        // The Start Compare button. Comparing a commit against itself is a
+        // checkout dressed up as a comparison, and starting again while
+        // already comparing would overwrite the return commit -- the only
+        // record of where the user came from.
+        [Test]
+        public void CanStartCompare_NeedsTwoDistinctCommits_AndNoCompareAlreadyRunning()
+        {
+            TwoCommitsHeadedAtC1();
+
+            presenter.CompareCommitAId = null;
+            Assert.IsFalse(presenter.CanStartCompare(), "no A picked");
+
+            presenter.CompareCommitAId = "c1";
+            presenter.CompareCommitBId = null;
+            Assert.IsFalse(presenter.CanStartCompare(), "no B picked");
+
+            presenter.CompareCommitBId = "c1";
+            Assert.IsFalse(presenter.CanStartCompare(), "A and B are the same commit");
+
+            presenter.CompareCommitBId = "c2";
+            Assert.IsTrue(presenter.CanStartCompare());
+
+            presenter.StartCompare();
+            Assert.IsFalse(presenter.CanStartCompare(), "already comparing");
+        }
+
+        // KAN-16: compare mode has to outlive a domain reload -- any script
+        // recompile while the user is mid-comparison -- and the presenter is
+        // rebuilt empty when that happens. The window pushes its
+        // [SerializeField] mirrors back in. If that push doesn't take, the
+        // scene still shows commit A while the presenter thinks compare mode
+        // is off, so Toggle and Exit both no-op and the user is stuck in a
+        // checked-out state with no button that leaves it.
+        [Test]
+        public void RestoreCompareState_PutsCompareModeBack_AndExitStillLeaves()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            store.AddCommit("c2", "second", "2026-01-02T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+
+            presenter.RestoreCompareState(active: true, aId: "c1", bId: "c2", showingB: true, returnId: "auto-x");
+
+            Assert.IsTrue(presenter.CompareModeActive);
+            Assert.AreEqual("c1", presenter.CompareCommitAId);
+            Assert.AreEqual("c2", presenter.CompareCommitBId);
+            Assert.IsTrue(presenter.CompareShowingB, "the reload happened while B was on screen");
+            Assert.AreEqual("auto-x", presenter.CompareReturnCommitId);
+
+            presenter.ToggleCompare();
+            Assert.IsFalse(presenter.CompareShowingB, "toggling from the restored state goes back to A");
+
+            presenter.ExitCompare(keepCurrent: false);
+            Assert.IsFalse(presenter.CompareModeActive);
+            Assert.AreEqual("auto-x", gateway.Restored.Single(),
+                "exit returns to what was recorded before the reload, not to nothing");
         }
 
         // KAN-93: a diff against the live scene captures the whole avatar,
@@ -681,6 +883,93 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.DoesNotThrow(() => presenter.SwitchBranch("dev"));
             Assert.AreEqual("dev", gateway.SwitchedBranches.Single());
+        }
+
+        // ---- view-state predicates ----
+
+        // The Checkout button. The head is already in the scene, and with
+        // nothing selected there is nothing to check out; both would restore
+        // over the user's work for no gain.
+        [Test]
+        public void CanCheckoutSelected_IsFalseForTheHeadAndForNothingSelected()
+        {
+            store.AddCommit("c1", "head", "2026-01-01T00:00:00Z");
+            store.AddCommit("c2", "older", "2026-01-02T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+
+            Assert.IsFalse(presenter.CanCheckoutSelected(), "the head is already what the scene shows");
+
+            presenter.SelectCommit("c2");
+            Assert.IsTrue(presenter.CanCheckoutSelected());
+
+            presenter.SelectCommit(null);
+            Assert.IsFalse(presenter.CanCheckoutSelected(), "nothing selected");
+
+            presenter.CheckoutSelected();
+            Assert.IsEmpty(gateway.Restored, "the guard holds inside CheckoutSelected, not only on the button");
+        }
+
+        // The banner claims "uncommitted changes", which is only what the diff
+        // means when it runs the live scene against the commit the scene is
+        // supposed to match. The other two combinations produce rows that are
+        // real differences but not uncommitted work, and calling them that
+        // would push people into committing to get rid of a warning about
+        // nothing.
+        [Test]
+        public void TheUncommittedBanner_StaysOff_WhenTheDiffIsntSceneAgainstHead()
+        {
+            store.AddCommit("c1", "head", "2026-01-01T00:00:00Z");
+            store.AddCommit("c2", "older", "2026-01-02T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            gateway.LiveState = new Commit { containers = { new ContainerSnapshot { containerId = "added" } } };
+            presenter.DiffEnabled = true;
+
+            Assert.IsTrue(presenter.ShowUncommittedWarning(), "scene against head, with a difference");
+
+            presenter.SelectCommit("c2");
+            Assert.IsTrue(presenter.SelectedDiff.Any(d => d.kind != DiffKind.Unchanged), "there are rows either way");
+            Assert.IsFalse(presenter.ShowUncommittedWarning(),
+                "an older commit differing from the scene is history, not uncommitted work");
+
+            presenter.SelectCommit("c1");
+            store.Commits["c2"].containers.Add(new ContainerSnapshot { containerId = "hair" });
+            presenter.SelectDiffBaseByIndex(1); // against commit c2 instead of the live scene
+            Assert.IsTrue(presenter.SelectedDiff.Any(d => d.kind != DiffKind.Unchanged), "there are rows either way");
+            Assert.IsFalse(presenter.ShowUncommittedWarning(),
+                "commit-to-commit rows say nothing about the scene");
+        }
+
+        [Test]
+        public void ClearBulkDelete_UnticksEverything()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            store.AddCommit("c2", "second", "2026-01-02T00:00:00Z");
+            presenter.SetAvatarGuid(Guid);
+            presenter.SetBulkDeleteSelected("c1", true);
+            presenter.SetBulkDeleteSelected("c2", true);
+
+            presenter.ClearBulkDelete();
+
+            CollectionAssert.IsEmpty(presenter.SelectedForBulkDelete);
+
+            presenter.DeleteSelected();
+            Assert.IsEmpty(prompt.Confirms, "nothing ticked, so nothing to confirm");
+            Assert.IsEmpty(store.Deleted);
+        }
+
+        // Commit messages aren't unique -- two "wip" rows in a popup are
+        // indistinguishable without the id, which is what the suffix is for.
+        [Test]
+        public void CommitLabel_AppendsAShortCommitId()
+        {
+            Assert.AreEqual("wip (abcdef)", AvatarVcsPresenter.CommitLabel(
+                new CommitIndexEntry { commitId = "abcdef0123456789", message = "wip" }));
+
+            Assert.AreEqual("wip (abc)", AvatarVcsPresenter.CommitLabel(
+                new CommitIndexEntry { commitId = "abc", message = "wip" }),
+                "an id shorter than the cut is used whole rather than read past its end");
         }
     }
 }
