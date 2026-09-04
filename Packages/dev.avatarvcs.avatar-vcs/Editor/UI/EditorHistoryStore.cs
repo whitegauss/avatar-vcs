@@ -21,5 +21,7 @@ namespace AvatarVcs.Editor.UI
 
         public List<string> DeleteCommits(string avatarGuid, IEnumerable<string> commitIds) =>
             CommitStore.DeleteCommits(avatarGuid, commitIds);
+
+        public void SaveCommit(string avatarGuid, Commit commit) => CommitStore.SaveCommit(avatarGuid, commit);
     }
 }

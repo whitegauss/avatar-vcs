@@ -63,6 +63,14 @@ namespace AvatarVcs.Tests.Editor
                 Commits.Remove(commitId);
             }
 
+            public readonly List<string> Saved = new();
+
+            public void SaveCommit(string avatarGuid, Commit commit)
+            {
+                Saved.Add(commit.commitId);
+                Commits[commit.commitId] = commit;
+            }
+
             public List<string> DeleteCommits(string avatarGuid, IEnumerable<string> commitIds)
             {
                 var ids = commitIds.ToList();
@@ -146,6 +154,63 @@ namespace AvatarVcs.Tests.Editor
 
         private void SetBranchHead(string commitId) =>
             store.Config.branches.Add(new BranchEntry { name = "main", commitId = commitId });
+
+        // ---- notes (KAN-94) ----
+
+        // A note is the one part of a commit meant to be written after the
+        // fact. The commit message names it in the list; the note is where
+        // the detail goes.
+        [Test]
+        public void ANoteCanBeSavedOntoTheSelectedCommit_AndReadBack()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+
+            Assert.AreEqual("", presenter.SelectedCommitNote(), "a commit with no note reads as empty, not null");
+
+            Assert.IsTrue(presenter.SaveNoteOnSelectedCommit("outfit A + hair B\nshoulder toggle off"));
+
+            Assert.AreEqual("outfit A + hair B\nshoulder toggle off", presenter.SelectedCommitNote());
+            CollectionAssert.Contains(store.Saved, "c1");
+        }
+
+        [Test]
+        public void SavingANote_LeavesTheRestOfTheCommitAlone()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            store.Commits["c1"].containers.Add(new ContainerSnapshot { containerId = "hair" });
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+
+            presenter.SaveNoteOnSelectedCommit("just a note");
+
+            var reloaded = store.LoadCommit(Guid, "c1");
+            Assert.AreEqual("first", reloaded.message, "the message is not the note");
+            Assert.AreEqual(1, reloaded.containers.Count, "recorded state is immutable; only the note is written");
+        }
+
+        [Test]
+        public void AnEmptyNote_IsStoredAsAbsentRatherThanBlank()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            presenter.SaveNoteOnSelectedCommit("something");
+
+            presenter.SaveNoteOnSelectedCommit("   ");
+
+            Assert.IsNull(store.LoadCommit(Guid, "c1").note,
+                "whitespace is not a note; keeping it would put a blank line in every commit file");
+            Assert.AreEqual("", presenter.SelectedCommitNote());
+        }
+
+        [Test]
+        public void SavingANote_WithNothingSelected_DoesNothing()
+        {
+            Assert.IsFalse(presenter.SaveNoteOnSelectedCommit("note"));
+            CollectionAssert.IsEmpty(store.Saved);
+        }
 
         // ---- Reload ----
 

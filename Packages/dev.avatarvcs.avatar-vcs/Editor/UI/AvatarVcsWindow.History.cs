@@ -66,6 +66,60 @@ namespace AvatarVcs.Editor.UI
             EditorGUILayout.EndVertical();
         }
 
+        /// <summary>
+        /// A free-form note on the selected commit, editable after the fact.
+        /// Separate from the commit message, which names the commit in the
+        /// list and is fixed once made.
+        ///
+        /// The draft is held in the window, not written through on every
+        /// keystroke: OnGUI runs constantly, and saving per character would
+        /// rewrite the commit file each frame the field has focus.
+        /// </summary>
+        private void DrawNotePanel()
+        {
+            var commitId = presenter.SelectedCommitId;
+            if (commitId == null) return;
+
+            // Selection moved: drop whatever was being typed for the old one
+            // rather than carrying it onto a different commit.
+            if (commitId != noteDraftCommitId)
+            {
+                noteDraftCommitId = commitId;
+                noteDraft = presenter.SelectedCommitNote();
+            }
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("Note", EditorStyles.boldLabel);
+
+            noteScroll = EditorGUILayout.BeginScrollView(noteScroll, GUILayout.MinHeight(48), GUILayout.MaxHeight(120));
+            var edited = EditorGUILayout.TextArea(noteDraft ?? "", GUILayout.ExpandHeight(true));
+            EditorGUILayout.EndScrollView();
+
+            var dirty = edited != (noteDraft ?? "");
+            if (dirty) noteDraft = edited;
+
+            EditorGUILayout.BeginHorizontal();
+            var saved = presenter.SelectedCommitNote();
+            var unsaved = (noteDraft ?? "") != saved;
+
+            GUI.enabled = unsaved;
+            if (GUILayout.Button("Save Note", GUILayout.Width(90)))
+            {
+                presenter.SaveNoteOnSelectedCommit(noteDraft);
+                GUI.FocusControl(null);
+            }
+            if (GUILayout.Button("Revert", GUILayout.Width(70)))
+            {
+                noteDraft = saved;
+                GUI.FocusControl(null);
+            }
+            GUI.enabled = true;
+
+            if (unsaved) EditorGUILayout.LabelField("unsaved", EditorStyles.miniLabel);
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.EndVertical();
+        }
+
         private void DrawDiffPanel()
         {
             EditorGUILayout.BeginVertical();

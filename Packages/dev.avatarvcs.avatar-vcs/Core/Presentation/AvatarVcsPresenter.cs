@@ -122,6 +122,38 @@ namespace AvatarVcs.Core.Presentation
             RecomputeSelectedDiff();
         }
 
+        /// <summary>
+        /// The selected commit's note, or "" when there is none. Loaded from
+        /// the store each time rather than cached: the note is small, and a
+        /// stale copy here would silently overwrite an edit made elsewhere.
+        /// </summary>
+        public string SelectedCommitNote()
+        {
+            if (avatarGuid == null || selectedCommitId == null) return string.Empty;
+            return store.LoadCommit(avatarGuid, selectedCommitId)?.note ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Saves a note onto the selected commit, leaving everything else it
+        /// recorded untouched. Returns false when there is nothing to save it
+        /// onto -- no avatar, no selection, or the commit no longer loads.
+        ///
+        /// The commit's recorded state is immutable; the note is the one part
+        /// meant to be written after the fact, which is why this reloads and
+        /// rewrites rather than taking a Commit from the caller.
+        /// </summary>
+        public bool SaveNoteOnSelectedCommit(string note)
+        {
+            if (avatarGuid == null || selectedCommitId == null) return false;
+
+            var commit = store.LoadCommit(avatarGuid, selectedCommitId);
+            if (commit == null) return false;
+
+            commit.note = string.IsNullOrWhiteSpace(note) ? null : note;
+            store.SaveCommit(avatarGuid, commit);
+            return true;
+        }
+
         public void RecomputeSelectedDiff()
         {
             selectedDiff = new List<ContainerDiff>();
