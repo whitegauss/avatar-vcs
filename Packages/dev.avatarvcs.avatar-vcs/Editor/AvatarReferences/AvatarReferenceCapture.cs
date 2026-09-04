@@ -216,7 +216,7 @@ namespace AvatarVcs.Editor.AvatarReferences
                         // happens to be a prefab instance would be an
                         // unrelated, surprising side effect.
                         if (descendant == target) continue;
-                        if (ContainerManager.GetPrefabGuid(descendant.gameObject) == null) continue;
+                        if (!IsOwnPrefabInstanceRoot(descendant.gameObject)) continue;
 
                         var transformState = CapturePrefabInstanceTransform(transform, target);
                         if (transformState.fields.Count > 0) state.components.Add(transformState);
@@ -233,6 +233,23 @@ namespace AvatarVcs.Editor.AvatarReferences
                 }
             }
         }
+
+        /// <summary>
+        /// True only when go is the root of a prefab instance of its own --
+        /// an accessory dropped onto a bone -- and not merely some object
+        /// that happens to live inside a larger prefab instance.
+        ///
+        /// GetPrefabGuid (GetCorrespondingObjectFromSource) was used here and
+        /// answers a different question: it is non-null for EVERY object
+        /// inside a prefab instance. Real avatars are prefab instances, so it
+        /// excluded nothing and every bone in the Armature got its pose
+        /// captured -- the exact thing the caller's comment says must never
+        /// happen. It is also the single largest slice of a commit: in one
+        /// real project 534 of a commit's 678 captured components were bones,
+        /// 36% of the captured component data.
+        /// </summary>
+        private static bool IsOwnPrefabInstanceRoot(GameObject go) =>
+            PrefabUtility.GetNearestPrefabInstanceRoot(go) == go;
 
         /// <summary>
         /// Captures only position/rotation/scale, by property name, not the

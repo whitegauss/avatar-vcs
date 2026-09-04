@@ -31,6 +31,7 @@ namespace AvatarVcs.Tests.Editor
         private Material materialB;
         private string materialAGuid;
         private GameObject accessoryPrefab;
+        private GameObject riggedAvatarPrefab;
         // A prefab (SkinnedMeshRenderer + asset mesh with Shape_A + materialA
         // in slot 0) used by the KAN-72 idempotency tests, which need a real
         // prefab instance to observe prefab-instance overrides. The mesh must
@@ -60,6 +61,20 @@ namespace AvatarVcs.Tests.Editor
             var accessorySource = new GameObject("Accessory");
             accessoryPrefab = PrefabUtility.SaveAsPrefabAsset(accessorySource, $"{TestAssetDir}/Accessory.prefab");
             Object.DestroyImmediate(accessorySource);
+
+            // A whole avatar as one prefab, which is what a real avatar is.
+            // Instantiating it makes every bone part of that instance, so
+            // every bone reports a corresponding source object -- the state
+            // the old bone guard could not distinguish.
+            var riggedSource = new GameObject("RiggedAvatar");
+            var riggedArmature = new GameObject("Armature");
+            riggedArmature.transform.SetParent(riggedSource.transform);
+            var riggedHip = new GameObject("Hip");
+            riggedHip.transform.SetParent(riggedArmature.transform);
+            var riggedSpine = new GameObject("Spine");
+            riggedSpine.transform.SetParent(riggedHip.transform);
+            riggedAvatarPrefab = PrefabUtility.SaveAsPrefabAsset(riggedSource, $"{TestAssetDir}/RiggedAvatar.prefab");
+            Object.DestroyImmediate(riggedSource);
 
             var bodyMesh = new Mesh
             {
@@ -563,6 +578,42 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual("Hip/Accessory", captured.path);
             var position = captured.fields.Single(f => f.key == "m_LocalPosition").value.Split(',').Select(float.Parse).ToArray();
             Assert.Less(Vector3.Distance(new Vector3(0.1f, 0.2f, 0.3f), new Vector3(position[0], position[1], position[2])), 0.0001f);
+        }
+
+        // The test above stands a bone in with a plain GameObject, which is
+        // why it never caught this: a real avatar IS a prefab instance, so
+        // every bone inside it reports a corresponding source object. The
+        // guard asked exactly that question and therefore excluded nothing --
+        // in one real user commit, 287 of the 401 captured components were
+        // Armature bones, 572 KB of a 624 KB file, for state the code's own
+        // comment says is never tracked.
+        [Test]
+        public void Capture_OnAPrefabInstanceAvatar_DoesNotCaptureItsOwnBones()
+        {
+            var avatar = (GameObject)PrefabUtility.InstantiatePrefab(riggedAvatarPrefab);
+            spawned.Add(avatar);
+
+            var state = AvatarReferenceCapture.Capture(avatar.transform, avatar.transform);
+
+            var transformStates = state.components.Where(c => c.type == typeof(Transform).FullName).ToList();
+            CollectionAssert.IsEmpty(transformStates,
+                "a bone inside the avatar's own prefab instance is not a prefab instance of its own");
+        }
+
+        [Test]
+        public void Capture_OnAPrefabInstanceAvatar_StillCapturesAnAccessoryPrefabOnABone()
+        {
+            var avatar = (GameObject)PrefabUtility.InstantiatePrefab(riggedAvatarPrefab);
+            spawned.Add(avatar);
+            var bone = avatar.transform.Find("Armature/Hip");
+            var accessory = (GameObject)PrefabUtility.InstantiatePrefab(accessoryPrefab, bone);
+            accessory.transform.localPosition = new Vector3(0.1f, 0.2f, 0.3f);
+
+            var state = AvatarReferenceCapture.Capture(avatar.transform, avatar.transform);
+
+            var captured = state.components.Single(c => c.type == typeof(Transform).FullName);
+            Assert.AreEqual("Armature/Hip/Accessory", captured.path,
+                "an accessory dropped on a bone is its own prefab instance and must still be tracked");
         }
 
         [Test]
