@@ -244,9 +244,9 @@ namespace AvatarVcs.Editor.AvatarReferences
         /// inside a prefab instance. Real avatars are prefab instances, so it
         /// excluded nothing and every bone in the Armature got its pose
         /// captured -- the exact thing the caller's comment says must never
-        /// happen. It also dominated commit size: in one real avatar, 287 of
-        /// the 401 captured components were Armature bones, 572 KB of a
-        /// 624 KB commit.
+        /// happen. It is also the single largest slice of a commit: in one
+        /// real project 534 of a commit's 678 captured components were bones,
+        /// 36% of the captured component data.
         /// </summary>
         private static bool IsOwnPrefabInstanceRoot(GameObject go) =>
             PrefabUtility.GetNearestPrefabInstanceRoot(go) == go;
