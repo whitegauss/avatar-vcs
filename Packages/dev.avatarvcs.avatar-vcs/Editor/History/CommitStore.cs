@@ -189,10 +189,29 @@ namespace AvatarVcs.Editor.History
         /// </summary>
         private static void ExecutePlan(string avatarGuid, CommitDeletionPlan plan, CommitIndex index)
         {
+            // Nothing here may delete a material the scene is wearing right
+            // now. The planner only knows whether another *commit* still
+            // references a generated asset -- but a checkout points the
+            // renderers themselves at these duplicates, so deleting the
+            // commit that produced them takes the avatar's materials with it.
+            // Harmless while the shader allowlist matched almost nothing and
+            // generatedAssets was always empty; real from 0.5.0 on.
+            var inUse = MaterialGuidsUsedInLoadedScenes();
+
             foreach (var guid in plan.AssetGuidsToDelete)
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
                 if (string.IsNullOrEmpty(path)) continue;
+
+                if (inUse.Contains(guid))
+                {
+                    // Left behind on purpose. An orphaned .mat costs disk;
+                    // deleting one out from under a renderer costs the user
+                    // their avatar's appearance.
+                    Debug.LogWarning($"[AvatarVCS] Not deleting '{path}': a renderer in an open scene is still "
+                        + "using it. It will be cleaned up once nothing points at it.");
+                    continue;
+                }
 
                 // generatedAssets comes from commit JSON, which this repo
                 // treats as hand-editable / corruptible everywhere else
@@ -233,6 +252,40 @@ namespace AvatarVcs.Editor.History
         /// which is the worst thing a corrupt generatedAssets entry could
         /// achieve, and a user folder can be named anything at all.
         /// </summary>
+        /// <summary>
+        /// GUIDs of every material currently assigned to a renderer in a
+        /// loaded scene. FindObjectsOfTypeAll reaches inactive objects and
+        /// every open scene, which is what matters: a hidden outfit's
+        /// materials are just as much the user's as a visible one's.
+        ///
+        /// Only open scenes can be checked. A material used solely by a
+        /// closed scene can still be deleted here -- the same limitation the
+        /// rest of the tool has, and far better than the previous behaviour
+        /// of not looking at the scene at all.
+        /// </summary>
+        private static HashSet<string> MaterialGuidsUsedInLoadedScenes()
+        {
+            var guids = new HashSet<string>();
+
+            foreach (var renderer in Resources.FindObjectsOfTypeAll<Renderer>())
+            {
+                if (renderer == null) continue;
+
+                foreach (var material in renderer.sharedMaterials)
+                {
+                    if (material == null) continue;
+
+                    var path = AssetDatabase.GetAssetPath(material);
+                    if (string.IsNullOrEmpty(path)) continue;
+
+                    var guid = AssetDatabase.AssetPathToGUID(path);
+                    if (!string.IsNullOrEmpty(guid)) guids.Add(guid);
+                }
+            }
+
+            return guids;
+        }
+
         private static bool IsAvatarVcsGeneratedAsset(string assetPath) =>
             GeneratedAssetNaming.LooksGenerated(assetPath) && !AssetDatabase.IsValidFolder(assetPath);
 

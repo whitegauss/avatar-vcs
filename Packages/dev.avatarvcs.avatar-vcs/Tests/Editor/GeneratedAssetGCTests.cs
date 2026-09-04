@@ -94,6 +94,15 @@ namespace AvatarVcs.Tests.Editor
             return !string.IsNullOrEmpty(path) && AssetDatabase.LoadMainAssetAtPath(path) != null;
         }
 
+        /// <summary>
+        /// Points the test avatar's renderer back at the source material, so
+        /// no generated duplicate is in use. Collection is deliberately
+        /// refused while the scene still holds one (KAN-92), so a test about
+        /// collection has to let go of it first.
+        /// </summary>
+        private void ReleaseGeneratedMaterialFromScene() =>
+            avatarRoot.transform.Find("Body").GetComponent<Renderer>().sharedMaterials = new[] { sourceMaterial };
+
         [Test]
         public void CheckoutSameCommitTwice_ReusesGeneratedMaterial_DoesNotProliferate()
         {
@@ -127,11 +136,67 @@ namespace AvatarVcs.Tests.Editor
             var generatedGuid = reloaded.materialSettings[0].generatedGuid;
             Assert.IsTrue(AssetStillLoads(generatedGuid), "sanity check: duplicate should exist before delete");
 
+            // Checkout leaves the duplicate in the renderer's slot, and a
+            // material the scene is wearing is never collected (KAN-92).
+            // This test is about the collection itself, so hand the slot back
+            // to the source first.
+            ReleaseGeneratedMaterialFromScene();
+
             CommitStore.DeleteCommit(avatarGuid, commit.commitId, force: true);
 
             Assert.IsFalse(AssetStillLoads(generatedGuid), "generated duplicate should be deleted along with the commit");
             Assert.IsNull(CommitStore.LoadCommit(avatarGuid, commit.commitId));
             Assert.IsFalse(CommitStore.LoadIndex(avatarGuid).entries.Any(e => e.commitId == commit.commitId));
+        }
+
+        // The reported data loss: checkout points the renderers at the
+        // generated duplicates, so deleting the commit that produced them
+        // deleted the materials the avatar was wearing. The planner only
+        // asks whether another *commit* still references the asset; nothing
+        // asked the scene. Harmless while generatedAssets was always empty,
+        // real once lilToon variants started matching.
+        [Test]
+        public void DeleteCommit_DoesNotDeleteAGeneratedMaterialTheSceneIsStillUsing()
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var commit = CommitWithMaterialSetting("with material", null);
+            CheckoutOperation.Checkout(commit, avatarRoot, "main", null);
+
+            var reloaded = CommitStore.LoadCommit(avatarGuid, commit.commitId);
+            var generatedGuid = reloaded.materialSettings[0].generatedGuid;
+
+            var renderer = avatarRoot.transform.Find("Body").GetComponent<Renderer>();
+            Assert.AreEqual(generatedGuid,
+                AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(renderer.sharedMaterials[0])),
+                "sanity check: checkout put the generated duplicate in the renderer's slot");
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Not deleting .*still using it"));
+            CommitStore.DeleteCommit(avatarGuid, commit.commitId, force: true);
+
+            Assert.IsTrue(AssetStillLoads(generatedGuid),
+                "deleting the commit must not take the material the avatar is wearing with it");
+            Assert.IsNotNull(renderer.sharedMaterials[0], "the renderer's slot must not be left empty");
+        }
+
+        [Test]
+        public void DeleteCommit_StillDeletesAGeneratedMaterialNothingIsUsing()
+        {
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var commit = CommitWithMaterialSetting("with material", null);
+            CheckoutOperation.Checkout(commit, avatarRoot, "main", null);
+
+            var reloaded = CommitStore.LoadCommit(avatarGuid, commit.commitId);
+            var generatedGuid = reloaded.materialSettings[0].generatedGuid;
+
+            // Point the renderer back at the source, so nothing in the scene
+            // holds the duplicate any more -- the guard must not turn into
+            // "never collect anything".
+            ReleaseGeneratedMaterialFromScene();
+
+            CommitStore.DeleteCommit(avatarGuid, commit.commitId, force: true);
+
+            Assert.IsFalse(AssetStillLoads(generatedGuid),
+                "an unreferenced duplicate is still garbage and must still be collected");
         }
 
         [Test]
@@ -164,6 +229,7 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.IsTrue(AssetStillLoads(sharedGuid), "asset still referenced by another commit must survive deletion");
 
+            ReleaseGeneratedMaterialFromScene();
             CommitStore.DeleteCommit(avatarGuid, second.commitId, force: true);
 
             Assert.IsFalse(AssetStillLoads(sharedGuid), "once no commit references it, deleting the last one should clean it up");

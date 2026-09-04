@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Deleting a commit no longer deletes materials your avatar is currently wearing.** Checking out a commit puts the generated duplicate materials into the renderers' slots, and deleting that commit then cleaned those duplicates up — taking the avatar's materials with them. The cleanup now skips any material a renderer in an open scene still uses, and says so; it still collects duplicates nothing points at. This could only bite from 0.5.0 on, when shader settings first started being recorded for real avatars.
+
 ## [0.6.0-poc] - 2026-09-04
 
 ### Added
