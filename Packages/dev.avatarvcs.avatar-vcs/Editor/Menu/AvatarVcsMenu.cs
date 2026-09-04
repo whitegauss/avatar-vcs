@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using AvatarVcs.Editor.AvatarReferences;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.MaterialSettings;
 using AvatarVcs.Core.Model;
 using AvatarVcs.Core.Presets;
 using AvatarVcs.Editor.UI;
@@ -195,6 +196,79 @@ namespace AvatarVcs.Editor.Menu
         // pack sold to another creator). Not tied to any avatarGuid/commit
         // history; applied purely by BlendShape name onto whatever mesh
         // the importer has.
+        // Material settings are exported from a Material asset selected in
+        // the Project window, not from a GameObject: a renderer has many
+        // slots and "this material's settings" is the unambiguous unit. The
+        // BlendShape commands above are GameObject-scoped because a
+        // SkinnedMeshRenderer has exactly one mesh.
+        [MenuItem("Assets/AvatarVCS/Export Material Settings...", false, 20)]
+        private static void ExportMaterialSettingsMenuItem()
+        {
+            var material = Selection.activeObject as Material;
+            var preset = MaterialSettingsPresetIO.Capture(material);
+
+            var path = EditorUtility.SaveFilePanel(
+                "Export Material Settings", "", $"{material.name}_settings", "json");
+            if (string.IsNullOrEmpty(path)) return;
+
+            try
+            {
+                File.WriteAllText(path, MaterialSettingsPresetJson.Serialize(preset));
+            }
+            catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException)
+            {
+                Debug.LogError($"[AvatarVCS] Could not write '{path}': {e.Message}");
+                return;
+            }
+
+            Debug.Log(MaterialSettingsPresetJson.DescribeExport(preset.properties.Count, preset.shader, path));
+        }
+
+        [MenuItem("Assets/AvatarVCS/Export Material Settings...", true)]
+        private static bool ValidateExportMaterialSettings() =>
+            Selection.activeObject is Material m && m.shader != null;
+
+        [MenuItem("Assets/AvatarVCS/Import Material Settings...", false, 21)]
+        private static void ImportMaterialSettingsMenuItem()
+        {
+            var material = Selection.activeObject as Material;
+
+            var path = EditorUtility.OpenFilePanel("Import Material Settings", "", "json");
+            if (string.IsNullOrEmpty(path)) return;
+
+            string json;
+            try
+            {
+                json = File.ReadAllText(path);
+            }
+            catch (Exception e) when (e is IOException or ArgumentException)
+            {
+                Debug.LogError($"[AvatarVCS] Could not read '{path}': {e.Message}");
+                return;
+            }
+
+            if (!MaterialSettingsPresetJson.TryParse(json, out var preset, out var error))
+            {
+                Debug.LogError($"[AvatarVCS] Could not read '{path}': {error}");
+                return;
+            }
+
+            if (preset == null)
+            {
+                Debug.LogError($"[AvatarVCS] '{path}' is not a valid material settings file.");
+                return;
+            }
+
+            var skipped = MaterialSettingsPresetIO.Apply(preset, material);
+            var applied = (preset.properties?.Count ?? 0) - skipped.Count;
+            Debug.Log(MaterialSettingsPresetJson.DescribeImport(
+                applied, path, preset.shader, material.shader != null ? material.shader.name : "(none)", skipped));
+        }
+
+        [MenuItem("Assets/AvatarVCS/Import Material Settings...", true)]
+        private static bool ValidateImportMaterialSettings() =>
+            Selection.activeObject is Material;
+
         [MenuItem("GameObject/AvatarVCS/Export BlendShapes...", false, 5)]
         private static void ExportBlendShapesMenuItem()
         {
