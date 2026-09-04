@@ -414,7 +414,12 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.IsTrue(BranchManager.RestoreToCommit(avatarRoot, first.commitId).IsSuccess);
 
-            Assert.AreSame(textureA, LiveCoatRenderer().sharedMaterials[0].GetTexture("_Main2ndTex"),
+            // By asset path, not reference: a reimport hands back a different
+            // C# instance wrapping the same asset, so AreSame compares two
+            // objects that both print as "TexA" and still fails.
+            Assert.AreEqual(
+                $"{Dir}/TexA.asset",
+                AssetDatabase.GetAssetPath(LiveCoatRenderer().sharedMaterials[0].GetTexture("_Main2ndTex")),
                 "the recorded texture must come back, not whatever the source material now holds");
         }
 

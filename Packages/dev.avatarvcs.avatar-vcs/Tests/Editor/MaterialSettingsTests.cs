@@ -277,7 +277,7 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [Test]
-        public void ShaderPropertyMap_GetProperties_EnumeratesColorAndFloatPropertiesFromTheShaderItself()
+        public void ShaderPropertyMap_GetProperties_EnumeratesColorFloatAndTextureFromTheShaderItself()
         {
             // Standard stands in for a real supported shader here (same
             // constraint as lilToon not being available), since GetProperties
@@ -291,7 +291,21 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.IsTrue(properties.Any(p => p.name == "_Color" && p.type == "color"));
             Assert.IsTrue(properties.Any(p => p.name == "_Glossiness" && p.type == "float"));
-            Assert.IsFalse(properties.Any(p => p.name == "_MainTex"), "texture properties must be excluded");
+
+            // Textures used to be excluded here as "asset references, not
+            // values". That left the generated duplicate carrying whatever
+            // texture the source material held at checkout time, so a swapped
+            // lilToon second-layer texture could never be restored (KAN-91).
+            // They are recoverable by GUID, same as a material slot.
+            Assert.IsTrue(properties.Any(p => p.name == "_MainTex" && p.type == "texture"));
+
+            // Still excluded: types MaterialPropertyValue has no encoding for.
+            // Standard declares _EmissionColor as Color and no bare Vector or
+            // Int property, so assert the shape instead -- every enumerated
+            // type must be one apply() can actually write back.
+            CollectionAssert.IsSubsetOf(
+                properties.Select(p => p.type).Distinct().ToList(),
+                new[] { "color", "float", "texture" });
         }
     }
 }
