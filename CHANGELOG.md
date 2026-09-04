@@ -7,7 +7,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **lilToon / Poiyomi shader settings are now recorded for real avatars.** Supported shaders were matched by exact name, and the only lilToon name on the list was the plain `lilToon`. Real materials are almost always variants — `Hidden/lilToonOutline`, `Hidden/lilToonTransparent`, `_lil/[Optional] lilToonOverlay` and 60 others — and every one of them was skipped, silently, because an unsupported shader is not something the tool warns about. The result was that an entire avatar could commit no shader settings at all and a checkout had nothing to put back, which looked exactly like "the colour isn't being restored". Shaders are now matched by family, so all lilToon variants, Poiyomi's `Poiyomi Toon` / `Poiyomi Pro` / locked-in shaders, and both MToon generations are covered. lilToon's internal pass shaders (`Hidden/ltspass_*`, `Hidden/ltsother_*`) are still excluded.
 - **Commits no longer record the pose of every bone in your Armature.** Only an accessory that is a prefab instance in its own right (dropped onto a bone, bypassing containers) is supposed to have its Transform tracked; bone pose never was. The check asked whether an object came from a prefab, which is true of *everything* inside a prefab instance — and a real avatar is one — so it excluded nothing. In one real project 534 of a commit's 678 captured components were bones, and dropping them takes that project's stored history from 11.8 MB to 9.3 MB (about 21% smaller; bones are 36% of the captured component data). Existing history keeps working — the surplus entries just restore the pose they already recorded.
+
+### Changed
+
+- Checkout no longer loads every sub-asset of a referenced file just to resolve a reference to that file's main asset. An avatar's AnimatorController can hold hundreds of sub-assets, and the full load happened once per recorded reference per checkout. As a side effect, a damaged internal reference in one of your own assets no longer makes Unity print `Broken text PPtr in file(...)` on every checkout with an AvatarVCS stack trace under it — the underlying problem is in the asset, but AvatarVCS was what forced it into view.
 
 ## [0.4.2-poc] - 2026-09-03
 

@@ -88,6 +88,24 @@ namespace AvatarVcs.Editor.Reflection
             var assetPath = AssetDatabase.GUIDToAssetPath(guid);
             if (string.IsNullOrEmpty(assetPath)) return null;
 
+            // Almost every recorded assetRef names the file's MAIN asset -- an
+            // Animator's controller, a MeshFilter's mesh, a Renderer's
+            // material. Check it before falling back to the sub-asset scan
+            // below, which pulls in *every* object in the file: an avatar's
+            // AnimatorController holds hundreds of state/state-machine
+            // sub-assets, and that full load happens once per assetRef per
+            // checkout. It also forces Unity to resolve every internal PPtr,
+            // so one damaged reference somewhere in the file spams the
+            // console ("Broken text PPtr in file(...)") on every checkout,
+            // pointing at AvatarVCS for a problem in the user's own asset.
+            var main = AssetDatabase.LoadMainAssetAtPath(assetPath);
+            if (main != null
+                && AssetDatabase.TryGetGUIDAndLocalFileIdentifier(main, out var mainGuid, out long mainLocalId)
+                && mainGuid == guid && mainLocalId == localId)
+            {
+                return main;
+            }
+
             foreach (var candidate in AssetDatabase.LoadAllAssetsAtPath(assetPath))
             {
                 if (AssetDatabase.TryGetGUIDAndLocalFileIdentifier(candidate, out var candidateGuid, out long candidateLocalId)

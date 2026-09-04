@@ -23,20 +23,62 @@ namespace AvatarVcs.Core.MaterialSettings
         // Still an explicit allowlist, not "every shader": duplicating a
         // material is only appropriate for shaders this tool has decided
         // are safe/sensible to do that for (design doc 1.4.3's MVP scope).
-        private static readonly HashSet<string> SupportedShaders = new()
+        //
+        // Matched by FAMILY, not by exact name. These shaders ship one
+        // variant per rendering mode and each variant is a separate registered
+        // name, so an exact-name list only ever covered the opaque default:
+        // lilToon alone registers 64 names, of which "lilToon" is one, and a
+        // real avatar's materials are almost always variants
+        // ("Hidden/lilToonOutline", "Hidden/lilToonTransparent", ...). Every
+        // variant is the same shader with the same property set, so there is
+        // no reason to treat them differently -- and because an unsupported
+        // shader is skipped silently, the old list made whole avatars record
+        // nothing at all with no visible sign.
+        private static readonly string[] SupportedFamilies =
         {
+            // lilToon: "lilToon", "Hidden/lilToon*", "_lil/lilToonMulti",
+            // "_lil/[Optional] lilToon*". Note this correctly excludes
+            // lilToon's internal pass shaders ("Hidden/ltspass_opaque",
+            // "Hidden/ltsother_baker"), which no material should reference.
             "lilToon",
-            // Poiyomi's registered shader name is dot-prefixed (hides it
-            // from the shader dropdown search); this is the actual
-            // material.shader.name.
-            ".poiyomi/Poiyomi",
-            // UniVRM's legacy (VRM 0.x) MToon shader.
-            "VRM/MToon",
-            // UniVRM's MToon 1.0 shader (VRM 1.0 / VRMC_materials_mtoon).
-            "VRM10/MToon10",
+            // Poiyomi: ".poiyomi/Poiyomi Toon", "Poiyomi/Poiyomi Pro", and
+            // the locked-in form "Hidden/Locked/Poiyomi Toon/<hash>".
+            "Poiyomi",
+            // UniVRM: "VRM/MToon" (VRM 0.x) and "VRM10/MToon10" (VRM 1.0).
+            "MToon",
         };
 
-        public static bool IsSupported(string shaderName) => SupportedShaders.Contains(shaderName);
+        // lilToon prefixes its optional shaders with this inside the "_lil"
+        // folder, e.g. "_lil/[Optional] lilToonOverlay".
+        private const string OptionalPrefix = "[Optional]";
+
+        /// <summary>
+        /// True when shaderName belongs to a supported shader family. A
+        /// shader's registered name is a "/"-separated path, and the family
+        /// name can sit in any segment: the leading segments are folders
+        /// ("Hidden", ".poiyomi", "Hidden/Locked") that say where the shader
+        /// appears in the dropdown, not what it is.
+        /// </summary>
+        public static bool IsSupported(string shaderName)
+        {
+            if (string.IsNullOrEmpty(shaderName)) return false;
+
+            foreach (var rawSegment in shaderName.Split('/'))
+            {
+                var segment = rawSegment.Trim();
+                if (segment.StartsWith(OptionalPrefix, StringComparison.Ordinal))
+                    segment = segment.Substring(OptionalPrefix.Length).TrimStart();
+
+                foreach (var family in SupportedFamilies)
+                {
+                    // StartsWith, not equality: the variant suffix is part of
+                    // the same segment ("lilToonTransparentOutline").
+                    if (segment.StartsWith(family, StringComparison.Ordinal)) return true;
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// Every Color/Float/Range property shader declares. Texture
