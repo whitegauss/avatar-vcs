@@ -37,9 +37,7 @@ namespace AvatarVcs.Editor.Core
             var rootGo = new GameObject(RootName);
             Undo.RegisterCreatedObjectUndo(rootGo, "Create AvatarVCS Root");
             Undo.SetTransformParent(rootGo.transform, avatarRoot.transform, "Create AvatarVCS Root");
-            rootGo.transform.localPosition = Vector3.zero;
-            rootGo.transform.localRotation = Quaternion.identity;
-            rootGo.transform.localScale = Vector3.one;
+            LocalTransform.Reset(rootGo.transform);
             var marker = Undo.AddComponent<AvatarVcsRoot>(rootGo);
             marker.AssignGuid(Guid.NewGuid().ToString("N"));
 
@@ -75,34 +73,21 @@ namespace AvatarVcs.Editor.Core
         /// <summary>
         /// EnsureRoot, plus (only on the root's actual first creation)
         /// AvatarVcsTrackedReference on the avatar root itself and on every
-        /// top-level child that already exists -- issue #46: most users
-        /// want their avatar body/armature/accessories tracked by default
-        /// (e.g. toggling a default accessory on/off), rather than having
-        /// to remember to opt each one in via Track Properties Here, and
-        /// some assets (bone-attached colliders/accessories) can only be
-        /// placed directly under Armature, bypassing container management
-        /// entirely -- untracked, their changes wouldn't be recorded at
-        /// all. Kept out of EnsureRoot itself for the same reason
-        /// EnsureRootAndDefaultContainer is -- see that method's doc
-        /// comment.
-        /// </summary>
-        public static GameObject EnsureRootWithDefaultTracking(GameObject avatarRoot)
-        {
-            var isNewRoot = FindRoot(avatarRoot) == null;
-            var root = EnsureRoot(avatarRoot);
-            if (isNewRoot)
-                SeedDefaultTracking(avatarRoot, root);
-
-            return root;
-        }
-
-        /// <summary>
-        /// EnsureRoot, plus EnsureRootWithDefaultTracking's first-creation
-        /// seeding -- what the "Ensure Root" command actually calls.
-        /// Deliberately does NOT seed an empty container: property tracking
-        /// (the default, seeded here) already covers the common case, and a
-        /// loose prefab instance placed directly under "[AvatarVCS]" is
-        /// wrapped into a container automatically at commit time
+        /// top-level child that already exists -- issue #46: most users want
+        /// their avatar body/armature/accessories tracked by default (e.g.
+        /// toggling a default accessory on/off), rather than having to
+        /// remember to opt each one in via Track Properties Here, and some
+        /// assets (bone-attached colliders/accessories) can only be placed
+        /// directly under Armature, bypassing container management entirely
+        /// -- untracked, their changes wouldn't be recorded at all. Kept out
+        /// of EnsureRoot itself for the same reason
+        /// EnsureRootAndDefaultContainer is -- see that method's doc comment.
+        ///
+        /// This is what the "Ensure Root" command calls. It deliberately does
+        /// NOT seed an empty container: the property tracking seeded here
+        /// already covers the common case, and a loose prefab instance placed
+        /// directly under "[AvatarVCS]" is wrapped into a container
+        /// automatically at commit time
         /// (AdoptLoosePrefabInstancesAsContainers), so an empty
         /// "[AvatarVCS]/container_1" was just noise (KAN-71).
         /// EnsureRootAndDefaultContainer still exists for callers that
@@ -302,9 +287,7 @@ namespace AvatarVcs.Editor.Core
             var containerGo = new GameObject(containerId);
             Undo.RegisterCreatedObjectUndo(containerGo, "Create AvatarVCS Container");
             Undo.SetTransformParent(containerGo.transform, root.transform, "Create AvatarVCS Container");
-            containerGo.transform.localPosition = Vector3.zero;
-            containerGo.transform.localRotation = Quaternion.identity;
-            containerGo.transform.localScale = Vector3.one;
+            LocalTransform.Reset(containerGo.transform);
 
             var marker = Undo.AddComponent<AvatarVcsContainer>(containerGo);
             marker.AssignGuid(Guid.NewGuid().ToString("N"));
@@ -446,9 +429,7 @@ namespace AvatarVcs.Editor.Core
                 // sitting at the world origin that displaced every adopted
                 // prefab by the avatar's own offset (issue #73).
                 Undo.SetTransformParent(wrapper.transform, root.transform, "Adopt Prefab As Container");
-                wrapper.transform.localPosition = Vector3.zero;
-                wrapper.transform.localRotation = Quaternion.identity;
-                wrapper.transform.localScale = Vector3.one;
+                LocalTransform.Reset(wrapper.transform);
 
                 Undo.SetTransformParent(child, wrapper.transform, "Adopt Prefab As Container");
 

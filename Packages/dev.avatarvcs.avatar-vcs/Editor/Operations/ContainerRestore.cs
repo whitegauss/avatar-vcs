@@ -97,9 +97,7 @@ namespace AvatarVcs.Editor.Operations
                 var prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
                 var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefabAsset, containerGo.transform);
                 Undo.RegisterCreatedObjectUndo(instance, "Restore AvatarVCS Container");
-                instance.transform.localPosition = Vector3.zero;
-                instance.transform.localRotation = Quaternion.identity;
-                instance.transform.localScale = Vector3.one;
+                LocalTransform.Reset(instance.transform);
             }
 
             return containerGo;
