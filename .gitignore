@@ -28,6 +28,8 @@ TODO.md
 LESSONS.md
 .claude/skills/
 plan.md
+# CI writes this to fingerprint the package file set for the Library cache
+.package-file-list
 .agents/
 
 # Commit history the TestProject writes to ProjectSettings while running tests
