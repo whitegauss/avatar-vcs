@@ -186,6 +186,12 @@ namespace AvatarVcs.Editor.MaterialSettings
         {
             var changed = false;
 
+            // Property names whose texture couldn't be resolved. Their
+            // tiling/offset must be skipped too: the slot keeps the texture
+            // the duplicate inherited, and stamping the recorded scale/offset
+            // onto a different texture is worse than leaving both alone.
+            var unresolvedTextures = new HashSet<string>();
+
             // A null material here means the just-created/reused duplicate
             // failed to load (line ~101). Now that the per-property loop also
             // swallows NullReferenceException, an unchecked null would make
@@ -234,9 +240,12 @@ namespace AvatarVcs.Editor.MaterialSettings
                             }
                             break;
                         case "texture":
-                            if (ApplyTexture(material, property, log)) changed = true;
+                            if (!TryApplyTexture(material, property, log, out var textureChanged))
+                                unresolvedTextures.Add(property.name);
+                            else if (textureChanged) changed = true;
                             break;
                         case ShaderPropertyMap.TextureScaleOffsetType:
+                            if (unresolvedTextures.Contains(property.name)) break;
                             if (ApplyTextureScaleOffset(material, property)) changed = true;
                             break;
                         default:
@@ -264,8 +273,21 @@ namespace AvatarVcs.Editor.MaterialSettings
         /// default -- that is what lets a checkout clear a texture the source
         /// material has since gained.
         /// </summary>
-        private static bool ApplyTexture(Material material, MaterialPropertyValue property, DiagnosticLog log)
+        /// <summary>
+        /// Restores one texture slot by GUID, the same way a material slot is
+        /// restored. An empty recorded value means "nothing was assigned",
+        /// which is restored as null so the shader falls back to its own
+        /// default -- that is what lets a checkout clear a texture the source
+        /// material has since gained.
+        ///
+        /// Returns false when the recorded GUID could not be resolved, which
+        /// is not the same as "nothing changed": the caller must then also
+        /// skip this property's tiling/offset.
+        /// </summary>
+        private static bool TryApplyTexture(Material material, MaterialPropertyValue property, DiagnosticLog log,
+            out bool changed)
         {
+            changed = false;
             Texture texture = null;
 
             if (!string.IsNullOrEmpty(property.value))
@@ -282,14 +304,15 @@ namespace AvatarVcs.Editor.MaterialSettings
                     // this is exactly the "may look different" case worth
                     // telling the user about.
                     log.Warn($"[AvatarVCS] Texture for '{property.name}' (GUID '{property.value}') could not be "
-                        + "resolved; left as-is.");
+                        + "resolved; that slot's texture and tiling are left as-is.");
                     return false;
                 }
             }
 
-            if (material.GetTexture(property.name) == texture) return false;
+            if (material.GetTexture(property.name) == texture) return true;
 
             material.SetTexture(property.name, texture);
+            changed = true;
             return true;
         }
 

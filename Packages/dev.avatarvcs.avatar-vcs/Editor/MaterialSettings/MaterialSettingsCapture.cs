@@ -75,10 +75,17 @@ namespace AvatarVcs.Editor.MaterialSettings
         }
 
         /// <summary>
-        /// The GUID of the texture in this slot, or "" when nothing is
-        /// assigned. A runtime-only texture (not a saved asset) also reads as
-        /// "" -- there is no guid to restore it from, and pretending
-        /// otherwise would silently drop it on checkout.
+        /// Three outcomes, and conflating any two of them loses data:
+        ///
+        ///   ""    nothing is assigned. A real state worth restoring -- it is
+        ///         what lets a checkout clear a texture the source material
+        ///         has since gained.
+        ///   guid  an assigned, saved texture. Restored by GUID.
+        ///   null  assigned, but with no asset to restore it from (a
+        ///         runtime-created texture). Caller skips the property
+        ///         entirely, so checkout leaves whatever the duplicate
+        ///         inherited. Recording this as "" would tell apply to clear
+        ///         the slot, silently dropping the texture.
         /// </summary>
         private static string TextureGuid(Material material, string name)
         {
@@ -86,9 +93,10 @@ namespace AvatarVcs.Editor.MaterialSettings
             if (texture == null) return string.Empty;
 
             var path = AssetDatabase.GetAssetPath(texture);
-            if (string.IsNullOrEmpty(path)) return string.Empty;
+            if (string.IsNullOrEmpty(path)) return null;
 
-            return AssetDatabase.AssetPathToGUID(path) ?? string.Empty;
+            var guid = AssetDatabase.AssetPathToGUID(path);
+            return string.IsNullOrEmpty(guid) ? null : guid;
         }
 
         private static string ColorToString(Color c) =>

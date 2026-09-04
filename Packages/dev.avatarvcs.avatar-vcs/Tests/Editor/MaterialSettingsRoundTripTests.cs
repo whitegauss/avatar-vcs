@@ -2,6 +2,7 @@ using System.Linq;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.MaterialSettings;
+using UnityEngine.TestTools;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -468,6 +469,72 @@ namespace AvatarVcs.Tests.Editor
             var live = LiveCoatRenderer().sharedMaterials[0];
             Assert.AreEqual(new Vector2(2f, 3f), live.GetTextureScale("_Main2ndTex"));
             Assert.AreEqual(new Vector2(0.25f, 0.5f), live.GetTextureOffset("_Main2ndTex"));
+        }
+
+        // Review catch: a texture with no asset behind it (runtime-created)
+        // was recorded as "" -- the same encoding as "nothing assigned" --
+        // so a checkout would have cleared the slot. There is no guid to
+        // restore it from, so the property is not recorded at all and the
+        // slot keeps whatever the duplicate inherited.
+        [Test]
+        public void ATextureWithNoAssetBehindIt_IsNotRecordedAsUnassigned()
+        {
+            var runtimeTexture = new Texture2D(2, 2) { name = "RuntimeOnly" };
+            try
+            {
+                coat.SetTexture("_Main2ndTex", runtimeTexture);
+
+                var captured = MaterialSettingsCapture.Capture(coat, lilToon.name, "Body", 0);
+
+                var entry = captured.properties.FirstOrDefault(p => p.name == "_Main2ndTex" && p.type == "texture");
+                Assert.IsNull(entry,
+                    "recording it as \"\" would tell checkout to clear the slot, dropping the texture");
+                Assert.IsFalse(
+                    captured.properties.Any(p => p.name == "_Main2ndTex"
+                        && p.type == AvatarVcs.Core.MaterialSettings.ShaderPropertyMap.TextureScaleOffsetType),
+                    "and its tiling must not be recorded on its own either");
+            }
+            finally
+            {
+                coat.SetTexture("_Main2ndTex", textureA);
+                Object.DestroyImmediate(runtimeTexture);
+            }
+        }
+
+        // Review catch: an unresolvable texture GUID leaves the slot alone,
+        // but its tiling/offset was still applied -- stamping the recorded
+        // scale onto a different texture than the one it was recorded for.
+        [Test]
+        public void AnUnresolvableTextureGuid_LeavesBothTheTextureAndItsTilingAlone()
+        {
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
+
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "initial");
+
+            // Point the recorded texture at a guid nothing resolves to, and
+            // give it a tiling that must NOT be stamped onto the inherited one.
+            foreach (var ms in first.containers.SelectMany(c => c.materialSettings))
+            {
+                foreach (var p in ms.properties.Where(p => p.name == "_Main2ndTex"))
+                {
+                    if (p.type == "texture") p.value = "ffffffffffffffffffffffffffffffff";
+                    else p.value = "9,9,9,9";
+                }
+            }
+            CommitStore.SaveCommit(avatarGuid, first);
+
+            LogAssert.ignoreFailingMessages = true;
+            var result = BranchManager.RestoreToCommit(avatarRoot, first.commitId);
+            LogAssert.ignoreFailingMessages = false;
+            Assert.IsTrue(result.IsSuccess);
+
+            var live = LiveCoatRenderer().sharedMaterials[0];
+            Assert.AreEqual($"{Dir}/TexA.asset", AssetDatabase.GetAssetPath(live.GetTexture("_Main2ndTex")),
+                "the inherited texture stays");
+            Assert.AreEqual(Vector2.one, live.GetTextureScale("_Main2ndTex"),
+                "and its tiling is not overwritten with the recorded one");
         }
 
         // The bug the user actually hit: their materials were on
