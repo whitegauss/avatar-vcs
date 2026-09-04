@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Internal
+
+- Every `DiagnosticLog` now reaches the console through one `DiagnosticScope` type instead of a hand-written own-or-borrow block and `try`/`finally` at each of the 14 entry points that take or make one. No call site can forget to flush, and the nine methods that had been split into an `XxxCore` purely to give the `try` block something to call no longer need to be. Console output is unchanged.
+
 ### Changed
 
 - **The changes list is collapsed by default, and costs nothing while it is.** Diffing against the live scene captures the whole avatar — every container, every tracked component, and since 0.5.0 tens of thousands of shader property reads — and the window asked for that again after *any* scene edit. So editing anything with the window open paid for a diff nobody was reading. It is now a "Changes" foldout, and while it is shut that passive capture doesn't happen at all. The "discard your changes?" confirmation before a checkout or branch switch is unaffected; it computes on demand. The passive "you have uncommitted changes" banner reads the same diff, so it now appears only once the panel is open.

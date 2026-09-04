@@ -29,25 +29,19 @@ namespace AvatarVcs.Editor.History
 
             // KAN-20: one DiagnosticLog for the whole commit; capture helpers
             // append to it and it is flushed to the console once at the end.
-            // Flush in a finally so warnings collected before a throw (e.g.
-            // CommitBuilder's container validation) still reach the console.
-            var log = new DiagnosticLog();
-            try
-            {
-                var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot, log);
-                var commit = CommitBuilder.CreateCommit(
-                    avatarRoot, message, config.currentBranch, currentHead, avatarReferences, materialSettings, log);
-                CommitStore.SaveCommit(avatarGuid, commit);
+            // The scope flushes on the exception path too, so warnings
+            // collected before a throw (e.g. CommitBuilder's container validation) still reach the console.
+            using var diagnostics = DiagnosticScope.Own(out var log);
 
-                BranchConfigOps.SetHead(config, config.currentBranch, commit.commitId);
-                CommitStore.SaveConfig(avatarGuid, config);
+            var (avatarReferences, materialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot, log);
+            var commit = CommitBuilder.CreateCommit(
+                avatarRoot, message, config.currentBranch, currentHead, avatarReferences, materialSettings, log);
+            CommitStore.SaveCommit(avatarGuid, commit);
 
-                return commit;
-            }
-            finally
-            {
-                UnityDiagnosticSink.Flush(log);
-            }
+            BranchConfigOps.SetHead(config, config.currentBranch, commit.commitId);
+            CommitStore.SaveConfig(avatarGuid, config);
+
+            return commit;
         }
 
         /// <summary>

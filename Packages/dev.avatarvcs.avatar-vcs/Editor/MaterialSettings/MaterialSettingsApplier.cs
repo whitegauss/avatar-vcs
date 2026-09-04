@@ -69,16 +69,9 @@ namespace AvatarVcs.Editor.MaterialSettings
             // direct caller (tests) passes none, so make one and flush it --
             // even on the throw path, so warnings logged before the throw
             // still reach the console.
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                return ApplyCore(state, avatarRoot, log);
-            }
-            finally
-            {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
+
+            return ApplyCore(state, avatarRoot, log);
         }
 
         private static Material ApplyCore(MaterialSettingsState state, GameObject avatarRoot, DiagnosticLog log)

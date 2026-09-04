@@ -59,16 +59,9 @@ namespace AvatarVcs.Editor.Apply
             // caller mid-operation passes its own; a direct caller (tests)
             // passes none, so make one and flush it to the console here so
             // existing LogAssert expectations still see the warnings.
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                return ApplyCore(state, containerRoot, avatarRoot, createIfMissing, log);
-            }
-            finally
-            {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
+
+            return ApplyCore(state, containerRoot, avatarRoot, createIfMissing, log);
         }
 
         private static ApplyResult ApplyCore(ComponentState state, GameObject containerRoot, GameObject avatarRoot,
