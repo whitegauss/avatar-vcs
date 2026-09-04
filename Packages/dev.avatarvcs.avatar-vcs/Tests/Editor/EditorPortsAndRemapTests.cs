@@ -88,7 +88,9 @@ namespace AvatarVcs.Tests.Editor
             var snapshot = new ContainerSnapshot
             {
                 containerId = "outfit",
-                containerGuid = "c0ffee",
+                // A real container guid shape: AvatarVcsContainer.AssignGuid
+                // rejects anything that is not 32 lowercase hex chars.
+                containerGuid = System.Guid.NewGuid().ToString("N"),
                 prefabGuids = { oldPrefabGuid },
                 localScale = Vector3.one,
             };
