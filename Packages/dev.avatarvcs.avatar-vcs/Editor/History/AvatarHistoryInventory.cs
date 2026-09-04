@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AvatarVcs.Core.History;
+using AvatarVcs.Core.Model;
 using AvatarVcs.Runtime;
 using UnityEditor;
 using UnityEngine;
