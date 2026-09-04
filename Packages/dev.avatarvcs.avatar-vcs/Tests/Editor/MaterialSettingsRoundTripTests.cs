@@ -323,6 +323,60 @@ namespace AvatarVcs.Tests.Editor
             });
         }
 
+        // KAN-90: the "some referenced assets have changed" warning fired on
+        // every checkout for the very materials whose settings the commit
+        // restores. Editing those is the normal workflow -- that is what
+        // materialSettings is for -- so the warning reported something the
+        // tool had already handled. A material on an unsupported shader is a
+        // different case: its content really is unrecoverable, so it stays
+        // recorded.
+        [Test]
+        public void EditingAMaterialWhoseSettingsAreRecorded_DoesNotWarnOnCheckout()
+        {
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
+
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "initial, coat is white");
+
+            var coatGuid = AssetDatabase.AssetPathToGUID($"{Dir}/Coat.mat");
+            CollectionAssert.DoesNotContain(first.assetVersions.Select(a => a.guid), coatGuid,
+                "a material this commit can restore must not be hash-watched");
+
+            coat.SetColor("_Color", Color.red);
+            EditorUtility.SetDirty(coat);
+            AssetDatabase.SaveAssets();
+
+            var result = BranchManager.RestoreToCommit(avatarRoot, first.commitId);
+
+            Assert.IsTrue(result.IsSuccess);
+            CollectionAssert.IsEmpty(result.VersionWarnings,
+                "the recorded settings were re-applied, so there is nothing to warn about");
+        }
+
+        [Test]
+        public void AMaterialOnAnUnsupportedShader_IsStillHashWatched()
+        {
+            var plain = new Material(Shader.Find("Standard"));
+            AssetDatabase.CreateAsset(plain, $"{Dir}/Plain.mat");
+            var plainGuid = AssetDatabase.AssetPathToGUID($"{Dir}/Plain.mat");
+
+            var body = new GameObject("Body");
+            body.transform.SetParent(avatarRoot.transform, false);
+            body.AddComponent<MeshFilter>().sharedMesh = mesh;
+            body.AddComponent<MeshRenderer>().sharedMaterials = new[] { plain };
+
+            ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+
+            var commit = BranchManager.Commit(avatarRoot, "standard-shader material");
+
+            CollectionAssert.Contains(commit.assetVersions.Select(a => a.guid), plainGuid,
+                "nothing restores this material's contents, so a change to it is still worth reporting");
+
+            AssetDatabase.DeleteAsset($"{Dir}/Plain.mat");
+        }
+
         // The bug the user actually hit: their materials were on
         // "Hidden/lilToonOutline" and "Hidden/lilToonTransparent", not the
         // bare "lilToon" the allowlist matched. Every slot was skipped

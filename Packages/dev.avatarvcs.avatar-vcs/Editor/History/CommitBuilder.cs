@@ -68,10 +68,23 @@ namespace AvatarVcs.Editor.History
 
             // Design doc 6.3: record every referenced asset's content hash
             // so a later checkout can warn if it's since changed in place.
-            var referencedGuids = containers.SelectMany(c => c.prefabGuids)
-                .Concat(materialSettingsList.Select(m => m.sourceMaterialGuid))
-                .Concat(containers.SelectMany(c => c.materialSettings.Select(m => m.sourceMaterialGuid))) // KAN-73
-                .Concat(avatarReferencesList.SelectMany(r => r.materials.Select(m => m.guid)));
+            //
+            // Except the materials whose shader settings this commit records.
+            // Checkout rebuilds those from the recorded values onto a
+            // duplicate, so the source changing is handled rather than lost --
+            // warning about it told the user about something the tool had
+            // already dealt with, on every single checkout. 6.3 is about
+            // content this tool cannot reproduce: prefabs, and materials on a
+            // shader outside the supported set, which stay recorded here.
+            var restoredMaterialGuids = materialSettingsList
+                .Concat(containers.SelectMany(c => c.materialSettings ?? new List<MaterialSettingsState>())) // KAN-73
+                .Select(m => m.sourceMaterialGuid)
+                .Where(guid => !string.IsNullOrEmpty(guid))
+                .ToHashSet();
+
+            var referencedGuids = containers.SelectMany(c => c.prefabGuids ?? new List<string>())
+                .Concat(avatarReferencesList.SelectMany(r => (r.materials ?? new List<MaterialRef>()).Select(m => m.guid)))
+                .Where(guid => !string.IsNullOrEmpty(guid) && !restoredMaterialGuids.Contains(guid));
 
             return new Commit
             {
