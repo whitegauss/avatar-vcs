@@ -4,6 +4,7 @@ using System.Linq;
 using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.AvatarReferences;
+using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.MaterialSettings;
