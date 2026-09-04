@@ -39,7 +39,18 @@ namespace AvatarVcs.Editor.Apply
                 go.SetActive(activeSelf);
             }
 
-            if (go.layer != layer)
+            // Unity has 32 layers and silently misbehaves outside 0..31 --
+            // the recorded value comes from commit JSON, which this repo
+            // treats as hand-editable and merge-corruptible everywhere else.
+            // Warn and skip rather than clamp: 40 clamped to 31 is a
+            // different, equally wrong layer, and silently moving an object
+            // to one is worse than leaving it where it is.
+            if (layer < 0 || layer > 31)
+            {
+                log.Warn($"[AvatarVCS] Layer {layer} recorded for {tagContext} is outside Unity's 0..31 range; "
+                    + $"left as {go.layer}.");
+            }
+            else if (go.layer != layer)
             {
                 Undo.RecordObject(go, undoName);
                 go.layer = layer;

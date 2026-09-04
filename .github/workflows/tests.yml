@@ -14,7 +14,7 @@ jobs:
       checks: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # A restored Library carries Unity's Bee build graph, which is keyed to
       # the set of source files that existed when it was written. Restore one
@@ -33,7 +33,7 @@ jobs:
           wc -l < .package-file-list
 
       - name: Cache Library
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: TestProject/Library
           key: Library-TestProject-v3-${{ hashFiles('.package-file-list') }}-${{ hashFiles('Packages/dev.avatarvcs.avatar-vcs/**') }}
@@ -41,7 +41,7 @@ jobs:
             Library-TestProject-v3-${{ hashFiles('.package-file-list') }}-
 
       - name: Run EditMode tests
-        uses: game-ci/unity-test-runner@v4
+        uses: game-ci/unity-test-runner@0ff419b913a3630032cbe0de48a0099b5a9f0ed9 # v4
         id: tests
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -53,7 +53,7 @@ jobs:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always() && steps.tests.outputs.artifactsPath != ''
         with:
           name: editmode-test-results

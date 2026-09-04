@@ -5,6 +5,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A `layer` outside Unity's 0..31 range in a hand-edited or badly merged commit no longer moves the object onto a wrong layer. It's reported and the object is left where it is — clamping 40 to 31 would just be a different wrong layer, applied silently.
+- The GUID-remapping file is now written with the same crash-safety as commits: flushed to disk before the atomic rename, so a power loss can't leave a file that exists, is the right size, and is full of zeroes. Prefab resolution for every commit relying on a remap depends on it.
+
+### Internal
+
+- Every GitHub Action is pinned to a commit SHA rather than a moving tag, and the release job's `contents: write` is scoped to that job instead of the whole workflow. The release job hands a write-capable token to a third-party action, so what that tag resolves to matters.
+
 ### Breaking
 
 - Removed `ContainerManager.EnsureRootWithDefaultTracking`. Its body was byte-identical to `EnsureRootWithDefaults`, which is what the "Ensure Root" command has always called — use that instead. (No known external caller; the package has no reverse dependencies.)

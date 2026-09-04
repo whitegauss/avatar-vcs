@@ -84,13 +84,10 @@ namespace AvatarVcs.Editor.History
         /// </summary>
         public static void Save(GuidRemapConfig config)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
-            var tempPath = $"{ConfigPath}.tmp";
-            File.WriteAllText(tempPath, JsonUtility.ToJson(config, true));
-            if (File.Exists(ConfigPath))
-                File.Replace(tempPath, ConfigPath, null);
-            else
-                File.Move(tempPath, ConfigPath);
+            // Atomic AND flushed to disk (KAN-18's guarantee, which this
+            // file had been left out of): a torn guid-remapping file breaks
+            // prefab resolution for every commit that relies on it.
+            AtomicFile.WriteAllText(ConfigPath, JsonUtility.ToJson(config, true));
             resolveIndexCache = null;
         }
     }

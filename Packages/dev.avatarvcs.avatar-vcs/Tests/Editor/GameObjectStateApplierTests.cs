@@ -1,3 +1,4 @@
+using System.Linq;
 using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Editor.Apply;
 using NUnit.Framework;
@@ -59,6 +60,38 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.IsTrue(log.IsEmpty);
             Assert.AreEqual("Player", go.tag);
+        }
+
+        // KAN-83: layer comes from commit JSON, which this repo treats as
+        // hand-editable and merge-corruptible. Unity has 32 layers and
+        // misbehaves silently outside 0..31. Warn and leave it alone rather
+        // than clamp -- 40 clamped to 31 is a different, equally wrong layer,
+        // and silently moving an object onto one is worse than not moving it.
+        [TestCase(32)]
+        [TestCase(40)]
+        [TestCase(-1)]
+        [TestCase(int.MaxValue)]
+        public void Apply_LayerOutsideUnitysRange_LeavesItUnchangedAndWarns(int layer)
+        {
+            go.layer = 5;
+
+            GameObjectStateApplier.Apply(go, activeSelf: true, tag: null, layer: layer, "the widget", "Undo", log);
+
+            Assert.AreEqual(5, go.layer, "an out-of-range layer must not move the object");
+            Assert.IsTrue(log.Entries.Any(e => e.Contains("0..31") && e.Contains("the widget")),
+                "and the user has to be told, naming what it was recorded for");
+        }
+
+        [TestCase(0)]
+        [TestCase(31)]
+        public void Apply_LayerAtTheEdgesOfUnitysRange_IsStillApplied(int layer)
+        {
+            go.layer = 5;
+
+            GameObjectStateApplier.Apply(go, activeSelf: true, tag: null, layer: layer, "context", "Undo", log);
+
+            Assert.AreEqual(layer, go.layer, "0 and 31 are valid layers; the guard must not exclude them");
+            Assert.IsEmpty(log.Entries);
         }
 
         [Test]
