@@ -158,6 +158,23 @@
           "changelogUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/CHANGELOG.md",
           "url": "https://github.com/whitegauss/avatar-vcs/releases/download/v0.7.0-poc/dev.avatarvcs.avatar-vcs-0.7.0-poc.zip",
           "zipSHA256": "69c8d7d8d3277f28bf01c1e1fb24b13c189b8b0575f86be90fd9bcad18f8c9e6"
+        },
+        "0.7.1-poc": {
+          "name": "dev.avatarvcs.avatar-vcs",
+          "version": "0.7.1-poc",
+          "displayName": "Avatar VCS (Phase 1 PoC)",
+          "description": "Version control for VRChat avatar configurations: prefab-composition containers with destroy/regenerate idempotency, BlendShape/material/component-field tracking, commit history, branches, and diff.",
+          "unity": "2022.3",
+          "author": {
+            "name": "gaussian",
+            "url": "https://github.com/whitegauss"
+          },
+          "license": "MIT",
+          "licenseUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/LICENSE",
+          "documentationUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/README.md",
+          "changelogUrl": "https://github.com/whitegauss/avatar-vcs/blob/main/CHANGELOG.md",
+          "url": "https://github.com/whitegauss/avatar-vcs/releases/download/v0.7.1-poc/dev.avatarvcs.avatar-vcs-0.7.1-poc.zip",
+          "zipSHA256": "b516e7f69b51cd46c98d0fd5e8b12660c3d4488a9776d43833ebdcb0b592e69d"
         }
       }
     }
