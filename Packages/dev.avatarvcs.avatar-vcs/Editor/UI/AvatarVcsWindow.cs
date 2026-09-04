@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AvatarVcs.Core.Presentation;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.History;
 using UnityEditor;
 using UnityEngine;
 
@@ -61,16 +62,33 @@ namespace AvatarVcs.Editor.UI
         [NonSerialized] private AvatarVcsPresenter presenter;
 
         [MenuItem("Window/AvatarVCS")]
-        public static void Open() => GetWindow<AvatarVcsWindow>("AvatarVCS");
+        public static void Open()
+        {
+            GetWindow<AvatarVcsWindow>("AvatarVCS");
+            RequestHistorySweep();
+        }
 
         public static void OpenFor(GameObject avatarRoot)
         {
             var window = GetWindow<AvatarVcsWindow>("AvatarVCS");
+            RequestHistorySweep();
             window.avatarRoot = avatarRoot;
             window.EnsurePresenter();
             window.gateway.AvatarRoot = avatarRoot;
             window.presenter.SetAvatarGuid(window.gateway.FindAvatarGuid());
         }
+
+        /// <summary>
+        /// Deliberately hung off the two "the user asked for this window"
+        /// entry points, not OnEnable: OnEnable also runs when a domain
+        /// reload re-creates an already-open window, so the sweep -- which
+        /// can read every scene and prefab in the project -- would fire after
+        /// a plain script recompile with the user never having opened
+        /// anything. Deferred a frame so a first-time scan can't stall the
+        /// window's first repaint.
+        /// </summary>
+        private static void RequestHistorySweep() =>
+            EditorApplication.delayCall += AvatarHistoryAutoCleanup.RunIfDue;
 
         private void EnsurePresenter()
         {
