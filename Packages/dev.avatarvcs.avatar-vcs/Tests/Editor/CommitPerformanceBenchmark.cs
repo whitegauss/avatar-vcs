@@ -18,8 +18,11 @@ namespace AvatarVcs.Tests.Editor
     /// only, not a substitute for profiling an actual VRChat avatar. Covers
     /// ticket items 1 (committed JSON byte size) and 2 (Commit() wall time).
     /// Item 3 -- the per-Inspector-drag RecomputeSelectedDiff frame cost with
-    /// the AvatarVCS window open -- needs interactive profiling and is not
-    /// covered here.
+    /// the AvatarVCS window open -- was addressed structurally instead of
+    /// measured (KAN-93): that diff captures the entire avatar, and it is now
+    /// only computed while the Changes panel is actually open, so the cost is
+    /// absent rather than small in the normal case. AvatarVcsPresenterTests
+    /// pins that nothing is captured while the panel is shut.
     /// </summary>
     public class CommitPerformanceBenchmark
     {
