@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AvatarVcs.Core.Presentation;
 using AvatarVcs.Editor.Core;
+using AvatarVcs.Editor.History;
 using UnityEditor;
 using UnityEngine;
 
@@ -100,6 +101,14 @@ namespace AvatarVcs.Editor.UI
             EditorApplication.hierarchyChanged += OnSceneMaybeChanged;
             Undo.postprocessModifications += OnPostprocessModifications;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+
+            // Opening this window is the one moment the user is thinking about
+            // AvatarVCS, which makes it the cheapest place to hang the
+            // once-a-session orphaned-history sweep. It returns immediately
+            // unless there is actually something it could delete -- see
+            // AvatarHistoryAutoCleanup for the conditions. Deferred so a
+            // slow first-time scan can't stall the window's first repaint.
+            EditorApplication.delayCall += AvatarHistoryAutoCleanup.RunIfDue;
         }
 
         private void OnDisable()

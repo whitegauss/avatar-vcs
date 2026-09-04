@@ -53,13 +53,30 @@ namespace AvatarVcs.Editor.Menu
             if (!EditorUtility.DisplayDialog("AvatarVCS — Clean Up Orphaned History", body, "Delete", "Cancel"))
                 return;
 
-            foreach (var decision in toDelete)
-                CommitStore.DeleteAvatarHistory(decision.history.avatarGuid);
+            var deleted = AvatarHistoryCleanup.Run(histories);
 
-            Debug.Log($"[AvatarVCS] Deleted {toDelete.Count} orphaned avatar "
-                + (toDelete.Count == 1 ? "history" : "histories")
+            Debug.Log($"[AvatarVCS] Deleted {deleted.Count} orphaned avatar "
+                + (deleted.Count == 1 ? "history" : "histories")
                 + $" ({EditorUtility.FormatBytes(freed)}): "
-                + string.Join(", ", toDelete.Select(d => d.history.avatarGuid)));
+                + string.Join(", ", deleted.Select(h => h.avatarGuid)));
+        }
+
+        // The same sweep runs on its own once per Unity session when the
+        // AvatarVCS window is opened, so the folder doesn't grow forever
+        // without anyone remembering this command. Exposed as a toggle
+        // because it deletes history, and because the check behind it reads
+        // the project when it does run.
+        private const string AutoMenuPath = "Window/AvatarVCS/Clean Up Orphaned History Automatically";
+
+        [MenuItem(AutoMenuPath, false, 21)]
+        private static void ToggleAutoCleanup() =>
+            AvatarHistoryAutoCleanup.Enabled = !AvatarHistoryAutoCleanup.Enabled;
+
+        [MenuItem(AutoMenuPath, true)]
+        private static bool ToggleAutoCleanupValidate()
+        {
+            global::UnityEditor.Menu.SetChecked(AutoMenuPath, AvatarHistoryAutoCleanup.Enabled);
+            return true;
         }
 
         private static string Describe(AvatarHistoryCleanupPlanner.Decision d) =>

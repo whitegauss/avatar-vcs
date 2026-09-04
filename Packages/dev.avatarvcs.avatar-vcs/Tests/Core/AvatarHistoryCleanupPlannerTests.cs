@@ -182,6 +182,21 @@ namespace AvatarVcs.Tests.Core
                 AvatarHistoryCleanupPlanner.TimestampOrder(null));
         }
 
+        // What lets the automatic sweep skip its project scan: if no more
+        // histories are unaccounted for than the retention rule keeps, the
+        // plan cannot delete anything, so the expensive part cannot change
+        // the outcome. Pinned here so the shortcut and the rule can't drift
+        // apart if DefaultKeepOrphans ever changes.
+        [Test]
+        public void WithNoMoreOrphansThanTheRetainedCount_NothingIsDeleted()
+        {
+            var histories = Enumerable.Range(0, AvatarHistoryCleanupPlanner.DefaultKeepOrphans)
+                .Select(i => History($"orphan{i}", referenced: false, "2026-01-01T00:00:00Z"))
+                .ToList();
+
+            CollectionAssert.IsEmpty(Deleted(histories));
+        }
+
         [Test]
         public void NullEntriesAreIgnored_AndANullListIsRejected()
         {
