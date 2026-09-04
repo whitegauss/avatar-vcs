@@ -5,28 +5,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Fixed
-
-- A `layer` outside Unity's 0..31 range in a hand-edited or badly merged commit no longer moves the object onto a wrong layer. It's reported and the object is left where it is — clamping 40 to 31 would just be a different wrong layer, applied silently.
-- The GUID-remapping file is now written with the same crash-safety as commits: flushed to disk before the atomic rename, so a power loss can't leave a file that exists, is the right size, and is full of zeroes. Prefab resolution for every commit relying on a remap depends on it.
-
-### Internal
-
-- Every GitHub Action is pinned to a commit SHA rather than a moving tag, and the release job's `contents: write` is scoped to that job instead of the whole workflow. The release job hands a write-capable token to a third-party action, so what that tag resolves to matters.
-
-### Breaking
-
-- Removed `ContainerManager.EnsureRootWithDefaultTracking`. Its body was byte-identical to `EnsureRootWithDefaults`, which is what the "Ensure Root" command has always called — use that instead. (No known external caller; the package has no reverse dependencies.)
-
-### Internal
-
-- The four places that park a new or reparented object at its parent's origin now share `LocalTransform.Reset` instead of writing out the same position/rotation/scale triple, where forgetting one of the three was an easy mistake to make.
-- Every `DiagnosticLog` now reaches the console through one `DiagnosticScope` type instead of a hand-written own-or-borrow block and `try`/`finally` at each of the 14 entry points that take or make one. No direct flush call remains outside that scope, so a new entry point can't forget to flush. Console output is unchanged.
+## [0.7.0-poc] - 2026-09-04
 
 ### Added
 
 - **A free-form note on each commit.** The commit message names a commit in the list and is fixed once made; the note is a multi-line field you can write and rewrite afterwards — "this one is outfit A with hair B, and the shoulder toggle has to be off". It sits under the history list and applies to whichever commit is selected. Older commits simply have none, and an older build ignores the field.
-
 
 ### Changed
 
@@ -34,8 +17,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A `layer` outside Unity's 0..31 range in a hand-edited or badly merged commit no longer moves the object onto a wrong layer. It's reported and the object is left where it is — clamping 40 to 31 would just be a different wrong layer, applied silently.
+- The GUID-remapping file is now written with the same crash-safety as commits: flushed to disk before the atomic rename, so a power loss can't leave a file that exists, is the right size, and is full of zeroes. Prefab resolution for every commit relying on a remap depends on it.
 - **Deleting a commit no longer deletes materials your avatar is currently wearing.** Checking out a commit puts the generated duplicate materials into the renderers' slots, and deleting that commit then cleaned those duplicates up — taking the avatar's materials with them. The cleanup now skips any material a renderer in an open scene still uses, and says so; it still collects duplicates nothing points at. This could only bite from 0.5.0 on, when shader settings first started being recorded for real avatars.
 
+### Breaking
+
+- Removed `ContainerManager.EnsureRootWithDefaultTracking`. Its body was byte-identical to `EnsureRootWithDefaults`, which is what the "Ensure Root" command has always called — use that instead. (No known external caller; the package has no reverse dependencies.)
+
+### Internal
+
+- Every GitHub Action is pinned to a commit SHA rather than a moving tag, and the release job's `contents: write` is scoped to that job instead of the whole workflow. The release job hands a write-capable token to a third-party action, so what that tag resolves to matters.
+- The four places that park a new or reparented object at its parent's origin now share `LocalTransform.Reset` instead of writing out the same position/rotation/scale triple, where forgetting one of the three was an easy mistake to make.
+- Every `DiagnosticLog` now reaches the console through one `DiagnosticScope` type instead of a hand-written own-or-borrow block and `try`/`finally` at each of the 14 entry points that take or make one. No direct flush call remains outside that scope, so a new entry point can't forget to flush. Console output is unchanged.
 ## [0.6.0-poc] - 2026-09-04
 
 ### Added
