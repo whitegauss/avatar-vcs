@@ -18,7 +18,13 @@ namespace AvatarVcs.Editor.Menu
     /// </summary>
     public static class AvatarVcsHistoryCleanupMenu
     {
-        [MenuItem("Window/AvatarVCS/Clean Up Orphaned History", false, 20)]
+        // Under Tools/, not Window/AvatarVCS/: "Window/AvatarVCS" is already
+        // a leaf item (AvatarVcsWindow.Open), and Unity can't have the same
+        // path be both a command and a submenu -- adding children there
+        // takes the window's own menu entry away.
+        private const string CleanUpMenuPath = "Tools/AvatarVCS/Clean Up Orphaned History";
+
+        [MenuItem(CleanUpMenuPath, false, 20)]
         private static void CleanUpMenuItem()
         {
             var histories = AvatarHistoryInventory.Scan();
@@ -66,7 +72,7 @@ namespace AvatarVcs.Editor.Menu
         // without anyone remembering this command. Exposed as a toggle
         // because it deletes history, and because the check behind it reads
         // the project when it does run.
-        private const string AutoMenuPath = "Window/AvatarVCS/Clean Up Orphaned History Automatically";
+        private const string AutoMenuPath = "Tools/AvatarVCS/Clean Up Orphaned History Automatically";
 
         [MenuItem(AutoMenuPath, false, 21)]
         private static void ToggleAutoCleanup() =>

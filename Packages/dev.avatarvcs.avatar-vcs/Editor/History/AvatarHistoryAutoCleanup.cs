@@ -72,7 +72,7 @@ namespace AvatarVcs.Editor.History
                 + (deleted.Count == 1 ? "history" : "histories")
                 + $" no avatar in this project claims any more ({EditorUtility.FormatBytes(deleted.Sum(d => d.byteSize))}). "
                 + "The most recent one was kept. Turn this off under "
-                + "Window > AvatarVCS > Clean Up Orphaned History Automatically.");
+                + "Tools > AvatarVCS > Clean Up Orphaned History Automatically.");
         }
 
         /// <summary>
