@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **lilToon / Poiyomi shader settings are now recorded for real avatars.** Supported shaders were matched by exact name, and the only lilToon name on the list was the plain `lilToon`. Real materials are almost always variants — `Hidden/lilToonOutline`, `Hidden/lilToonTransparent`, `_lil/[Optional] lilToonOverlay` and 60 others — and every one of them was skipped, silently, because an unsupported shader is not something the tool warns about. The result was that an entire avatar could commit no shader settings at all and a checkout had nothing to put back, which looked exactly like "the colour isn't being restored". Shaders are now matched by family, so all lilToon variants, Poiyomi's `Poiyomi Toon` / `Poiyomi Pro` / locked-in shaders, and both MToon generations are covered. lilToon's internal pass shaders (`Hidden/ltspass_*`, `Hidden/ltsother_*`) are still excluded.
+
 ## [0.4.2-poc] - 2026-09-03
 
 ### Fixed

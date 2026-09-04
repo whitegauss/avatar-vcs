@@ -24,8 +24,10 @@ namespace AvatarVcs.Tests.Editor
         private const string Dir = "Assets/AvatarVcsTests_MatSettings_Temp";
 
         private Shader lilToon;
+        private Shader lilToonOutline;
         private Mesh mesh;
         private Material coat;
+        private Material outlinedCoat;
         private GameObject outfitPrefab;
         private GameObject nestedOutfitPrefab;
         private GameObject avatarRoot;
@@ -35,6 +37,7 @@ namespace AvatarVcs.Tests.Editor
         public void OneTimeSetUp()
         {
             lilToon = Shader.Find("lilToon");
+            lilToonOutline = Shader.Find("Hidden/lilToonOutline");
             if (lilToon == null) return;
 
             if (!AssetDatabase.IsValidFolder(Dir))
@@ -50,6 +53,12 @@ namespace AvatarVcs.Tests.Editor
 
             coat = new Material(lilToon);
             AssetDatabase.CreateAsset(coat, $"{Dir}/Coat.mat");
+
+            if (lilToonOutline != null)
+            {
+                outlinedCoat = new Material(lilToonOutline);
+                AssetDatabase.CreateAsset(outlinedCoat, $"{Dir}/OutlinedCoat.mat");
+            }
 
             var src = new GameObject("Outfit");
             var filter = src.AddComponent<MeshFilter>();
@@ -84,6 +93,11 @@ namespace AvatarVcs.Tests.Editor
             // below deliberately write to the shared asset.
             coat.SetColor("_Color", Color.white);
             EditorUtility.SetDirty(coat);
+            if (outlinedCoat != null)
+            {
+                outlinedCoat.SetColor("_Color", Color.white);
+                EditorUtility.SetDirty(outlinedCoat);
+            }
             AssetDatabase.SaveAssets();
 
             avatarRoot = new GameObject("Avatar");
@@ -268,6 +282,46 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.AreEqual(Color.white, LiveCoatRenderer().sharedMaterials[0].GetColor("_Color"),
                 "checking out the first commit must put the nested renderer back to white");
+        }
+
+        // The bug the user actually hit: their materials were on
+        // "Hidden/lilToonOutline" and "Hidden/lilToonTransparent", not the
+        // bare "lilToon" the allowlist matched. Every slot was skipped
+        // silently, so materialSettings was empty in every commit and
+        // checkout had nothing to restore -- the colour simply stayed as-is.
+        [Test]
+        public void LilToonVariantShader_IsCapturedAndRestoredLikeThePlainOne()
+        {
+            if (lilToonOutline == null) Assert.Ignore("No shader named 'Hidden/lilToonOutline' in this project.");
+
+            var hair = new GameObject("Hair");
+            hair.transform.SetParent(avatarRoot.transform, false);
+            hair.AddComponent<MeshFilter>().sharedMesh = mesh;
+            hair.AddComponent<MeshRenderer>().sharedMaterials = new[] { outlinedCoat };
+
+            ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+
+            var first = BranchManager.Commit(avatarRoot, "initial, hair is white");
+
+            var recorded = first.materialSettings.FirstOrDefault();
+            Assert.IsNotNull(recorded,
+                "a lilToon variant must be recorded; recording nothing is what made the whole feature look broken");
+            Assert.AreEqual("Hidden/lilToonOutline", recorded.shader);
+            Assert.AreEqual("1,1,1,1", recorded.properties.Single(p => p.name == "_Color").value);
+
+            outlinedCoat.SetColor("_Color", Color.red);
+            EditorUtility.SetDirty(outlinedCoat);
+            AssetDatabase.SaveAssets();
+
+            BranchManager.Commit(avatarRoot, "hair turned red");
+
+            var result = BranchManager.RestoreToCommit(avatarRoot, first.commitId);
+            Assert.IsTrue(result.IsSuccess, $"checkout failed: {result.Kind}");
+
+            var live = avatarRoot.transform.Find("Hair").GetComponent<Renderer>().sharedMaterials[0];
+            Assert.AreEqual(Color.white, live.GetColor("_Color"),
+                "checking out the first commit must put the hair back to white");
         }
     }
 }
