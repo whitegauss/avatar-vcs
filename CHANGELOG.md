@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Window → AvatarVCS → Clean Up Orphaned History.** An avatar's identity is the id minted onto its `[AvatarVCS]` root, so deleting that root and setting it up again starts a fresh history and strands the old one under `ProjectSettings/AvatarVcs/avatars/` forever. Nothing ever removed those. The new command lists the histories no avatar in the project claims any more, with commit counts and sizes, and deletes them on confirmation — keeping the most recently committed one, in case the root was removed by mistake (an orphan with no commits never takes that slot). If the project can't be searched reliably — assets serialised as binary, an unreadable file, a cancelled scan — nothing is reported as orphaned at all. Deciding what is orphaned searches **every** scene and prefab in the project plus everything currently loaded, not just the open scene, so an avatar living in a scene you don't have open is never mistaken for garbage.
+
 ### Fixed
 
 - **lilToon / Poiyomi shader settings are now recorded for real avatars.** Supported shaders were matched by exact name, and the only lilToon name on the list was the plain `lilToon`. Real materials are almost always variants — `Hidden/lilToonOutline`, `Hidden/lilToonTransparent`, `_lil/[Optional] lilToonOverlay` and 60 others — and every one of them was skipped, silently, because an unsupported shader is not something the tool warns about. The result was that an entire avatar could commit no shader settings at all and a checkout had nothing to put back, which looked exactly like "the colour isn't being restored". Shaders are now matched by family, so all lilToon variants, Poiyomi's `Poiyomi Toon` / `Poiyomi Pro` / locked-in shaders, and both MToon generations are covered. lilToon's internal pass shaders (`Hidden/ltspass_*`, `Hidden/ltsother_*`) are still excluded.
