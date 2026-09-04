@@ -7,9 +7,6 @@ on:
     tags:
       - "v*"
 
-permissions:
-  contents: write
-
 env:
   PACKAGE_ID: dev.avatarvcs.avatar-vcs
   PACKAGE_DIR: Packages/dev.avatarvcs.avatar-vcs
@@ -17,9 +14,15 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Scoped to this job rather than the whole workflow. contents: write is
+    # genuinely needed twice here -- to push the index.json update back to
+    # main, and to create the GitHub Release -- but nothing else in this
+    # repo's automation should inherit it by default.
+    permissions:
+      contents: write
     steps:
       - name: Checkout the pushed tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # The commit the tag points at, not main's HEAD -- otherwise a tag
           # that doesn't sit on main's tip would ship an artifact whose
@@ -89,7 +92,7 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}

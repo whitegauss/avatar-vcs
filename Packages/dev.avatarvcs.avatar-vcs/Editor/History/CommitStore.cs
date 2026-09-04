@@ -39,24 +39,8 @@ namespace AvatarVcs.Editor.History
         /// leave a zero-length or partial file at path, the exact truncated-
         /// JSON failure this method exists to prevent.
         /// </summary>
-        private static void WriteAtomically(string path, string content)
-        {
-            var tempPath = $"{path}.tmp";
-
-            // StreamWriter(string) defaults to UTF-8 with no BOM, matching
-            // File.WriteAllText. BaseStream is the underlying FileStream.
-            using (var writer = new StreamWriter(tempPath, append: false))
-            {
-                writer.Write(content);
-                writer.Flush();
-                ((FileStream)writer.BaseStream).Flush(flushToDisk: true);
-            }
-
-            if (File.Exists(path))
-                File.Replace(tempPath, path, null);
-            else
-                File.Move(tempPath, path);
-        }
+        private static void WriteAtomically(string path, string content) =>
+            AtomicFile.WriteAllText(path, content);
 
         /// <summary>
         /// JsonUtility.FromJson throws on malformed JSON (e.g. a file

@@ -244,6 +244,29 @@ namespace AvatarVcs.Tests.Editor
             Assert.DoesNotThrow(() => GuidRemapper.Resolve("any-guid"));
         }
 
+        // KAN-83: GuidRemapper.Save had been left out of KAN-18's flush-to-
+        // disk guarantee -- it wrote with File.WriteAllText and renamed, so a
+        // power loss between the two could leave a file that exists, is the
+        // right size, and is full of zeroes. Both writers now share
+        // AtomicFile, which is the thing this asserts: the mapping survives a
+        // save/reload rather than the flush itself, which can't be observed
+        // from a test.
+        [Test]
+        public void GuidRemapper_Save_RoundTripsThroughTheSharedAtomicWriter()
+        {
+            GuidRemapper.AddMapping("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+            Assert.AreEqual("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                GuidRemapper.Resolve("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                "the mapping must survive the write it just did");
+
+            Assert.AreEqual("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                GuidRemapResolver.Resolve(
+                    GuidRemapResolver.BuildIndex(GuidRemapper.Load()),
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").Guid,
+                "...and be there on a fresh read from disk, not just in the cache");
+        }
+
         [Test]
         public void GuidRemapper_Save_DoesNotLeaveTempFileBehind()
         {

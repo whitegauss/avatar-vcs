@@ -76,21 +76,17 @@ namespace AvatarVcs.Editor.History
         }
 
         /// <summary>
-        /// Writes via a temp file in the same directory, then swaps it into
-        /// place, matching CommitStore.WriteAtomically -- a crash or
-        /// disk-full partway through a direct File.WriteAllText would
-        /// otherwise leave a truncated file that permanently breaks every
-        /// future Load() for this config.
+        /// Writes through AtomicFile, the same writer CommitStore uses -- not
+        /// merely the same approach. A crash or disk-full partway through a
+        /// direct File.WriteAllText would leave a truncated file that
+        /// permanently breaks every future Load() for this config.
         /// </summary>
         public static void Save(GuidRemapConfig config)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
-            var tempPath = $"{ConfigPath}.tmp";
-            File.WriteAllText(tempPath, JsonUtility.ToJson(config, true));
-            if (File.Exists(ConfigPath))
-                File.Replace(tempPath, ConfigPath, null);
-            else
-                File.Move(tempPath, ConfigPath);
+            // This file had been left out of KAN-18's flush-to-disk
+            // guarantee: a torn guid-remapping file breaks prefab resolution
+            // for every commit that relies on a remap.
+            AtomicFile.WriteAllText(ConfigPath, JsonUtility.ToJson(config, true));
             resolveIndexCache = null;
         }
     }
