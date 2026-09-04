@@ -346,6 +346,7 @@ namespace AvatarVcs.Tests.Editor
             second.generatedAssets.Add("unused_guid_for_second");
             CommitStore.SaveCommit(avatarGuid, second);
 
+            ReleaseGeneratedMaterialFromScene();
             var blocked = CommitStore.DeleteCommits(avatarGuid, new[] { first.commitId, second.commitId });
 
             Assert.IsEmpty(blocked);
@@ -386,6 +387,7 @@ namespace AvatarVcs.Tests.Editor
             second.generatedAssets.Add(sharedGuid);
             CommitStore.SaveCommit(avatarGuid, second);
 
+            ReleaseGeneratedMaterialFromScene();
             var blocked = CommitStore.DeleteCommits(avatarGuid, new[] { first.commitId, second.commitId });
 
             Assert.IsEmpty(blocked);
