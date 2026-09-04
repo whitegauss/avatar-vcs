@@ -19,6 +19,12 @@ namespace AvatarVcs.Core.Presentation
 
         /// <summary>Deletes each id that isn't a branch head; returns the ids it refused (still a head).</summary>
         List<string> DeleteCommits(string avatarGuid, IEnumerable<string> commitIds);
+
+        /// <summary>
+        /// Rewrites an existing commit in place. Only used to save an edited
+        /// note: a commit's recorded state is immutable, its note is not.
+        /// </summary>
+        void SaveCommit(string avatarGuid, Commit commit);
     }
 
     /// <summary>

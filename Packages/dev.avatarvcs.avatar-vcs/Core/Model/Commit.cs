@@ -26,6 +26,19 @@ namespace AvatarVcs.Core.Model
         public string parentCommitId;
         public string branch;
         public string message;
+
+        /// <summary>
+        /// A free-form note, editable after the fact, separate from the
+        /// one-line commit message. The message names the commit in a list;
+        /// this is where "the outfit here is X plus Y, and the hair needs the
+        /// shoulder toggle off" goes.
+        ///
+        /// Additive: absent in older commits, where JsonUtility leaves it
+        /// null, and an older build simply ignores it. schemaVersion does not
+        /// move (see CurrentSchemaVersion's rule).
+        /// </summary>
+        public string note;
+
         public string timestamp;
         public string avatarGuid;
         public string avatarName;
