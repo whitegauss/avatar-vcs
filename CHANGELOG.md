@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0-poc] - 2026-09-04
+
 ### Added
 
 - **Texture assignments are now versioned along with the colours.** lilToon's second- and third-layer textures, MatCap, outline masks and the rest were left out, so the generated duplicate simply carried whatever texture the source material held at checkout time — swap one and no checkout put the old one back. They are now recorded by GUID (with tiling and offset), restored the same way a material slot is, and "nothing assigned" is restored too, so a checkout can clear a texture the source has since gained.
