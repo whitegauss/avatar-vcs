@@ -37,6 +37,11 @@ namespace AvatarVcs.Core.Presentation
         private string selectedCommitId;
         private List<ContainerDiff> selectedDiff = new();
         private bool diffEnabled;
+
+        // See SelectedCommitNote: reading a note means parsing the whole
+        // commit, so it is not something to do from OnGUI.
+        private string cachedNoteCommitId;
+        private string cachedNote = string.Empty;
         private string diffBaseCommitId;
         private readonly HashSet<string> selectedForBulkDelete = new();
 
@@ -133,6 +138,8 @@ namespace AvatarVcs.Core.Presentation
                 return;
             }
 
+            cachedNoteCommitId = null;
+
             config = store.LoadConfig(avatarGuid);
             commits = store.LoadIndex(avatarGuid).entries
                 .OrderByDescending(e => e.timestamp)
@@ -147,14 +154,28 @@ namespace AvatarVcs.Core.Presentation
         }
 
         /// <summary>
-        /// The selected commit's note, or "" when there is none. Loaded from
-        /// the store each time rather than cached: the note is small, and a
-        /// stale copy here would silently overwrite an edit made elsewhere.
+        /// The selected commit's note, or "" when there is none.
+        ///
+        /// Cached per selected commit. This used to load on every call, on
+        /// the reasoning that "the note is small" -- but reading it means
+        /// parsing the whole commit, which on a real avatar is megabytes, and
+        /// the note panel calls this from OnGUI. That made every keystroke in
+        /// the window a multi-megabyte disk read and parse.
+        ///
+        /// Refreshed when the selection moves, when a note is saved, and on
+        /// Reload; nothing else in the editor writes a note.
         /// </summary>
         public string SelectedCommitNote()
         {
             if (avatarGuid == null || selectedCommitId == null) return string.Empty;
-            return store.LoadCommit(avatarGuid, selectedCommitId)?.note ?? string.Empty;
+
+            if (selectedCommitId != cachedNoteCommitId)
+            {
+                cachedNote = store.LoadCommit(avatarGuid, selectedCommitId)?.note ?? string.Empty;
+                cachedNoteCommitId = selectedCommitId;
+            }
+
+            return cachedNote;
         }
 
         /// <summary>
@@ -175,6 +196,9 @@ namespace AvatarVcs.Core.Presentation
 
             commit.note = string.IsNullOrWhiteSpace(note) ? null : note;
             store.SaveCommit(avatarGuid, commit);
+
+            cachedNoteCommitId = selectedCommitId;
+            cachedNote = commit.note ?? string.Empty;
             return true;
         }
 
