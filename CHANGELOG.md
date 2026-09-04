@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0-poc] - 2026-09-04
+
 ### Added
 
 - **Tools → AvatarVCS → Clean Up Orphaned History.** An avatar's identity is the id minted onto its `[AvatarVCS]` root, so deleting that root and setting it up again starts a fresh history and strands the old one under `ProjectSettings/AvatarVcs/avatars/` forever. Nothing ever removed those. The new command lists the histories no avatar in the project claims any more, with commit counts and sizes, and deletes them on confirmation — keeping the most recently committed one, in case the root was removed by mistake (an orphan with no commits never takes that slot). If the project can't be searched reliably — assets serialised as binary, an unreadable file, a cancelled scan — nothing is reported as orphaned at all. Deciding what is orphaned searches **every** scene and prefab in the project plus everything currently loaded, not just the open scene, so an avatar living in a scene you don't have open is never mistaken for garbage.
