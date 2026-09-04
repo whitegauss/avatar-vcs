@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Texture assignments are now versioned along with the colours.** lilToon's second- and third-layer textures, MatCap, outline masks and the rest were left out, so the generated duplicate simply carried whatever texture the source material held at checkout time — swap one and no checkout put the old one back. They are now recorded by GUID (with tiling and offset), restored the same way a material slot is, and "nothing assigned" is restored too, so a checkout can clear a texture the source has since gained.
+
 ### Fixed
 
 - **Checkout no longer warns that a material "has changed since this commit was recorded" when it is one whose settings the commit restores.** Adjusting a lilToon colour and committing is the normal workflow, so on every later checkout the warning listed the very materials the tool had just rebuilt from the recorded values — including on every flip in compare mode. Those materials are no longer hash-watched. Assets whose content genuinely can't be reproduced — prefabs, and materials on a shader outside the supported set — still are.

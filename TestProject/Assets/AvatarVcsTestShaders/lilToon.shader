@@ -16,9 +16,10 @@ Shader "lilToon"
         _MainColor ("Alternate Main Color", Color) = (1,1,1,1)
         _Cutoff ("Alpha Cutoff", Range(0,1)) = 0.5
         _Metallic ("Metallic", Float) = 0.0
-        // A texture property: deliberately NOT captured (asset references need
-        // GUID handling), so its presence pins that exclusion.
+        // Texture properties. lilToon's second/third layers are the ones
+        // users notice going missing, so mirror that shape here.
         _MainTex ("Main Texture", 2D) = "white" {}
+        _Main2ndTex ("2nd Layer Texture", 2D) = "white" {}
     }
 
     SubShader
