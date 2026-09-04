@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Starting the editor no longer throws `ArgumentException: The scene is not loaded` from `AvatarVcsRoot`. Unity runs `OnValidate` while it restores the last opened scenes, before those scenes are up; the duplicate-avatar self-heal there looked at the scene's root objects and threw. It now skips until the scene is actually loaded — there is no duplicated avatar to heal mid-restore.
+
 ## [0.7.0-poc] - 2026-09-04
 
 ### Added

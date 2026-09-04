@@ -53,6 +53,18 @@ namespace AvatarVcs.Runtime
         {
             if (string.IsNullOrEmpty(avatarGuid)) return;
 
+            // OnValidate also fires while Unity is deserializing -- restoring
+            // the last opened scenes at editor startup, importing a prefab --
+            // and at that point gameObject.scene exists but is not loaded, so
+            // GetRootGameObjects below throws "The scene is not loaded".
+            //
+            // Everything past this point self-heals a duplicated avatar, which
+            // is a thing the user does to a live scene. There is nothing to
+            // heal mid-restore, so bail rather than guarding the one call:
+            // the rename warning is equally meaningless before the scene is
+            // up, and would just be startup noise.
+            if (!gameObject.scene.IsValid() || !gameObject.scene.isLoaded) return;
+
             if (gameObject.name != ExpectedRootName)
                 Debug.LogWarning($"[AvatarVCS] This GameObject was renamed from '{ExpectedRootName}'. "
                     + "It'll still be found and used correctly, but renaming it back is recommended to avoid confusion.");

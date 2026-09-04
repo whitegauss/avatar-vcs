@@ -76,6 +76,43 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual(1, avatarRoot.transform.childCount);
         }
 
+        // KAN-96 guards OnValidate against firing before the scene is loaded
+        // (editor startup restoring scenes threw "The scene is not loaded").
+        // The unloaded case can't be built in an EditMode test -- there is no
+        // way to hold a live component in a scene that isn't up -- so what is
+        // pinned here is the behaviour that guard could have switched off:
+        // two sibling avatars sharing a guid must still self-heal.
+        [Test]
+        public void DuplicatedAvatar_SharingAGuidWithALowerSibling_RegeneratesItsOwn()
+        {
+            var original = ContainerManager.EnsureRoot(avatarRoot);
+            var sharedGuid = original.GetComponent<AvatarVcsRoot>().AvatarGuid;
+
+            var duplicateAvatar = new GameObject("TestAvatar (1)");
+            duplicateAvatar.transform.SetParent(avatarRoot.transform.parent, false);
+            try
+            {
+                var duplicateRoot = ContainerManager.EnsureRoot(duplicateAvatar);
+                var marker = duplicateRoot.GetComponent<AvatarVcsRoot>();
+
+                // Stand in for the clone: give it the original's guid the way
+                // duplication would, through the serialized field, so
+                // OnValidate runs exactly as it does in the editor.
+                var so = new SerializedObject(marker);
+                so.FindProperty("avatarGuid").stringValue = sharedGuid;
+                so.ApplyModifiedProperties();
+
+                Assert.AreNotEqual(sharedGuid, marker.AvatarGuid,
+                    "two avatars sharing a guid would read and write the same commit history");
+                Assert.AreEqual(sharedGuid, original.GetComponent<AvatarVcsRoot>().AvatarGuid,
+                    "the lower sibling keeps the guid; only the later one regenerates");
+            }
+            finally
+            {
+                Object.DestroyImmediate(duplicateAvatar);
+            }
+        }
+
         [Test]
         public void EnsureRoot_NeverSeedsADefaultContainerOrTracking()
         {
