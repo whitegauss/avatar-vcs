@@ -39,33 +39,28 @@ namespace AvatarVcs.Editor.History
             // appends to it instead of calling Debug.LogWarning directly; we
             // flush it to the console (unchanged behaviour) and also hand its
             // entries to the CheckoutResult so a caller/test can inspect them.
-            // Flush in a finally so warnings collected before an unexpected
-            // throw still reach the console, as they did pre-KAN-20.
-            var log = new DiagnosticLog();
-            try
-            {
-                // Same capture BranchManager.Commit uses -- this safety-net
-                // commit must preserve tracked BlendShape/material state too, or
-                // it's silently lost the moment the checkout below overwrites it.
-                var (autoAvatarReferences, autoMaterialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot, log);
-                var autoCommit = CommitBuilder.CreateCommit(
-                    avatarRoot,
-                    $"[auto] before checkout to {commit.commitId}",
-                    sourceBranch,
-                    autoCommitParentId,
-                    autoAvatarReferences,
-                    autoMaterialSettings,
-                    log);
-                CommitStore.SaveCommit(avatarGuid, autoCommit);
+            // The scope flushes on the exception path too, so warnings
+            // collected before an unexpected throw still reach the console,
+            // as they did pre-KAN-20.
+            using var diagnostics = DiagnosticScope.Own(out var log);
 
-                var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid, log);
+            // Same capture BranchManager.Commit uses -- this safety-net
+            // commit must preserve tracked BlendShape/material state too, or
+            // it's silently lost the moment the checkout below overwrites it.
+            var (autoAvatarReferences, autoMaterialSettings) = AvatarReferenceCollector.CollectFromTrackedTargets(avatarRoot, log);
+            var autoCommit = CommitBuilder.CreateCommit(
+                avatarRoot,
+                $"[auto] before checkout to {commit.commitId}",
+                sourceBranch,
+                autoCommitParentId,
+                autoAvatarReferences,
+                autoMaterialSettings,
+                log);
+            CommitStore.SaveCommit(avatarGuid, autoCommit);
 
-                return CheckoutResult.Success(autoCommit.commitId, versionWarnings, log.Entries);
-            }
-            finally
-            {
-                UnityDiagnosticSink.Flush(log);
-            }
+            var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid, log);
+
+            return CheckoutResult.Success(autoCommit.commitId, versionWarnings, log.Entries);
         }
 
         /// <summary>
@@ -89,18 +84,11 @@ namespace AvatarVcs.Editor.History
             var configRoot = ContainerManager.EnsureRoot(avatarRoot);
             var avatarGuid = configRoot.GetComponent<AvatarVcsRoot>().AvatarGuid;
 
-            // Flush in a finally so warnings collected before an unexpected
-            // throw still reach the console (see Checkout above).
-            var log = new DiagnosticLog();
-            try
-            {
-                var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid, log);
-                return CheckoutResult.Success(null, versionWarnings, log.Entries);
-            }
-            finally
-            {
-                UnityDiagnosticSink.Flush(log);
-            }
+            // Scope-flushed on the exception path too (see Checkout above).
+            using var diagnostics = DiagnosticScope.Own(out var log);
+
+            var versionWarnings = ApplyCommitToScene(commit, avatarRoot, configRoot, avatarGuid, log);
+            return CheckoutResult.Success(null, versionWarnings, log.Entries);
         }
 
         private static List<string> FindMissingPrefabs(Commit commit)

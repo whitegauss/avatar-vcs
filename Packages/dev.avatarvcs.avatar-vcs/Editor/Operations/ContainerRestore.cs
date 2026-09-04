@@ -44,19 +44,12 @@ namespace AvatarVcs.Editor.Operations
             // KAN-20: own a DiagnosticLog for the whole single-container
             // restore and hand it to both passes so they don't each make and
             // flush their own; a caller mid-checkout passes its own instead.
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                var containerGo = InstantiateContainerStructure(snapshot, root, log);
-                var avatarRoot = root.transform.parent != null ? root.transform.parent.gameObject : root;
-                ApplyContainerComponents(snapshot, containerGo, avatarRoot, log);
-                return containerGo;
-            }
-            finally
-            {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
+
+            var containerGo = InstantiateContainerStructure(snapshot, root, log);
+            var avatarRoot = root.transform.parent != null ? root.transform.parent.gameObject : root;
+            ApplyContainerComponents(snapshot, containerGo, avatarRoot, log);
+            return containerGo;
         }
 
         /// <summary>
@@ -71,16 +64,9 @@ namespace AvatarVcs.Editor.Operations
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (root == null) throw new ArgumentNullException(nameof(root));
 
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                return InstantiateContainerStructureCore(snapshot, root, log);
-            }
-            finally
-            {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
+
+            return InstantiateContainerStructureCore(snapshot, root, log);
         }
 
         private static GameObject InstantiateContainerStructureCore(ContainerSnapshot snapshot, GameObject root, DiagnosticLog log)
@@ -131,16 +117,9 @@ namespace AvatarVcs.Editor.Operations
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (containerGo == null) throw new ArgumentNullException(nameof(containerGo));
 
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                ApplyContainerComponentsCore(snapshot, containerGo, avatarRoot, log);
-            }
-            finally
-            {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
+
+            ApplyContainerComponentsCore(snapshot, containerGo, avatarRoot, log);
         }
 
         private static void ApplyContainerComponentsCore(ContainerSnapshot snapshot, GameObject containerGo, GameObject avatarRoot, DiagnosticLog log)

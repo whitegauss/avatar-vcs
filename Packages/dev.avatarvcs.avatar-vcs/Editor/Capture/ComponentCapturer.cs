@@ -33,16 +33,9 @@ namespace AvatarVcs.Editor.Capture
             // KAN-20: a caller mid-operation passes its own DiagnosticLog; a
             // direct caller (tests) passes none, so make one and flush it to
             // the console here so existing LogAssert expectations still fire.
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                return CaptureCore(component, containerRoot, avatarRoot, log);
-            }
-            finally
-            {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
+
+            return CaptureCore(component, containerRoot, avatarRoot, log);
         }
 
         private static ComponentState CaptureCore(Component component, Transform containerRoot, Transform avatarRoot, DiagnosticLog log)

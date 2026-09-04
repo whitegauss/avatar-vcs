@@ -32,23 +32,16 @@ namespace AvatarVcs.Editor.AvatarReferences
             // KAN-20: a caller mid-operation (a commit collecting every
             // tracked target) passes its own DiagnosticLog; a direct caller
             // (tests) passes none, so make one and flush it here.
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                var state = new AvatarReferenceState
-                {
-                    path = ReferenceResolver.GetRelativePath(target, avatarRoot),
-                };
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
 
-                CaptureDescendantComponents(target, avatarRoot, state, log);
-
-                return state;
-            }
-            finally
+            var state = new AvatarReferenceState
             {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+                path = ReferenceResolver.GetRelativePath(target, avatarRoot),
+            };
+
+            CaptureDescendantComponents(target, avatarRoot, state, log);
+
+            return state;
         }
 
         /// <summary>

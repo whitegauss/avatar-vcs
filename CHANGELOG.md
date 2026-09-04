@@ -5,9 +5,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Internal
+
+- Every `DiagnosticLog` now reaches the console through one `DiagnosticScope` type instead of a hand-written own-or-borrow block and `try`/`finally` at each of the 14 entry points that take or make one. No direct flush call remains outside that scope, so a new entry point can't forget to flush. Console output is unchanged.
+
 ### Added
 
 - **A free-form note on each commit.** The commit message names a commit in the list and is fixed once made; the note is a multi-line field you can write and rewrite afterwards — "this one is outfit A with hair B, and the shoulder toggle has to be off". It sits under the history list and applies to whichever commit is selected. Older commits simply have none, and an older build ignores the field.
+
 
 ### Changed
 

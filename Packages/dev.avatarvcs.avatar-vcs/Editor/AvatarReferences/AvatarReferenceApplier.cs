@@ -28,16 +28,9 @@ namespace AvatarVcs.Editor.AvatarReferences
             // passes its own DiagnosticLog; a direct caller (tests) passes
             // none, so make one and flush it to the console here so existing
             // LogAssert expectations still fire.
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                ApplyCore(state, avatarRoot, log);
-            }
-            finally
-            {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
+
+            ApplyCore(state, avatarRoot, log);
         }
 
         private static void ApplyCore(AvatarReferenceState state, Transform avatarRoot, DiagnosticLog log)

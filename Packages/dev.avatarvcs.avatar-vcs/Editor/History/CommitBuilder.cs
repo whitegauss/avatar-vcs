@@ -31,16 +31,9 @@ namespace AvatarVcs.Editor.History
             // KAN-20: a caller mid-operation passes its own DiagnosticLog for
             // the per-container capture warnings; a direct caller (tests)
             // passes none, so make one and flush it here.
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                return CreateCommitCore(avatarRoot, message, branch, parentCommitId, avatarReferences, materialSettings, log);
-            }
-            finally
-            {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
+
+            return CreateCommitCore(avatarRoot, message, branch, parentCommitId, avatarReferences, materialSettings, log);
         }
 
         private static Commit CreateCommitCore(

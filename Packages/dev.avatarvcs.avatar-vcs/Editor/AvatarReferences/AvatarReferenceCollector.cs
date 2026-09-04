@@ -33,16 +33,9 @@ namespace AvatarVcs.Editor.AvatarReferences
             // KAN-20: pass a DiagnosticLog through to each per-target capture.
             // BranchManager.Commit / the checkout auto-commit pass their own;
             // a direct caller (tests) passes none, so make one and flush here.
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                return CollectCore(avatarRoot, log);
-            }
-            finally
-            {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
+
+            return CollectCore(avatarRoot, log);
         }
 
         private static (List<AvatarReferenceState> avatarReferences, List<MaterialSettingsState> materialSettings)

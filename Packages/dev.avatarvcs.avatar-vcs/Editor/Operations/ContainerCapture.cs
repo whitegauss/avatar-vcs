@@ -34,16 +34,9 @@ namespace AvatarVcs.Editor.Operations
 
             // KAN-20: a caller mid-commit passes its own DiagnosticLog; a
             // direct caller (tests) passes none, so make one and flush here.
-            var ownsLog = log == null;
-            log ??= new DiagnosticLog();
-            try
-            {
-                return CaptureCore(container, avatarRoot, marker, log);
-            }
-            finally
-            {
-                if (ownsLog) UnityDiagnosticSink.Flush(log);
-            }
+            using var diagnostics = DiagnosticScope.OwnOrBorrow(ref log);
+
+            return CaptureCore(container, avatarRoot, marker, log);
         }
 
         private static ContainerSnapshot CaptureCore(Transform container, Transform avatarRoot, AvatarVcsContainer marker, DiagnosticLog log)
