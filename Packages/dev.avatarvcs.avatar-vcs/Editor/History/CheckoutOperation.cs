@@ -133,6 +133,11 @@ namespace AvatarVcs.Editor.History
         {
             var priorGeneratedGuids = AllGeneratedMaterialGuids(commit);
 
+            // One AssetDatabase flush for the whole checkout instead of one
+            // per material slot. Covers the container-inner materialSettings
+            // too, since ContainerRestore runs inside this scope.
+            using var materialSaves = MaterialSettingsApplier.BeginSaveBatch();
+
             foreach (var existing in ContainerManager.GetContainers(configRoot).ToList())
                 Undo.DestroyObjectImmediate(existing.gameObject);
 

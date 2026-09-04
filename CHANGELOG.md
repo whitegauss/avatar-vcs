@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Checkout is much faster on an avatar with many lilToon materials.** Applying recorded shader settings flushed the whole AssetDatabase once per material slot; on a real avatar that is 46 full flushes per checkout. It now flushes once for the entire checkout, and a slot whose generated duplicate already holds the recorded values isn't rewritten at all — so re-checking out the same commit does almost no asset work. Recorded values still win over a hand-edited duplicate.
+
 ## [0.5.0-poc] - 2026-09-04
 
 ### Added
