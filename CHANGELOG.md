@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Commits no longer record the pose of every bone in your Armature.** Only an accessory that is a prefab instance in its own right (dropped onto a bone, bypassing containers) is supposed to have its Transform tracked; bone pose never was. The check asked whether an object came from a prefab, which is true of *everything* inside a prefab instance — and a real avatar is one — so it excluded nothing. In one real avatar 287 of the 401 captured components were bones, 572 KB of a 624 KB commit. Commits shrink substantially, and existing history keeps working (the extra entries restore the pose they already recorded).
+
 ## [0.4.2-poc] - 2026-09-03
 
 ### Fixed
