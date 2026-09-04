@@ -75,6 +75,17 @@ namespace AvatarVcs.Editor.UI
         /// keystroke: OnGUI runs constantly, and saving per character would
         /// rewrite the commit file each frame the field has focus.
         /// </summary>
+        /// <summary>
+        /// The note's first line, clipped, for the collapsed foldout label --
+        /// enough to tell whether a note exists and roughly what it says
+        /// without giving up the vertical space to show it.
+        /// </summary>
+        private static string FirstLine(string note)
+        {
+            var line = note.Split('\n')[0].Trim();
+            return line.Length <= 60 ? line : line.Substring(0, 57) + "...";
+        }
+
         private void DrawNotePanel()
         {
             var commitId = presenter.SelectedCommitId;
@@ -89,9 +100,23 @@ namespace AvatarVcs.Editor.UI
             }
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField("Note", EditorStyles.boldLabel);
 
-            noteScroll = EditorGUILayout.BeginScrollView(noteScroll, GUILayout.MinHeight(48), GUILayout.MaxHeight(120));
+            // Collapsed by default and one line tall when shut. A note is
+            // written once and read rarely, so it should not take a fixed
+            // slice of the window away from the history list -- which is what
+            // is actually being used most of the time.
+            var summary = string.IsNullOrEmpty(noteDraft)
+                ? "Note"
+                : $"Note: {FirstLine(noteDraft)}";
+            noteExpanded = EditorGUILayout.Foldout(noteExpanded, summary, toggleOnLabelClick: true);
+
+            if (!noteExpanded)
+            {
+                EditorGUILayout.EndVertical();
+                return;
+            }
+
+            noteScroll = EditorGUILayout.BeginScrollView(noteScroll, GUILayout.Height(72));
             var edited = EditorGUILayout.TextArea(noteDraft ?? "", GUILayout.ExpandHeight(true));
             EditorGUILayout.EndScrollView();
 

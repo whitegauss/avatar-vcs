@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The note panel is collapsed by default and no longer takes a fixed slice of the window. Shut, it is one line showing the start of the note — enough to see there is one — and the space goes back to the commit history, which is what you actually look at.
+
 ## [0.7.1-poc] - 2026-09-04
 
 ### Fixed

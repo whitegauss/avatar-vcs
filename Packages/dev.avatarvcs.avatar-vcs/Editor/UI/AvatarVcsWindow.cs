@@ -36,6 +36,7 @@ namespace AvatarVcs.Editor.UI
         // Survives a domain reload so a recompile doesn't silently reopen the
         // panel -- and with it the per-edit capture it gates.
         [SerializeField] private bool diffExpanded;
+        [SerializeField] private bool noteExpanded;
 
         private string commitMessage = "";
         private bool showNewBranchField;
