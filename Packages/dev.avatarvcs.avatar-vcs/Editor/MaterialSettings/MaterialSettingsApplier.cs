@@ -186,6 +186,12 @@ namespace AvatarVcs.Editor.MaterialSettings
         {
             var changed = false;
 
+            // Property names whose texture couldn't be resolved. Their
+            // tiling/offset must be skipped too: the slot keeps the texture
+            // the duplicate inherited, and stamping the recorded scale/offset
+            // onto a different texture is worse than leaving both alone.
+            var unresolvedTextures = new HashSet<string>();
+
             // A null material here means the just-created/reused duplicate
             // failed to load (line ~101). Now that the per-property loop also
             // swallows NullReferenceException, an unchecked null would make
@@ -233,6 +239,15 @@ namespace AvatarVcs.Editor.MaterialSettings
                                 changed = true;
                             }
                             break;
+                        case "texture":
+                            if (!TryApplyTexture(material, property, log, out var textureChanged))
+                                unresolvedTextures.Add(property.name);
+                            else if (textureChanged) changed = true;
+                            break;
+                        case ShaderPropertyMap.TextureScaleOffsetType:
+                            if (unresolvedTextures.Contains(property.name)) break;
+                            if (ApplyTextureScaleOffset(material, property)) changed = true;
+                            break;
                         default:
                             log.Warn($"[AvatarVCS] Unsupported material property type '{property.type}' for '{property.name}' was skipped.");
                             break;
@@ -249,6 +264,77 @@ namespace AvatarVcs.Editor.MaterialSettings
             }
 
             return changed;
+        }
+
+        /// <summary>
+        /// Restores one texture slot by GUID, the same way a material slot is
+        /// restored. An empty recorded value means "nothing was assigned",
+        /// which is restored as null so the shader falls back to its own
+        /// default -- that is what lets a checkout clear a texture the source
+        /// material has since gained.
+        /// </summary>
+        /// <summary>
+        /// Restores one texture slot by GUID, the same way a material slot is
+        /// restored. An empty recorded value means "nothing was assigned",
+        /// which is restored as null so the shader falls back to its own
+        /// default -- that is what lets a checkout clear a texture the source
+        /// material has since gained.
+        ///
+        /// Returns false when the recorded GUID could not be resolved, which
+        /// is not the same as "nothing changed": the caller must then also
+        /// skip this property's tiling/offset.
+        /// </summary>
+        private static bool TryApplyTexture(Material material, MaterialPropertyValue property, DiagnosticLog log,
+            out bool changed)
+        {
+            changed = false;
+            Texture texture = null;
+
+            if (!string.IsNullOrEmpty(property.value))
+            {
+                // GuidRemapper for the same reason sourceMaterialGuid uses it:
+                // a re-imported texture gets a new guid (design doc 6.4).
+                var path = AssetDatabase.GUIDToAssetPath(GuidRemapper.Resolve(property.value));
+                texture = string.IsNullOrEmpty(path) ? null : AssetDatabase.LoadAssetAtPath<Texture>(path);
+
+                if (texture == null)
+                {
+                    // Deleted or replaced since the commit. Leaving whatever
+                    // the duplicate inherited beats blanking the slot, and
+                    // this is exactly the "may look different" case worth
+                    // telling the user about.
+                    log.Warn($"[AvatarVCS] Texture for '{property.name}' (GUID '{property.value}') could not be "
+                        + "resolved; that slot's texture and tiling are left as-is.");
+                    return false;
+                }
+            }
+
+            if (material.GetTexture(property.name) == texture) return true;
+
+            material.SetTexture(property.name, texture);
+            changed = true;
+            return true;
+        }
+
+        private static bool ApplyTextureScaleOffset(Material material, MaterialPropertyValue property)
+        {
+            var parts = property.value.Split(',');
+            if (parts.Length != 4) throw new FormatException($"expected 4 components, got {parts.Length}");
+
+            var scale = new Vector2(
+                float.Parse(parts[0], CultureInfo.InvariantCulture),
+                float.Parse(parts[1], CultureInfo.InvariantCulture));
+            var offset = new Vector2(
+                float.Parse(parts[2], CultureInfo.InvariantCulture),
+                float.Parse(parts[3], CultureInfo.InvariantCulture));
+
+            if (material.GetTextureScale(property.name) == scale
+                && material.GetTextureOffset(property.name) == offset)
+                return false;
+
+            material.SetTextureScale(property.name, scale);
+            material.SetTextureOffset(property.name, offset);
+            return true;
         }
 
         private static void PointRendererAt(Renderer renderer, int slot, string targetPath, Material material)

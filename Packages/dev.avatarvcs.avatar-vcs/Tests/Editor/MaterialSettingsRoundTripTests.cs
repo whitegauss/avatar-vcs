@@ -2,6 +2,7 @@ using System.Linq;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.MaterialSettings;
+using UnityEngine.TestTools;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -29,6 +30,8 @@ namespace AvatarVcs.Tests.Editor
         private Mesh mesh;
         private Material coat;
         private Material outlinedCoat;
+        private Texture2D textureA;
+        private Texture2D textureB;
         private GameObject outfitPrefab;
         private GameObject nestedOutfitPrefab;
         private GameObject avatarRoot;
@@ -51,6 +54,11 @@ namespace AvatarVcs.Tests.Editor
                 triangles = new[] { 0, 1, 2 },
             };
             AssetDatabase.CreateAsset(mesh, $"{Dir}/CoatMesh.asset");
+
+            textureA = new Texture2D(2, 2) { name = "TexA" };
+            textureB = new Texture2D(2, 2) { name = "TexB" };
+            AssetDatabase.CreateAsset(textureA, $"{Dir}/TexA.asset");
+            AssetDatabase.CreateAsset(textureB, $"{Dir}/TexB.asset");
 
             coat = new Material(lilToon);
             AssetDatabase.CreateAsset(coat, $"{Dir}/Coat.mat");
@@ -93,6 +101,9 @@ namespace AvatarVcs.Tests.Editor
             // The colour every test starts from, reset here because tests
             // below deliberately write to the shared asset.
             coat.SetColor("_Color", Color.white);
+            coat.SetTexture("_Main2ndTex", textureA);
+            coat.SetTextureScale("_Main2ndTex", Vector2.one);
+            coat.SetTextureOffset("_Main2ndTex", Vector2.zero);
             EditorUtility.SetDirty(coat);
             if (outlinedCoat != null)
             {
@@ -375,6 +386,155 @@ namespace AvatarVcs.Tests.Editor
                 "nothing restores this material's contents, so a change to it is still worth reporting");
 
             AssetDatabase.DeleteAsset($"{Dir}/Plain.mat");
+        }
+
+        // KAN-91: textures were left out of materialSettings, so the
+        // generated duplicate -- copied from the source material -- carried
+        // whatever texture the source held *now*. Swap a lilToon second-layer
+        // texture and no checkout put the old one back, silently. A texture
+        // is recoverable by GUID exactly like a material slot is.
+        [Test]
+        public void CheckingOutAnEarlierCommit_RestoresTheRecordedSecondLayerTexture()
+        {
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
+
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "initial, 2nd layer is TexA");
+
+            var recorded = first.containers
+                .SelectMany(c => c.materialSettings)
+                .SelectMany(ms => ms.properties)
+                .FirstOrDefault(p => p.name == "_Main2ndTex" && p.type == "texture");
+            Assert.IsNotNull(recorded, "the second-layer texture must be recorded");
+            Assert.AreEqual(AssetDatabase.AssetPathToGUID($"{Dir}/TexA.asset"), recorded.value);
+
+            coat.SetTexture("_Main2ndTex", textureB);
+            EditorUtility.SetDirty(coat);
+            AssetDatabase.SaveAssets();
+
+            Assert.IsTrue(BranchManager.RestoreToCommit(avatarRoot, first.commitId).IsSuccess);
+
+            // By asset path, not reference: a reimport hands back a different
+            // C# instance wrapping the same asset, so AreSame compares two
+            // objects that both print as "TexA" and still fails.
+            Assert.AreEqual(
+                $"{Dir}/TexA.asset",
+                AssetDatabase.GetAssetPath(LiveCoatRenderer().sharedMaterials[0].GetTexture("_Main2ndTex")),
+                "the recorded texture must come back, not whatever the source material now holds");
+        }
+
+        [Test]
+        public void CheckingOutAnEarlierCommit_ClearsATextureTheSourceHasSinceGained()
+        {
+            coat.SetTexture("_Main2ndTex", null);
+            EditorUtility.SetDirty(coat);
+            AssetDatabase.SaveAssets();
+
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "initial, no 2nd layer");
+
+            coat.SetTexture("_Main2ndTex", textureA);
+            EditorUtility.SetDirty(coat);
+            AssetDatabase.SaveAssets();
+
+            Assert.IsTrue(BranchManager.RestoreToCommit(avatarRoot, first.commitId).IsSuccess);
+
+            Assert.IsNull(LiveCoatRenderer().sharedMaterials[0].GetTexture("_Main2ndTex"),
+                "\"nothing was assigned\" is a state worth restoring, not an absence to skip");
+        }
+
+        [Test]
+        public void CheckingOutAnEarlierCommit_RestoresTilingAndOffset()
+        {
+            coat.SetTextureScale("_Main2ndTex", new Vector2(2f, 3f));
+            coat.SetTextureOffset("_Main2ndTex", new Vector2(0.25f, 0.5f));
+            EditorUtility.SetDirty(coat);
+            AssetDatabase.SaveAssets();
+
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "initial, tiled 2nd layer");
+
+            coat.SetTextureScale("_Main2ndTex", Vector2.one);
+            coat.SetTextureOffset("_Main2ndTex", Vector2.zero);
+            EditorUtility.SetDirty(coat);
+            AssetDatabase.SaveAssets();
+
+            Assert.IsTrue(BranchManager.RestoreToCommit(avatarRoot, first.commitId).IsSuccess);
+
+            var live = LiveCoatRenderer().sharedMaterials[0];
+            Assert.AreEqual(new Vector2(2f, 3f), live.GetTextureScale("_Main2ndTex"));
+            Assert.AreEqual(new Vector2(0.25f, 0.5f), live.GetTextureOffset("_Main2ndTex"));
+        }
+
+        // Review catch: a texture with no asset behind it (runtime-created)
+        // was recorded as "" -- the same encoding as "nothing assigned" --
+        // so a checkout would have cleared the slot. There is no guid to
+        // restore it from, so the property is not recorded at all and the
+        // slot keeps whatever the duplicate inherited.
+        [Test]
+        public void ATextureWithNoAssetBehindIt_IsNotRecordedAsUnassigned()
+        {
+            var runtimeTexture = new Texture2D(2, 2) { name = "RuntimeOnly" };
+            try
+            {
+                coat.SetTexture("_Main2ndTex", runtimeTexture);
+
+                var captured = MaterialSettingsCapture.Capture(coat, lilToon.name, "Body", 0);
+
+                var entry = captured.properties.FirstOrDefault(p => p.name == "_Main2ndTex" && p.type == "texture");
+                Assert.IsNull(entry,
+                    "recording it as \"\" would tell checkout to clear the slot, dropping the texture");
+                Assert.IsFalse(
+                    captured.properties.Any(p => p.name == "_Main2ndTex"
+                        && p.type == AvatarVcs.Core.MaterialSettings.ShaderPropertyMap.TextureScaleOffsetType),
+                    "and its tiling must not be recorded on its own either");
+            }
+            finally
+            {
+                coat.SetTexture("_Main2ndTex", textureA);
+                Object.DestroyImmediate(runtimeTexture);
+            }
+        }
+
+        // Review catch: an unresolvable texture GUID leaves the slot alone,
+        // but its tiling/offset was still applied -- stamping the recorded
+        // scale onto a different texture than the one it was recorded for.
+        [Test]
+        public void AnUnresolvableTextureGuid_LeavesBothTheTextureAndItsTilingAlone()
+        {
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
+
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "initial");
+
+            // Point the recorded texture at a guid nothing resolves to, and
+            // give it a tiling that must NOT be stamped onto the inherited one.
+            foreach (var ms in first.containers.SelectMany(c => c.materialSettings))
+            {
+                foreach (var p in ms.properties.Where(p => p.name == "_Main2ndTex"))
+                {
+                    if (p.type == "texture") p.value = "ffffffffffffffffffffffffffffffff";
+                    else p.value = "9,9,9,9";
+                }
+            }
+            CommitStore.SaveCommit(avatarGuid, first);
+
+            LogAssert.ignoreFailingMessages = true;
+            var result = BranchManager.RestoreToCommit(avatarRoot, first.commitId);
+            LogAssert.ignoreFailingMessages = false;
+            Assert.IsTrue(result.IsSuccess);
+
+            var live = LiveCoatRenderer().sharedMaterials[0];
+            Assert.AreEqual($"{Dir}/TexA.asset", AssetDatabase.GetAssetPath(live.GetTexture("_Main2ndTex")),
+                "the inherited texture stays");
+            Assert.AreEqual(Vector2.one, live.GetTextureScale("_Main2ndTex"),
+                "and its tiling is not overwritten with the recorded one");
         }
 
         // The bug the user actually hit: their materials were on

@@ -20,6 +20,14 @@ namespace AvatarVcs.Core.MaterialSettings
     /// </summary>
     public static class ShaderPropertyMap
     {
+        /// <summary>
+        /// MaterialPropertyValue.type for a texture's tiling/offset, recorded
+        /// as "scaleX,scaleY,offsetX,offsetY" against the same property name
+        /// as the texture itself. Not a shader property in its own right,
+        /// which is why it isn't produced by GetProperties.
+        /// </summary>
+        public const string TextureScaleOffsetType = "textureST";
+
         // Still an explicit allowlist, not "every shader": duplicating a
         // material is only appropriate for shaders this tool has decided
         // are safe/sensible to do that for (design doc 1.4.3's MVP scope).
@@ -81,10 +89,16 @@ namespace AvatarVcs.Core.MaterialSettings
         }
 
         /// <summary>
-        /// Every Color/Float/Range property shader declares. Texture
-        /// properties are deliberately excluded -- they're asset references
-        /// needing GUID handling, not a simple value type, and out of scope
-        /// here (MaterialPropertyValue only carries "color"/"float").
+        /// Every Color/Float/Range/Texture property shader declares.
+        ///
+        /// Textures were excluded at first as "asset references, not simple
+        /// values". That left a hole: the generated duplicate is copied from
+        /// the source material, so its textures follow whatever the source
+        /// holds *now*, not what the commit recorded -- swap a lilToon
+        /// second-layer texture and no checkout puts the old one back. A
+        /// texture is recoverable the same way a material slot is, by GUID,
+        /// so it is recorded as type "texture" with the guid as its value
+        /// (empty meaning "none", which restores the shader's own default).
         /// </summary>
         public static IReadOnlyList<(string name, string type)> GetProperties(Shader shader)
         {
@@ -99,6 +113,7 @@ namespace AvatarVcs.Core.MaterialSettings
                     ShaderPropertyType.Color => "color",
                     ShaderPropertyType.Float => "float",
                     ShaderPropertyType.Range => "float",
+                    ShaderPropertyType.Texture => "texture",
                     _ => null,
                 };
                 if (type == null) continue;
