@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Checkout no longer warns that a material "has changed since this commit was recorded" when it is one whose settings the commit restores.** Adjusting a lilToon colour and committing is the normal workflow, so on every later checkout the warning listed the very materials the tool had just rebuilt from the recorded values — including on every flip in compare mode. Those materials are no longer hash-watched. Assets whose content genuinely can't be reproduced — prefabs, and materials on a shader outside the supported set — still are.
+
 ## [0.5.0-poc] - 2026-09-04
 
 ### Added
