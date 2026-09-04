@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The window is responsive again.** Reading a commit's note meant parsing the entire commit, and the note panel did that on every repaint — so every keystroke in the commit message box, and every mouse move over the window, re-read and re-parsed a multi-megabyte file from disk. Introduced in 0.7.0 along with the note field. The note is now read when the selection moves, when it's saved, and on refresh.
+
 ## [0.7.0-poc] - 2026-09-04
 
 ### Added

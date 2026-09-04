@@ -52,8 +52,13 @@ namespace AvatarVcs.Tests.Editor
 
             public BranchConfig LoadConfig(string avatarGuid) => Config;
             public CommitIndex LoadIndex(string avatarGuid) => new() { entries = Index.ToList() };
-            public Commit LoadCommit(string avatarGuid, string commitId) =>
-                commitId != null && Commits.TryGetValue(commitId, out var c) ? c : null;
+            public int LoadCommitCalls;
+
+            public Commit LoadCommit(string avatarGuid, string commitId)
+            {
+                LoadCommitCalls++;
+                return commitId != null && Commits.TryGetValue(commitId, out var c) ? c : null;
+            }
 
             public void DeleteCommit(string avatarGuid, string commitId)
             {
@@ -215,6 +220,57 @@ namespace AvatarVcs.Tests.Editor
         {
             Assert.IsFalse(presenter.SaveNoteOnSelectedCommit("note"));
             CollectionAssert.IsEmpty(store.Saved);
+        }
+
+        // KAN-95: the note panel calls SelectedCommitNote from OnGUI, and
+        // reading a note means parsing the whole commit -- megabytes on a
+        // real avatar. Shipped in 0.7.0 as "every keystroke re-reads the
+        // commit from disk". Assert the absence of the work, not just the
+        // right answer.
+        [Test]
+        public void SelectedCommitNote_RepeatedCalls_HitTheStoreOnce()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            store.Commits["c1"].note = "a note";
+
+            var before = store.LoadCommitCalls;
+            for (var i = 0; i < 50; i++) presenter.SelectedCommitNote();
+
+            Assert.AreEqual(before + 1, store.LoadCommitCalls,
+                "OnGUI calls this every frame; it must not read the commit each time");
+        }
+
+        [Test]
+        public void SelectedCommitNote_AfterTheSelectionMoves_ReadsTheNewCommit()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            store.AddCommit("c2", "second", "2026-01-02T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            store.Commits["c1"].note = "note one";
+            store.Commits["c2"].note = "note two";
+
+            Assert.AreEqual("note one", presenter.SelectedCommitNote());
+
+            presenter.SelectCommit("c2");
+
+            Assert.AreEqual("note two", presenter.SelectedCommitNote(),
+                "the cache must follow the selection, not outlive it");
+        }
+
+        [Test]
+        public void SelectedCommitNote_AfterSaving_ReflectsWhatWasSaved()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            presenter.SelectedCommitNote();
+
+            presenter.SaveNoteOnSelectedCommit("written after the cache was warm");
+
+            Assert.AreEqual("written after the cache was warm", presenter.SelectedCommitNote());
         }
 
         // ---- Reload ----
