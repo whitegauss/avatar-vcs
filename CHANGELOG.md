@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Checkout no longer loads every sub-asset of a referenced file just to resolve a reference to that file's main asset. An avatar's AnimatorController can hold hundreds of sub-assets, and the full load happened once per recorded reference per checkout. As a side effect, a damaged internal reference in one of your own assets no longer makes Unity print `Broken text PPtr in file(...)` on every checkout with an AvatarVCS stack trace under it — the underlying problem is in the asset, but AvatarVCS was what forced it into view.
+
 ## [0.4.2-poc] - 2026-09-03
 
 ### Fixed
