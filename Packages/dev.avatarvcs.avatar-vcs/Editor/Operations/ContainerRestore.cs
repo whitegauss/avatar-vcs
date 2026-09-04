@@ -4,6 +4,7 @@ using System.Linq;
 using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Editor.Apply;
 using AvatarVcs.Editor.AvatarReferences;
+using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.Diagnostics;
 using AvatarVcs.Editor.History;
 using AvatarVcs.Editor.MaterialSettings;
@@ -97,9 +98,7 @@ namespace AvatarVcs.Editor.Operations
                 var prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
                 var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefabAsset, containerGo.transform);
                 Undo.RegisterCreatedObjectUndo(instance, "Restore AvatarVCS Container");
-                instance.transform.localPosition = Vector3.zero;
-                instance.transform.localRotation = Quaternion.identity;
-                instance.transform.localScale = Vector3.one;
+                LocalTransform.Reset(instance.transform);
             }
 
             return containerGo;

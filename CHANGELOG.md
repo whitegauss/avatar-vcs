@@ -5,8 +5,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Breaking
+
+- Removed `ContainerManager.EnsureRootWithDefaultTracking`. Its body was byte-identical to `EnsureRootWithDefaults`, which is what the "Ensure Root" command has always called — use that instead. (No known external caller; the package has no reverse dependencies.)
+
 ### Internal
 
+- The four places that park a new or reparented object at its parent's origin now share `LocalTransform.Reset` instead of writing out the same position/rotation/scale triple, where forgetting one of the three was an easy mistake to make.
 - Every `DiagnosticLog` now reaches the console through one `DiagnosticScope` type instead of a hand-written own-or-borrow block and `try`/`finally` at each of the 14 entry points that take or make one. No direct flush call remains outside that scope, so a new entry point can't forget to flush. Console output is unchanged.
 
 ### Added

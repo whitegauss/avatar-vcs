@@ -16,18 +16,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # A restored Library carries Unity's Bee build graph, which is keyed to
+      # the set of source files that existed when it was written. Restore one
+      # across an add/rename/delete and the compile fails on files the graph
+      # has never heard of -- CS2001 for a renamed file, CS0103 for every
+      # consumer of a newly added type. Both have bitten this repo.
+      #
+      # So the cache key has two parts. The file LIST decides what may be
+      # restored at all; file CONTENTS decide whether it is an exact hit.
+      # Editing existing files restores the cache and builds incrementally;
+      # adding, moving or deleting one misses every restore-key and builds a
+      # clean Library, which is the only safe answer.
+      - name: Fingerprint the package file list
+        run: |
+          git ls-files 'Packages/dev.avatarvcs.avatar-vcs/**' | sort > .package-file-list
+          wc -l < .package-file-list
+
       - name: Cache Library
         uses: actions/cache@v4
         with:
           path: TestProject/Library
-          # Bump the cache epoch (v2) whenever files are moved/renamed under
-          # Packages/**: a restored Library carries Unity's Bee build graph,
-          # which keeps referencing a source file at its old path after a
-          # rename and fails the compile with CS2001. A fresh epoch forces a
-          # clean Library once; incremental caching resumes from there.
-          key: Library-TestProject-v2-${{ hashFiles('Packages/dev.avatarvcs.avatar-vcs/**') }}
+          key: Library-TestProject-v3-${{ hashFiles('.package-file-list') }}-${{ hashFiles('Packages/dev.avatarvcs.avatar-vcs/**') }}
           restore-keys: |
-            Library-TestProject-v2-
+            Library-TestProject-v3-${{ hashFiles('.package-file-list') }}-
 
       - name: Run EditMode tests
         uses: game-ci/unity-test-runner@v4
