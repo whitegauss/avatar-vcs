@@ -7,7 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
-- Every `DiagnosticLog` now reaches the console through one `DiagnosticScope` type instead of a hand-written own-or-borrow block and `try`/`finally` at each of the 14 entry points that take or make one. No call site can forget to flush, and the nine methods that had been split into an `XxxCore` purely to give the `try` block something to call no longer need to be. Console output is unchanged.
+- Every `DiagnosticLog` now reaches the console through one `DiagnosticScope` type instead of a hand-written own-or-borrow block and `try`/`finally` at each of the 14 entry points that take or make one. No direct flush call remains outside that scope, so a new entry point can't forget to flush. Console output is unchanged.
 
 ### Changed
 
