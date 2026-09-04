@@ -26,6 +26,7 @@ USAGE.md
 CODE_REVIEW.md
 TODO.md
 LESSONS.md
+MANUAL_TEST.md
 .claude/skills/
 plan.md
 # CI writes this to fingerprint the package file set for the Library cache
