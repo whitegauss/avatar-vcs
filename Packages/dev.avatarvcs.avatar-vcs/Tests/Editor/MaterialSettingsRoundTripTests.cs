@@ -1,6 +1,7 @@
 using System.Linq;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
+using AvatarVcs.Editor.MaterialSettings;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -292,6 +293,44 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.AreEqual(Color.white, LiveCoatRenderer().sharedMaterials[0].GetColor("_Color"),
                 "checking out the first commit must put the nested renderer back to white");
+        }
+
+        // KAN-89 skips writing a property the duplicate already holds, so a
+        // repeat checkout doesn't dirty the asset and make the (now batched)
+        // flush real work. The recorded values must still win over anything
+        // that edited the duplicate in the meantime -- a checkout is a
+        // regenerate, not a one-time stamp.
+        [Test]
+        public void ReCheckout_StillOverwritesAHandEditedDuplicate()
+        {
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
+
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "initial, coat is white");
+            Assert.IsTrue(BranchManager.RestoreToCommit(avatarRoot, first.commitId).IsSuccess);
+
+            // Someone edits the generated duplicate directly.
+            var duplicate = LiveCoatRenderer().sharedMaterials[0];
+            Assert.IsTrue(duplicate.name.Contains("_avatarvcs"), "sanity check: the slot holds the generated duplicate");
+            duplicate.SetColor("_Color", Color.magenta);
+            EditorUtility.SetDirty(duplicate);
+            AssetDatabase.SaveAssets();
+
+            Assert.IsTrue(BranchManager.RestoreToCommit(avatarRoot, first.commitId).IsSuccess);
+
+            Assert.AreEqual(Color.white, LiveCoatRenderer().sharedMaterials[0].GetColor("_Color"),
+                "the recorded value must win over a hand-edited duplicate");
+        }
+
+        [Test]
+        public void SaveBatchScopes_Nest()
+        {
+            Assert.DoesNotThrow(() =>
+            {
+                using var outer = MaterialSettingsApplier.BeginSaveBatch();
+                using var inner = MaterialSettingsApplier.BeginSaveBatch();
+            });
         }
 
         // KAN-90: the "some referenced assets have changed" warning fired on

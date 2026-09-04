@@ -27,6 +27,38 @@ namespace AvatarVcs.Editor.MaterialSettings
     /// </summary>
     public static class MaterialSettingsApplier
     {
+        // AssetDatabase.SaveAssets flushes the whole database, and this used
+        // to run once per material slot. That was invisible while the shader
+        // allowlist matched almost nothing; once lilToon's variants started
+        // matching (KAN-84) a real avatar reached 46 slots, so one checkout
+        // meant 46 full flushes. A caller applying many slots opens a batch
+        // and pays for one.
+        private static int saveBatchDepth;
+
+        /// <summary>
+        /// Defers the AssetDatabase flush until the outermost scope closes.
+        /// Nestable, so an inner caller (ContainerRestore, inside a checkout)
+        /// doesn't need to know whether an outer one already opened it.
+        /// </summary>
+        public static SaveBatchScope BeginSaveBatch() => new SaveBatchScope(++saveBatchDepth);
+
+        public readonly struct SaveBatchScope : IDisposable
+        {
+            private readonly int depth;
+            internal SaveBatchScope(int depth) => this.depth = depth;
+
+            public void Dispose()
+            {
+                saveBatchDepth--;
+                if (depth == 1) AssetDatabase.SaveAssets();
+            }
+        }
+
+        private static void SaveUnlessBatched()
+        {
+            if (saveBatchDepth == 0) AssetDatabase.SaveAssets();
+        }
+
         public static Material Apply(MaterialSettingsState state, GameObject avatarRoot, DiagnosticLog log = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -93,8 +125,17 @@ namespace AvatarVcs.Editor.MaterialSettings
                 var existing = string.IsNullOrEmpty(existingPath) ? null : AssetDatabase.LoadAssetAtPath<Material>(existingPath);
                 if (existing != null)
                 {
-                    ApplyProperties(existing, state.properties, log);
-                    AssetDatabase.SaveAssets();
+                    // Re-checking out the same commit normally finds the
+                    // duplicate already holding these values. Writing them
+                    // back anyway would dirty the asset and make the flush
+                    // real work every time, so only touch it when a value
+                    // actually differs.
+                    if (ApplyProperties(existing, state.properties, log))
+                    {
+                        EditorUtility.SetDirty(existing);
+                        SaveUnlessBatched();
+                    }
+
                     PointRendererAt(renderer, state.slot, state.targetPath, existing);
                     return existing;
                 }
@@ -122,7 +163,7 @@ namespace AvatarVcs.Editor.MaterialSettings
             var assetPath = AssetDatabase.GenerateUniqueAssetPath(
                 $"{directory}/{duplicate.name}{GeneratedAssetNaming.MaterialExtension}");
             AssetDatabase.CreateAsset(duplicate, assetPath);
-            AssetDatabase.SaveAssets();
+            SaveUnlessBatched();
             // CreateAsset can trigger a reimport that leaves the pre-save
             // reference stale; reload so callers and the renderer get the
             // same canonical instance that later AssetDatabase lookups see.
@@ -134,8 +175,17 @@ namespace AvatarVcs.Editor.MaterialSettings
             return duplicate;
         }
 
-        private static void ApplyProperties(Material material, List<MaterialPropertyValue> properties, DiagnosticLog log)
+        /// <summary>
+        /// Writes each recorded property onto material, skipping any that
+        /// already holds the recorded value. Returns whether anything was
+        /// actually written, so the caller can avoid dirtying (and flushing)
+        /// an asset that is already correct -- the normal case when the same
+        /// commit is checked out twice.
+        /// </summary>
+        private static bool ApplyProperties(Material material, List<MaterialPropertyValue> properties, DiagnosticLog log)
         {
+            var changed = false;
+
             // A null material here means the just-created/reused duplicate
             // failed to load (line ~101). Now that the per-property loop also
             // swallows NullReferenceException, an unchecked null would make
@@ -165,10 +215,23 @@ namespace AvatarVcs.Editor.MaterialSettings
                     switch (property.type)
                     {
                         case "color":
-                            material.SetColor(property.name, ParseColor(property.value));
+                            var color = ParseColor(property.value);
+                            if (material.GetColor(property.name) != color)
+                            {
+                                material.SetColor(property.name, color);
+                                changed = true;
+                            }
                             break;
                         case "float":
-                            material.SetFloat(property.name, float.Parse(property.value, CultureInfo.InvariantCulture));
+                            var number = float.Parse(property.value, CultureInfo.InvariantCulture);
+                            // Exact compare on purpose: both sides come from
+                            // the same round-trip ("R" format), so an equal
+                            // value really is bit-identical.
+                            if (material.GetFloat(property.name) != number)
+                            {
+                                material.SetFloat(property.name, number);
+                                changed = true;
+                            }
                             break;
                         case "texture":
                             if (ApplyTexture(material, property, log)) changed = true;
@@ -190,6 +253,8 @@ namespace AvatarVcs.Editor.MaterialSettings
                     log.Warn($"[AvatarVCS] Could not parse material property '{property.name}' (type '{property.type}', value '{property.value}'): {e.Message}; skipped.");
                 }
             }
+
+            return changed;
         }
 
         /// <summary>
