@@ -43,6 +43,13 @@ namespace AvatarVcs.Editor.UI
 
         private Vector2 historyScroll;
         private Vector2 diffScroll;
+        private Vector2 noteScroll;
+
+        // The note being edited, and the commit it belongs to. Kept apart
+        // from the stored note so an unsaved edit isn't clobbered by a
+        // repaint, and discarded when the selection moves.
+        private string noteDraft;
+        private string noteDraftCommitId;
         private readonly Dictionary<string, bool> expandedContainers = new();
 
         // Object-picker values for the remap UI; converted to GUIDs and
@@ -206,6 +213,7 @@ namespace AvatarVcs.Editor.UI
             DrawDiffPanel();
             EditorGUILayout.EndHorizontal();
 
+            DrawNotePanel();
             DrawCommitBar();
             DrawCheckoutBar();
         }
