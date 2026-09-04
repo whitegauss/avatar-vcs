@@ -78,7 +78,9 @@ namespace AvatarVcs.Tests.Editor
             GameObjectStateApplier.Apply(go, activeSelf: true, tag: null, layer: layer, "the widget", "Undo", log);
 
             Assert.AreEqual(5, go.layer, "an out-of-range layer must not move the object");
-            Assert.IsTrue(log.Entries.Any(e => e.Contains("0..31") && e.Contains("the widget")),
+            Assert.IsTrue(
+                log.Entries.Any(e => e.Severity == DiagnosticSeverity.Warning
+                    && e.Message.Contains("0..31") && e.Message.Contains("the widget")),
                 "and the user has to be told, naming what it was recorded for");
         }
 
