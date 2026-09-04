@@ -479,10 +479,15 @@ namespace AvatarVcs.Tests.Editor
             store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
             SetBranchHead("c1");
             presenter.SetAvatarGuid(Guid);
+            // Something for the diff to actually find, so this can't pass on
+            // a regression that captures and then computes nothing.
+            gateway.LiveState = new Commit { containers = { new ContainerSnapshot { containerId = "added" } } };
 
             presenter.DiffEnabled = true;
 
             Assert.AreEqual(1, gateway.CaptureLiveStateCalls);
+            Assert.IsTrue(presenter.SelectedDiff.Any(d => d.containerId == "added" && d.kind == DiffKind.Added),
+                "capturing is not the point; the diff has to come out of it");
         }
 
         [Test]
