@@ -33,6 +33,10 @@ namespace AvatarVcs.Editor.UI
 
         private bool diffPossiblyStale;
 
+        // Survives a domain reload so a recompile doesn't silently reopen the
+        // panel -- and with it the per-edit capture it gates.
+        [SerializeField] private bool diffExpanded;
+
         private string commitMessage = "";
         private bool showNewBranchField;
         private string newBranchName = "";
@@ -117,6 +121,7 @@ namespace AvatarVcs.Editor.UI
         private void OnEnable()
         {
             EnsurePresenter();
+            presenter.DiffEnabled = diffExpanded;
 
             // Auto-refresh the "uncommitted changes" diff instead of relying
             // on the user to remember to hit Refresh: hierarchyChanged covers
@@ -192,8 +197,11 @@ namespace AvatarVcs.Editor.UI
             if (diffPossiblyStale)
             {
                 diffPossiblyStale = false;
-                // Only meaningful when diffing against the live scene.
-                if (presenter.DiffBaseCommitId == null)
+                // Only meaningful when diffing against the live scene, and
+                // only worth the capture when the panel is actually open --
+                // RecomputeSelectedDiff is a no-op otherwise, but skip the
+                // call outright so the intent is visible here too.
+                if (presenter.DiffEnabled && presenter.DiffBaseCommitId == null)
                     presenter.RecomputeSelectedDiff();
             }
 

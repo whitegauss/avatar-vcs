@@ -129,6 +129,21 @@ namespace AvatarVcs.Editor.UI
         {
             EditorGUILayout.BeginVertical();
 
+            // Collapsed by default, and shut means genuinely off: the
+            // presenter computes nothing while DiffEnabled is false. A diff
+            // against the live scene captures the whole avatar, and the
+            // window asks for one after any scene edit, so leaving this open
+            // taxes every edit the user makes.
+            var wasExpanded = diffExpanded;
+            diffExpanded = EditorGUILayout.Foldout(diffExpanded, "Changes", toggleOnLabelClick: true);
+            if (diffExpanded != wasExpanded) presenter.DiffEnabled = diffExpanded;
+
+            if (!diffExpanded)
+            {
+                EditorGUILayout.EndVertical();
+                return;
+            }
+
             var baseLabel = presenter.DiffBaseCommitId == null
                 ? "current scene"
                 : presenter.CommitMessageOf(presenter.DiffBaseCommitId);

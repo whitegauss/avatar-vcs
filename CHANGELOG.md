@@ -9,6 +9,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **A free-form note on each commit.** The commit message names a commit in the list and is fixed once made; the note is a multi-line field you can write and rewrite afterwards — "this one is outfit A with hair B, and the shoulder toggle has to be off". It sits under the history list and applies to whichever commit is selected. Older commits simply have none, and an older build ignores the field.
 
+### Changed
+
+- **The changes list is collapsed by default, and costs nothing while it is.** Diffing against the live scene captures the whole avatar — every container, every tracked component, and since 0.5.0 tens of thousands of shader property reads — and the window asked for that again after *any* scene edit. So editing anything with the window open paid for a diff nobody was reading. It is now a "Changes" foldout, and while it is shut that passive capture doesn't happen at all. The "discard your changes?" confirmation before a checkout or branch switch is unaffected; it computes on demand. The passive "you have uncommitted changes" banner reads the same diff, so it now appears only once the panel is open.
+
 ### Fixed
 
 - **Deleting a commit no longer deletes materials your avatar is currently wearing.** Checking out a commit puts the generated duplicate materials into the renderers' slots, and deleting that commit then cleaned those duplicates up — taking the avatar's materials with them. The cleanup now skips any material a renderer in an open scene still uses, and says so; it still collects duplicates nothing points at. This could only bite from 0.5.0 on, when shader settings first started being recorded for real avatars.

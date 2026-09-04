@@ -101,7 +101,12 @@ namespace AvatarVcs.Tests.Editor
             public readonly List<(string from, string to)> Remaps = new();
 
             public string FindAvatarGuid() => Guid;
-            public Commit CaptureLiveState() => LiveState;
+            public int CaptureLiveStateCalls;
+            public Commit CaptureLiveState()
+            {
+                CaptureLiveStateCalls++;
+                return LiveState;
+            }
 
             public Commit CommitCurrentState(string message)
             {
@@ -515,6 +520,78 @@ namespace AvatarVcs.Tests.Editor
             presenter.StartCompare();
             presenter.ExitCompare(keepCurrent: false);
             Assert.AreEqual("auto-x", gateway.Restored.Last(), "otherwise restores compareReturnCommitId");
+        }
+
+        // KAN-93: a diff against the live scene captures the whole avatar,
+        // and the window asks for one after any scene edit. With the panel
+        // shut nobody is reading the result, so nothing should be captured.
+        [Test]
+        public void WithTheDiffPanelShut_ReloadCapturesNothing()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+
+            presenter.SetAvatarGuid(Guid);
+
+            Assert.AreEqual(0, gateway.CaptureLiveStateCalls,
+                "the scene must not be captured for a diff nobody opened");
+            CollectionAssert.IsEmpty(presenter.SelectedDiff);
+        }
+
+        [Test]
+        public void OpeningTheDiffPanel_CapturesAndComputesTheDiff()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            // Something for the diff to actually find, so this can't pass on
+            // a regression that captures and then computes nothing.
+            gateway.LiveState = new Commit { containers = { new ContainerSnapshot { containerId = "added" } } };
+
+            presenter.DiffEnabled = true;
+
+            Assert.AreEqual(1, gateway.CaptureLiveStateCalls);
+            Assert.IsTrue(presenter.SelectedDiff.Any(d => d.containerId == "added" && d.kind == DiffKind.Added),
+                "capturing is not the point; the diff has to come out of it");
+        }
+
+        [Test]
+        public void ShuttingTheDiffPanel_DropsTheDiffAndStopsCapturing()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            presenter.DiffEnabled = true;
+            var capturesWhileOpen = gateway.CaptureLiveStateCalls;
+
+            presenter.DiffEnabled = false;
+            presenter.RecomputeSelectedDiff();
+
+            Assert.AreEqual(capturesWhileOpen, gateway.CaptureLiveStateCalls,
+                "an explicit recompute must still do nothing while the panel is shut");
+            CollectionAssert.IsEmpty(presenter.SelectedDiff);
+        }
+
+        // The trade-off, stated as a test rather than left to be discovered:
+        // the passive "you have uncommitted changes" banner reads the same
+        // diff, so it only appears once the panel is open. The safety net at
+        // checkout time is HasUncommittedChanges, which computes on demand and
+        // is unaffected.
+        [Test]
+        public void TheUncommittedBanner_NeedsTheDiffPanelOpen_ButTheCheckoutGuardDoesNot()
+        {
+            store.AddCommit("c1", "first", "2026-01-01T00:00:00Z");
+            SetBranchHead("c1");
+            presenter.SetAvatarGuid(Guid);
+            gateway.LiveState = new Commit { containers = { new ContainerSnapshot { containerId = "added" } } };
+
+            Assert.IsFalse(presenter.ShowUncommittedWarning(), "nothing computed, so nothing to show");
+
+            Assert.IsTrue(presenter.HasUncommittedChanges("c1"),
+                "the checkout guard computes on demand and still sees the change");
+
+            presenter.DiffEnabled = true;
+            Assert.IsTrue(presenter.ShowUncommittedWarning());
         }
 
         // KAN-77: HasUncommittedChanges has no try/catch and gates SwitchBranch

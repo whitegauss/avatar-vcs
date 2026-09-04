@@ -36,6 +36,7 @@ namespace AvatarVcs.Core.Presentation
         private List<CommitIndexEntry> commits = new();
         private string selectedCommitId;
         private List<ContainerDiff> selectedDiff = new();
+        private bool diffEnabled;
         private string diffBaseCommitId;
         private readonly HashSet<string> selectedForBulkDelete = new();
 
@@ -55,6 +56,29 @@ namespace AvatarVcs.Core.Presentation
         public IReadOnlyList<CommitIndexEntry> Commits => commits;
         public string SelectedCommitId => selectedCommitId;
         public IReadOnlyList<ContainerDiff> SelectedDiff => selectedDiff;
+
+        /// <summary>
+        /// Whether the diff panel is open. While it is shut, no diff is
+        /// computed at all.
+        ///
+        /// Diffing against the live scene means capturing the whole avatar --
+        /// every container, every tracked component, and since shader
+        /// settings started being recorded, tens of thousands of material
+        /// property reads. The window asks for that again after any scene
+        /// edit, so with the panel open the cost lands on every slider drag,
+        /// not just on checkout. Nobody reads a diff they haven't opened.
+        /// </summary>
+        public bool DiffEnabled
+        {
+            get => diffEnabled;
+            set
+            {
+                if (diffEnabled == value) return;
+                diffEnabled = value;
+                if (diffEnabled) RecomputeSelectedDiff();
+                else selectedDiff = new List<ContainerDiff>();
+            }
+        }
         public string DiffBaseCommitId => diffBaseCommitId;
         public IReadOnlyCollection<string> SelectedForBulkDelete => selectedForBulkDelete;
         public IReadOnlyList<string> PendingMissingGuids => pendingMissingGuids;
@@ -157,6 +181,7 @@ namespace AvatarVcs.Core.Presentation
         public void RecomputeSelectedDiff()
         {
             selectedDiff = new List<ContainerDiff>();
+            if (!diffEnabled) return;
             if (avatarGuid == null || selectedCommitId == null) return;
 
             var selectedCommit = store.LoadCommit(avatarGuid, selectedCommitId);
