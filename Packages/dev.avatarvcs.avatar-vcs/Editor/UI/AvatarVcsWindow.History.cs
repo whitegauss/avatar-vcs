@@ -79,10 +79,16 @@ namespace AvatarVcs.Editor.UI
         /// The note's first line, clipped, for the collapsed foldout label --
         /// enough to tell whether a note exists and roughly what it says
         /// without giving up the vertical space to show it.
+        ///
+        /// Cut at the first newline rather than splitting: this is a label
+        /// drawn from OnGUI, so it runs every frame the panel is on screen,
+        /// and Split would allocate the whole note as one string per line to
+        /// use only the first.
         /// </summary>
         private static string FirstLine(string note)
         {
-            var line = note.Split('\n')[0].Trim();
+            var newline = note.IndexOf('\n');
+            var line = (newline < 0 ? note : note.Substring(0, newline)).Trim();
             return line.Length <= 60 ? line : line.Substring(0, 57) + "...";
         }
 
