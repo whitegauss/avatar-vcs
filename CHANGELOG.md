@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Export and import a material's shader settings as a small file.** Right-click a material in the Project window → **AvatarVCS → Export Material Settings**. The file records only the properties that differ from the shader's own defaults, so it's a readable handful rather than lilToon's ~490, and it carries no path, no slot and no reference to the material it came from — which is what lets you import it onto a different material, on a different avatar, in a different project. Textures travel as GUIDs and are never embedded: a preset is values only, so it can't stand in for an asset the recipient doesn't already own, and sharing one is safer than sending the `.mat` itself. A property the target shader doesn't have, or a texture the recipient doesn't own, is reported and skipped rather than applied blindly.
+
 ### Changed
 
 - The note panel is collapsed by default and no longer takes a fixed slice of the window. Shut, it is one line showing the start of the note — enough to see there is one — and the space goes back to the commit history, which is what you actually look at.
