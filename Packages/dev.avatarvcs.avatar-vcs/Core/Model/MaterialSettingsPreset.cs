@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace AvatarVcs.Core.Model
@@ -20,6 +21,7 @@ namespace AvatarVcs.Core.Model
     /// already own. That is the same property the commit format has, and it
     /// is what makes sharing one safer than sending the .mat itself.
     /// </summary>
+    [Serializable]
     public class MaterialSettingsPreset
     {
         /// <summary>

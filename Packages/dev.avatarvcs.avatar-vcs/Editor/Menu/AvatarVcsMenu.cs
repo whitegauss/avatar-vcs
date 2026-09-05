@@ -241,7 +241,7 @@ namespace AvatarVcs.Editor.Menu
             {
                 json = File.ReadAllText(path);
             }
-            catch (Exception e) when (e is IOException or ArgumentException)
+            catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException)
             {
                 Debug.LogError($"[AvatarVCS] Could not read '{path}': {e.Message}");
                 return;

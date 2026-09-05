@@ -47,6 +47,12 @@ namespace AvatarVcs.Core.Presets
         /// Names the shader mismatch explicitly when there is one: importing
         /// lilToon values onto a Standard material is the case where a
         /// half-applied result would otherwise be baffling.
+        ///
+        /// The skip list does not say why, because Apply skips for three
+        /// different reasons and only one of them is "not on this material".
+        /// A texture the recipient doesn't own is skipped with the property
+        /// sitting right there on the material -- and that is the headline
+        /// case for a shared preset, not a corner one.
         /// </summary>
         public static string DescribeImport(
             int appliedCount, string path, string presetShader, string targetShader, IReadOnlyList<string> skipped)
@@ -58,7 +64,8 @@ namespace AvatarVcs.Core.Presets
                     + " only properties present on both were applied.";
 
             if (skipped.Count > 0)
-                message += $" {skipped.Count} not on this material, skipped: {string.Join(", ", skipped)}";
+                message += $" {skipped.Count} skipped (not on this material, or its value or texture"
+                    + $" couldn't be used): {string.Join(", ", skipped)}";
 
             return message;
         }
