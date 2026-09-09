@@ -11,13 +11,6 @@ Git のブランチ／コミットに似たモデルで、「髪ロング版」�
 このツールはシーン上のアバターを実際に書き換えます。テスターの方は
 [BETA.md](./BETA.md) に見てほしい点と報告のしかたをまとめてあります。
 
-設計書の Phase 1〜4 を実装済みです。
-
-- **Phase 1**: 管理下コンテナ方式によるプレハブ構成の記録・破棄→再生成による冪等な復元
-- **Phase 2**: コンポーネント設定（Transform 以外のフィールド、アセット参照、シーン内参照）の記録・復元、アバター本体の BlendShape / マテリアル参照のホワイトリスト管理、マテリアル設定（lilToon）の複製・再適用
-- **Phase 3**: コミット履歴の永続化、ブランチの作成・切り替え、コミット間の構造化 diff、EditorWindow UI
-- **Phase 4**: アセット更新時のバージョン警告（内容ハッシュの変更検知）、GUID 再マッピング UI（アセット再インポート後の追従）
-
 追加機能:
 - **ブランチ比較モード**（設計書 5.2）: 2つのコミットを自動コミットなしで交互に checkout して見比べるモード
 - **コミット間 diff**: 選択コミット vs 現在のシーンだけでなく、任意のコミット同士の差分表示
@@ -31,7 +24,11 @@ CI (`.github/workflows/tests.yml`) で [game-ci/unity-test-runner](https://githu
 またボーン自体の pose（Transform）はスコープ外で、変更しても管理対象になりません（ボーンは実体を持たず、コミットの JSON から安全に復元する手段がないためです）。それ以外——Body / Armature / アバタールート自身や、その配下の既存コンポーネントが持つ BlendShape・マテリアル参照・各種フィールド値——はデフォルトで追跡対象です。特定のサブツリー（例：この衣装だけ）を追跡から外したい場合は、対象を選択して `GameObject > AvatarVCS > Untrack Properties Here` を実行すると除外マーカー（`AvatarVcsUntracked`）が付き、そのサブツリー全体がコミットに含まれなくなります（`Track Properties Here` で解除）。Armature に直接配置したアクセサリ等の Prefab インスタンスであれば、その位置（Transform）も記録されます。ただし Prefab の追加・削除・入れ替えという「構造」の変更自体を管理できるのは `[AvatarVCS]` ルート配下のコンテナのみです。
 
 ## インストール
-
+### VPMリポジトリ
+以下のURLからインストールできます。
+```
+https://whitegauss.github.io/vpm-repository/
+```
 ### VCC (VRChat Creator Companion) 経由
 
 VCC の Settings > Packages > Add Repository で以下の URL を追加してください:
