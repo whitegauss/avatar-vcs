@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Updating AvatarVCS no longer breaks every AvatarVCS component in your scene.** The package shipped without a single `.meta` file. Unity generates one for any asset that arrives without it, with a GUID it picks at install time — so every install, and every *update*, handed the same scripts brand-new GUIDs. The components your scene holds are stored as references to those GUIDs, so after an update the `[AvatarVCS]` root and its containers came back as "missing script": the tool reported no root on the avatar, the containers were no longer containers, and the commit history — filed under the `avatarGuid` that lived on the now-missing root component — looked like it had never been made. Running Ensure Root again got the tool working, at the price of a fresh, empty history beside the old one. The `.meta` files are now part of the package and their GUIDs are fixed permanently, so an update leaves the scene alone. **Updating into this version is the last time this happens** — your existing markers were written against whatever GUIDs your current install invented, and those are what this replaces.
+
 ## [0.8.0-poc] - 2026-09-09
 
 ### Added
