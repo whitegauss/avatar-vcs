@@ -119,8 +119,9 @@ namespace AvatarVcs.Editor.History
             {
                 Debug.LogWarning($"[AvatarVCS] '{path}' is "
                     + (status == StoredFileStatus.Missing ? "missing" : "unreadable")
-                    + $"; rebuilt {rebuilt.entries.Count} entries from the commit files themselves. "
-                    + "The history is intact.");
+                    + $"; rebuilt {rebuilt.entries.Count} "
+                    + (rebuilt.entries.Count == 1 ? "entry" : "entries")
+                    + " from the commit files themselves. The history is intact.");
             }
 
             return rebuilt;
@@ -135,25 +136,33 @@ namespace AvatarVcs.Editor.History
         }
 
         /// <summary>
-        /// Branch heads, rebuilt from the commits when the file is gone or
-        /// unreadable (BranchConfigOps.RebuildFrom). Same reasoning as
-        /// LoadIndex, with one gap that can't be closed: a branch created but
-        /// never committed to leaves no trace in any commit.
+        /// Branch heads, rebuilt from the commits when the file is there but
+        /// unreadable (BranchConfigOps.RebuildFrom).
+        ///
+        /// Only when it is *there*, unlike LoadIndex. An index entry is a copy
+        /// of something in a commit file, so rebuilding one states no more
+        /// than the commits already do -- but a branch head is a decision, and
+        /// a commit merely records which branch it was made on. No config file
+        /// means no branch was ever pointed anywhere for this avatar (commits
+        /// written straight through SaveCommit, without BranchManager, do
+        /// exactly that), and answering that with "then its newest commit must
+        /// be the head" invents a head that blocks deleting that commit.
+        ///
+        /// A branch created but never committed to still can't be recovered:
+        /// nothing outside config.json ever knew about it.
         /// </summary>
         public static BranchConfig LoadConfig(string avatarGuid)
         {
             var path = CommitPaths.ConfigFile(avatarGuid);
             var (config, status) = StoredJson.Load<BranchConfig>(path, BranchConfig.CurrentSchemaVersion);
-            if (status == StoredFileStatus.Loaded) return config;
-            if (status == StoredFileStatus.TooNew) return new BranchConfig();
+            if (status != StoredFileStatus.Unreadable) return config ?? new BranchConfig();
 
             var rebuilt = BranchConfigOps.RebuildFrom(CommitsOnDisk(avatarGuid));
             if (rebuilt.branches.Count > 0)
             {
-                Debug.LogWarning($"[AvatarVCS] '{path}' is "
-                    + (status == StoredFileStatus.Missing ? "missing" : "unreadable")
-                    + $"; rebuilt {rebuilt.branches.Count} branch head(s) from the commit files, now on "
-                    + $"'{rebuilt.currentBranch}'. A branch with no commits on it cannot be recovered this way.");
+                Debug.LogWarning($"[AvatarVCS] '{path}' is unreadable; rebuilt {rebuilt.branches.Count} "
+                    + $"branch head(s) from the commit files, now on '{rebuilt.currentBranch}'. "
+                    + "A branch with no commits on it cannot be recovered this way.");
             }
 
             return rebuilt;

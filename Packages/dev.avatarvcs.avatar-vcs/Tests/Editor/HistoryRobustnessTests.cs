@@ -208,6 +208,45 @@ namespace AvatarVcs.Tests.Editor
                 CommitStore.LoadIndex(avatarGuid).entries.Select(e => e.commitId).ToList());
         }
 
+        // index.json is derived, so a deleted one comes back: every field in
+        // an entry is a copy of something in the commit file.
+        [Test]
+        public void CommitStore_MissingIndexFile_ComesBackFromTheCommitFiles()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var commit = BranchManager.Commit(avatar, "init");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            System.IO.File.Delete($"{CommitStore.GetAvatarDir(avatarGuid)}/index.json");
+
+            LogAssert.ignoreFailingMessages = true;
+            var index = CommitStore.LoadIndex(avatarGuid);
+            LogAssert.ignoreFailingMessages = false;
+
+            Assert.AreEqual(commit.commitId, index.entries.Single().commitId);
+        }
+
+        // ...and this is the line between the two recoveries. config.json is
+        // not derived: a commit records which branch it was made on, but a
+        // branch HEAD is a decision, and a commit written straight through
+        // SaveCommit never points one anywhere. So "no config file" means "no
+        // branch was ever pointed at anything", and answering it with "the
+        // newest commit must be the head" invents a head -- which then makes
+        // that commit undeletable. Rebuilding is therefore only for a file
+        // that is there and unreadable.
+        [Test]
+        public void CommitStore_MissingConfigFile_DoesNotInventBranchHeads()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            var commit = CommitBuilder.CreateCommit(avatar, "first", "main", null);
+            CommitStore.SaveCommit(avatarGuid, commit);
+            Assert.IsFalse(System.IO.File.Exists($"{CommitStore.GetAvatarDir(avatarGuid)}/config.json"),
+                "this test is only meaningful while SaveCommit writes no config");
+
+            Assert.IsEmpty(CommitStore.LoadConfig(avatarGuid).branches);
+            Assert.DoesNotThrow(() => CommitStore.DeleteCommit(avatarGuid, commit.commitId));
+        }
+
         [Test]
         public void CommitStore_CorruptConfigFile_RebuildsBranchHeadsFromTheCommitFiles()
         {
