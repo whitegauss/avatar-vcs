@@ -145,27 +145,146 @@ namespace AvatarVcs.Tests.Editor
                 .Replace($"\"schemaVersion\": {Commit.CurrentSchemaVersion}", "\"schemaVersion\": 99");
             System.IO.File.WriteAllText(commitPath, json);
 
+            // The message moved to StoredSchema.RefusalMessage when commits,
+            // index.json, config.json and guid-remapping.json were put behind
+            // one version rule; the behaviour it describes is unchanged.
             LogAssert.Expect(LogType.Warning,
-                new System.Text.RegularExpressions.Regex("schemaVersion 99, newer than this build supports"));
+                new System.Text.RegularExpressions.Regex("written by a newer AvatarVCS \\(schemaVersion 99"));
 
             Commit loaded = null;
             Assert.DoesNotThrow(() => loaded = CommitStore.LoadCommit(avatarGuid, commit.commitId));
             Assert.IsNull(loaded);
         }
 
+        // Rewritten (was CommitStore_CorruptIndexFile_ReturnsEmptyIndexInsteadOfThrowing,
+        // which asserted an empty index). Returning empty was not just a
+        // display problem: SaveCommit loads the index, adds one entry and
+        // writes it back, so the next commit turned a corrupt index into a
+        // one-entry index and the history was gone for good. index.json is a
+        // cache of the commit files, so it is rebuilt from them instead.
         [Test]
-        public void CommitStore_CorruptIndexFile_ReturnsEmptyIndexInsteadOfThrowing()
+        public void CommitStore_CorruptIndexFile_RebuildsTheHistoryFromTheCommitFiles()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var first = BranchManager.Commit(avatar, "init");
+            var second = BranchManager.Commit(avatar, "second");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            var indexPath = $"{CommitStore.GetAvatarDir(avatarGuid)}/index.json";
+            System.IO.File.WriteAllText(indexPath, "not json at all");
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Could not parse"));
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("rebuilt 2 entries"));
+
+            CommitIndex index = null;
+            Assert.DoesNotThrow(() => index = CommitStore.LoadIndex(avatarGuid));
+            Assert.IsNotNull(index);
+            CollectionAssert.AreEquivalent(
+                new[] { first.commitId, second.commitId },
+                index.entries.Select(e => e.commitId).ToList());
+        }
+
+        [Test]
+        public void CommitStore_CorruptIndexFile_IsMovedAsideRatherThanOverwritten()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var first = BranchManager.Commit(avatar, "init");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            var dir = CommitStore.GetAvatarDir(avatarGuid);
+            var indexPath = $"{dir}/index.json";
+            const string corrupt = "{ \"entries\": [ truncated";
+            System.IO.File.WriteAllText(indexPath, corrupt);
+
+            LogAssert.ignoreFailingMessages = true;
+            var second = BranchManager.Commit(avatar, "second");
+            LogAssert.ignoreFailingMessages = false;
+
+            var kept = System.IO.Directory.GetFiles(dir, "index.json.corrupt-*");
+            Assert.AreEqual(1, kept.Length, "the unreadable index should be kept, not written over");
+            Assert.AreEqual(corrupt, System.IO.File.ReadAllText(kept[0]));
+
+            // And the rebuilt index has both commits, not just the new one.
+            CollectionAssert.AreEquivalent(
+                new[] { first.commitId, second.commitId },
+                CommitStore.LoadIndex(avatarGuid).entries.Select(e => e.commitId).ToList());
+        }
+
+        // index.json is derived, so a deleted one comes back: every field in
+        // an entry is a copy of something in the commit file.
+        [Test]
+        public void CommitStore_MissingIndexFile_ComesBackFromTheCommitFiles()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var commit = BranchManager.Commit(avatar, "init");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            System.IO.File.Delete($"{CommitStore.GetAvatarDir(avatarGuid)}/index.json");
+
+            LogAssert.ignoreFailingMessages = true;
+            var index = CommitStore.LoadIndex(avatarGuid);
+            LogAssert.ignoreFailingMessages = false;
+
+            Assert.AreEqual(commit.commitId, index.entries.Single().commitId);
+        }
+
+        // ...and this is the line between the two recoveries. config.json is
+        // not derived: a commit records which branch it was made on, but a
+        // branch HEAD is a decision, and a commit written straight through
+        // SaveCommit never points one anywhere. So "no config file" means "no
+        // branch was ever pointed at anything", and answering it with "the
+        // newest commit must be the head" invents a head -- which then makes
+        // that commit undeletable. Rebuilding is therefore only for a file
+        // that is there and unreadable.
+        [Test]
+        public void CommitStore_MissingConfigFile_DoesNotInventBranchHeads()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            var commit = CommitBuilder.CreateCommit(avatar, "first", "main", null);
+            CommitStore.SaveCommit(avatarGuid, commit);
+            Assert.IsFalse(System.IO.File.Exists($"{CommitStore.GetAvatarDir(avatarGuid)}/config.json"),
+                "this test is only meaningful while SaveCommit writes no config");
+
+            Assert.IsEmpty(CommitStore.LoadConfig(avatarGuid).branches);
+            Assert.DoesNotThrow(() => CommitStore.DeleteCommit(avatarGuid, commit.commitId));
+        }
+
+        [Test]
+        public void CommitStore_CorruptConfigFile_RebuildsBranchHeadsFromTheCommitFiles()
+        {
+            var avatar = SpawnAvatar("Avatar");
+            BranchManager.Commit(avatar, "init");
+            var head = BranchManager.Commit(avatar, "second");
+            var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
+            System.IO.File.WriteAllText($"{CommitStore.GetAvatarDir(avatarGuid)}/config.json", "{ not json");
+
+            LogAssert.ignoreFailingMessages = true;
+            var config = CommitStore.LoadConfig(avatarGuid);
+            LogAssert.ignoreFailingMessages = false;
+
+            Assert.AreEqual("main", config.currentBranch);
+            Assert.AreEqual(head.commitId, BranchConfigOps.CurrentHead(config),
+                "the newest commit on a branch is that branch's head");
+        }
+
+        // An index written by a newer AvatarVCS holds fields this build has no
+        // field for, and JsonUtility drops those on the way back out. Losing
+        // one commit is better than rewriting the file that lists all of them,
+        // so the save is refused instead.
+        [Test]
+        public void CommitStore_IndexFromNewerSchema_RefusesToSaveOverIt()
         {
             var avatar = SpawnAvatar("Avatar");
             BranchManager.Commit(avatar, "init");
             var avatarGuid = ContainerManager.GetAvatarGuid(avatar);
             var indexPath = $"{CommitStore.GetAvatarDir(avatarGuid)}/index.json";
-            System.IO.File.WriteAllText(indexPath, "not json at all");
+            var fromTheFuture = System.IO.File.ReadAllText(indexPath)
+                .Replace($"\"schemaVersion\": {CommitIndex.CurrentSchemaVersion}", "\"schemaVersion\": 99");
+            System.IO.File.WriteAllText(indexPath, fromTheFuture);
 
-            CommitIndex index = null;
-            Assert.DoesNotThrow(() => index = CommitStore.LoadIndex(avatarGuid));
-            Assert.IsNotNull(index);
-            Assert.IsEmpty(index.entries);
+            LogAssert.ignoreFailingMessages = true;
+            Assert.Throws<InvalidOperationException>(() => BranchManager.Commit(avatar, "second"));
+            LogAssert.ignoreFailingMessages = false;
+
+            Assert.AreEqual(fromTheFuture, System.IO.File.ReadAllText(indexPath), "the file must be untouched");
         }
 
         [Test]

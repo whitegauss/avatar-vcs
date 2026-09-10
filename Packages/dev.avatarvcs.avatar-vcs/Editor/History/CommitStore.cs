@@ -30,7 +30,7 @@ namespace AvatarVcs.Editor.History
         /// File.WriteAllText directly to the final path had no such
         /// guarantee, and a truncated JSON file permanently broke every
         /// future load for that avatar (JsonUtility.FromJson throwing, see
-        /// TryLoadJson below).
+        /// StoredJson.Load).
         ///
         /// The temp file's bytes are flushed all the way to disk before the
         /// rename (KAN-18). File.WriteAllText returns once the data is in the
@@ -41,28 +41,6 @@ namespace AvatarVcs.Editor.History
         /// </summary>
         private static void WriteAtomically(string path, string content) =>
             AtomicFile.WriteAllText(path, content);
-
-        /// <summary>
-        /// JsonUtility.FromJson throws on malformed JSON (e.g. a file
-        /// truncated by a crash mid-write, or a bad manual/merge edit).
-        /// Returns default(T) and warns instead of propagating -- every
-        /// caller already treats "file doesn't exist" as a recoverable,
-        /// often totally normal case (a fresh avatar's history), so a
-        /// corrupt-but-present file should degrade the same way rather than
-        /// permanently breaking the window for that avatar.
-        /// </summary>
-        private static T TryLoadJson<T>(string path)
-        {
-            try
-            {
-                return JsonUtility.FromJson<T>(File.ReadAllText(path));
-            }
-            catch (Exception e) when (e is ArgumentException or IOException)
-            {
-                Debug.LogWarning($"[AvatarVCS] Could not parse '{path}' as {typeof(T).Name}; treating as missing. {e.Message}");
-                return default;
-            }
-        }
 
         public static string GetAvatarDir(string avatarGuid) => CommitPaths.AvatarDir(avatarGuid);
 
@@ -103,48 +81,122 @@ namespace AvatarVcs.Editor.History
             var path = CommitPaths.CommitFile(avatarGuid, commitId);
             if (!File.Exists(path)) return null;
 
-            var commit = TryLoadJson<Commit>(path);
-
             // A commit written by a newer AvatarVCS may carry fields this
             // build doesn't deserialize; restoring it would silently drop
-            // them. Treat it as unreadable (same as a corrupt file) rather
-            // than half-apply it. A file with no schemaVersion key keeps the
-            // field's default (CurrentSchemaVersion) after JsonUtility, so
-            // pre-versioning files still load.
-            if (commit != null && commit.schemaVersion > Commit.CurrentSchemaVersion)
-            {
-                Debug.LogWarning($"[AvatarVCS] Commit '{commitId}' has schemaVersion {commit.schemaVersion}, "
-                    + $"newer than this build supports ({Commit.CurrentSchemaVersion}); treating as unreadable. Update the AvatarVCS package.");
-                return null;
-            }
-
+            // them, so StoredJson reports it as TooNew and this returns null
+            // -- the same answer as for a corrupt file, which is what every
+            // caller here already handles.
+            var (commit, _) = StoredJson.Load<Commit>(path, Commit.CurrentSchemaVersion);
             return commit;
         }
 
+        /// <summary>
+        /// The commit list, rebuilt from the commits themselves when the file
+        /// is gone or unreadable.
+        ///
+        /// index.json holds nothing the commit files don't: it exists so the
+        /// history list doesn't have to read every multi-megabyte snapshot to
+        /// draw itself. Treating a broken one as "this avatar has no history"
+        /// was therefore both wrong and, once the next save wrote a one-entry
+        /// index over it, permanent. This never writes -- recovering a view of
+        /// the history is a read -- and the next real save puts the rebuilt
+        /// index back on disk (see SaveIndex, which moves the broken file
+        /// aside rather than onto).
+        /// </summary>
         public static CommitIndex LoadIndex(string avatarGuid)
         {
             var path = CommitPaths.IndexFile(avatarGuid);
-            return (File.Exists(path) ? TryLoadJson<CommitIndex>(path) : null) ?? new CommitIndex();
+            var (index, status) = StoredJson.Load<CommitIndex>(path, CommitIndex.CurrentSchemaVersion);
+            if (status == StoredFileStatus.Loaded) return index;
+
+            // Written by a newer build. Rebuilding from the commits would be
+            // no better -- they are that build's too -- and the file itself is
+            // protected by SaveIndex refusing to write over it.
+            if (status == StoredFileStatus.TooNew) return new CommitIndex();
+
+            var rebuilt = CommitIndexOps.RebuildFrom(CommitsOnDisk(avatarGuid));
+            if (rebuilt.entries.Count > 0)
+            {
+                Debug.LogWarning($"[AvatarVCS] '{path}' is "
+                    + (status == StoredFileStatus.Missing ? "missing" : "unreadable")
+                    + $"; rebuilt {rebuilt.entries.Count} "
+                    + (rebuilt.entries.Count == 1 ? "entry" : "entries")
+                    + " from the commit files themselves. The history is intact.");
+            }
+
+            return rebuilt;
         }
 
         private static void SaveIndex(string avatarGuid, CommitIndex index)
         {
             var path = CommitPaths.IndexFile(avatarGuid);
+            StoredJson.EnsureWritable<CommitIndex>(path, CommitIndex.CurrentSchemaVersion);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             WriteAtomically(path, JsonUtility.ToJson(index, true));
         }
 
+        /// <summary>
+        /// Branch heads, rebuilt from the commits when the file is there but
+        /// unreadable (BranchConfigOps.RebuildFrom).
+        ///
+        /// Only when it is *there*, unlike LoadIndex. An index entry is a copy
+        /// of something in a commit file, so rebuilding one states no more
+        /// than the commits already do -- but a branch head is a decision, and
+        /// a commit merely records which branch it was made on. No config file
+        /// means no branch was ever pointed anywhere for this avatar (commits
+        /// written straight through SaveCommit, without BranchManager, do
+        /// exactly that), and answering that with "then its newest commit must
+        /// be the head" invents a head that blocks deleting that commit.
+        ///
+        /// A branch created but never committed to still can't be recovered:
+        /// nothing outside config.json ever knew about it.
+        /// </summary>
         public static BranchConfig LoadConfig(string avatarGuid)
         {
             var path = CommitPaths.ConfigFile(avatarGuid);
-            return (File.Exists(path) ? TryLoadJson<BranchConfig>(path) : null) ?? new BranchConfig();
+            var (config, status) = StoredJson.Load<BranchConfig>(path, BranchConfig.CurrentSchemaVersion);
+            if (status != StoredFileStatus.Unreadable) return config ?? new BranchConfig();
+
+            var rebuilt = BranchConfigOps.RebuildFrom(CommitsOnDisk(avatarGuid));
+            if (rebuilt.branches.Count > 0)
+            {
+                Debug.LogWarning($"[AvatarVCS] '{path}' is unreadable; rebuilt {rebuilt.branches.Count} "
+                    + $"branch head(s) from the commit files, now on '{rebuilt.currentBranch}'. "
+                    + "A branch with no commits on it cannot be recovered this way.");
+            }
+
+            return rebuilt;
         }
 
         public static void SaveConfig(string avatarGuid, BranchConfig config)
         {
             var path = CommitPaths.ConfigFile(avatarGuid);
+            StoredJson.EnsureWritable<BranchConfig>(path, BranchConfig.CurrentSchemaVersion);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             WriteAtomically(path, JsonUtility.ToJson(config, true));
+        }
+
+        /// <summary>
+        /// Every commit file in the avatar's commits/ directory, one at a time
+        /// -- these are megabytes each, and a rebuild only ever needs five
+        /// fields off each one, so they are yielded lazily rather than all
+        /// held at once.
+        ///
+        /// The filename is the commit id, and LoadCommit re-checks it, so a
+        /// stray file dropped in the directory is skipped rather than
+        /// believed. A commit written by a newer build reads as null there and
+        /// is skipped too: it is genuinely not summarisable by this build.
+        /// </summary>
+        private static IEnumerable<Commit> CommitsOnDisk(string avatarGuid)
+        {
+            var dir = Path.Combine(CommitPaths.AvatarDir(avatarGuid), "commits");
+            if (!Directory.Exists(dir)) yield break;
+
+            foreach (var file in Directory.EnumerateFiles(dir, "*.json"))
+            {
+                var commit = LoadCommit(avatarGuid, Path.GetFileNameWithoutExtension(file));
+                if (commit != null) yield return commit;
+            }
         }
 
         /// <summary>
@@ -199,7 +251,7 @@ namespace AvatarVcs.Editor.History
 
                 // generatedAssets comes from commit JSON, which this repo
                 // treats as hand-editable / corruptible everywhere else
-                // (TryLoadJson, SnapshotDiffer's SafeToDictionary, ...) --
+                // (StoredJson.Load, SnapshotDiffer's SafeToDictionary, ...) --
                 // but this is the one path that hits AssetDatabase.DeleteAsset
                 // on a user's real asset. Only delete something that matches
                 // how MaterialSettingsApplier actually names its duplicates.

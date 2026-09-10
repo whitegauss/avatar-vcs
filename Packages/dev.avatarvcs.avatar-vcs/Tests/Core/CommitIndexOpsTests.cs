@@ -57,5 +57,51 @@ namespace AvatarVcs.Tests.Core
             Assert.AreEqual("c1", CommitIndexOps.EntryFor(index, "c1").commitId);
             Assert.IsNull(CommitIndexOps.EntryFor(index, "missing"));
         }
+
+        // The recovery path for a lost or unreadable index.json: everything in
+        // an entry is copied from the commit, so the commits can produce it
+        // again. Ids are real 32-hex guids because that is what
+        // CommitIdentifier lets through on the way back in.
+        [Test]
+        public void RebuildFrom_CopiesEveryEntryFieldOffTheCommit()
+        {
+            var commit = new Commit
+            {
+                commitId = "d098f2b073af4f40a6e5291f71d4f55b",
+                parentCommitId = "a465f09c1d6d4edab7d4f8bbb31ad466",
+                branch = "long-hair",
+                message = "sa",
+                timestamp = "2026-09-03T05:27:46.5108946Z",
+            };
+
+            var entry = CommitIndexOps.RebuildFrom(new[] { commit }).entries.Single();
+
+            Assert.AreEqual(commit.commitId, entry.commitId);
+            Assert.AreEqual(commit.parentCommitId, entry.parentCommitId);
+            Assert.AreEqual(commit.branch, entry.branch);
+            Assert.AreEqual(commit.message, entry.message);
+            Assert.AreEqual(commit.timestamp, entry.timestamp);
+        }
+
+        [Test]
+        public void RebuildFrom_SkipsWhatItCannotIdentify()
+        {
+            var index = CommitIndexOps.RebuildFrom(new[]
+            {
+                null,
+                new Commit { commitId = null, branch = "main" },
+                new Commit { commitId = "", branch = "main" },
+                new Commit { commitId = "d098f2b073af4f40a6e5291f71d4f55b", branch = "main" },
+            });
+
+            Assert.AreEqual("d098f2b073af4f40a6e5291f71d4f55b", index.entries.Single().commitId);
+        }
+
+        [Test]
+        public void RebuildFrom_NothingToRebuildFromIsAnEmptyIndex()
+        {
+            Assert.IsEmpty(CommitIndexOps.RebuildFrom(null).entries);
+            Assert.IsEmpty(CommitIndexOps.RebuildFrom(new Commit[0]).entries);
+        }
     }
 }

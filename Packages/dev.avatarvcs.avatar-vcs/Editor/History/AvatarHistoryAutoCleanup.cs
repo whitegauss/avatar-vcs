@@ -5,6 +5,7 @@ using AvatarVcs.Core.History;
 using AvatarVcs.Runtime;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace AvatarVcs.Editor.History
 {
@@ -65,6 +66,15 @@ namespace AvatarVcs.Editor.History
 
             if (!CouldDeleteAnything()) return;
 
+            if (ProjectLooksMidUpgrade(out var why))
+            {
+                Debug.Log($"[AvatarVCS] Skipped the automatic cleanup of orphaned history: {why} "
+                    + "Whether a history is orphaned is decided from what the scenes reference, and that is exactly "
+                    + "what a half-finished package update makes unreliable. Run Tools > AvatarVCS > "
+                    + "Clean Up Orphaned History by hand once the project is sound.");
+                return;
+            }
+
             var deleted = AvatarHistoryCleanup.Run(AvatarHistoryInventory.Scan());
             if (deleted.Count == 0) return;
 
@@ -101,6 +111,45 @@ namespace AvatarVcs.Editor.History
                     stored.Remove(root.AvatarGuid);
 
             return stored.Count > AvatarHistoryCleanupPlanner.DefaultKeepOrphans;
+        }
+
+        /// <summary>
+        /// A GameObject with a missing script in an open scene means some
+        /// package's components can't be resolved right now -- and updating
+        /// AvatarVCS itself used to do that to every AvatarVcsRoot in the
+        /// project, because the package shipped without .meta files and Unity
+        /// re-generated the script GUIDs on each install.
+        ///
+        /// That state is precisely where this must not run. An avatar whose
+        /// AvatarVcsRoot is missing still keeps its history alive here, because
+        /// AvatarHistoryInventory finds the avatarGuid in the scene's text --
+        /// but the moment the user tidies the missing components away and
+        /// saves, the last evidence of that avatarGuid is gone and its history
+        /// looks orphaned. Deleting it then would be silent and permanent, so
+        /// nothing is deleted automatically while any missing script is around,
+        /// whoever's it is.
+        /// </summary>
+        private static bool ProjectLooksMidUpgrade(out string why)
+        {
+            for (var i = 0; i < SceneManager.sceneCount; i++)
+            {
+                var scene = SceneManager.GetSceneAt(i);
+                if (!scene.isLoaded) continue;
+
+                foreach (var root in scene.GetRootGameObjects())
+                {
+                    foreach (var transform in root.GetComponentsInChildren<Transform>(includeInactive: true))
+                    {
+                        if (GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(transform.gameObject) == 0) continue;
+
+                        why = $"'{transform.name}' in scene '{scene.name}' has a missing script.";
+                        return true;
+                    }
+                }
+            }
+
+            why = null;
+            return false;
         }
     }
 

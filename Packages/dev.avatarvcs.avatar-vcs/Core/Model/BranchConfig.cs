@@ -18,6 +18,10 @@ namespace AvatarVcs.Core.Model
     [Serializable]
     public class BranchConfig
     {
+        /// <summary>See CommitIndex.CurrentSchemaVersion.</summary>
+        public const int CurrentSchemaVersion = 1;
+
+        public int schemaVersion = CurrentSchemaVersion;
         public List<BranchEntry> branches = new();
         public string currentBranch = "main";
     }

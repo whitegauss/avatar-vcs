@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using AvatarVcs.Core.History;
 using AvatarVcs.Core.Model;
 using UnityEngine;
@@ -54,25 +53,20 @@ namespace AvatarVcs.Editor.History
         }
 
         /// <summary>
-        /// JsonUtility.FromJson throws on malformed JSON (e.g. a file
-        /// truncated by a crash mid-write, or a bad manual edit). Falls back
-        /// to an empty config and warns instead of propagating -- matching
-        /// CommitStore.TryLoadJson, since "no mappings recorded yet" is
-        /// already a normal, recoverable state every caller here handles.
+        /// Falls back to an empty config, warning, when the file is
+        /// unreadable or newer than this build -- "no mappings recorded yet"
+        /// is already a normal state every caller handles, and a remap that
+        /// has to be answered again is an annoyance rather than a loss.
+        ///
+        /// Unlike the commit index, there is nothing to rebuild this from: a
+        /// mapping is an answer the user gave, recorded nowhere else. So the
+        /// protection is entirely on the write side -- Save moves an
+        /// unreadable file aside instead of onto (StoredJson.EnsureWritable).
         /// </summary>
         public static GuidRemapConfig Load()
         {
-            if (!File.Exists(ConfigPath)) return new GuidRemapConfig();
-
-            try
-            {
-                return JsonUtility.FromJson<GuidRemapConfig>(File.ReadAllText(ConfigPath)) ?? new GuidRemapConfig();
-            }
-            catch (Exception e) when (e is ArgumentException or IOException)
-            {
-                Debug.LogWarning($"[AvatarVCS] Could not parse '{ConfigPath}' as {nameof(GuidRemapConfig)}; treating as empty. {e.Message}");
-                return new GuidRemapConfig();
-            }
+            var (config, _) = StoredJson.Load<GuidRemapConfig>(ConfigPath, GuidRemapConfig.CurrentSchemaVersion);
+            return config ?? new GuidRemapConfig();
         }
 
         /// <summary>
@@ -83,6 +77,12 @@ namespace AvatarVcs.Editor.History
         /// </summary>
         public static void Save(GuidRemapConfig config)
         {
+            // Load() answers an unreadable file with an empty config, and
+            // AddMapping saves that back with one entry in it -- which would
+            // erase every mapping the user had already resolved. EnsureWritable
+            // is what makes the file survive that round trip.
+            StoredJson.EnsureWritable<GuidRemapConfig>(ConfigPath, GuidRemapConfig.CurrentSchemaVersion);
+
             // This file had been left out of KAN-18's flush-to-disk
             // guarantee: a torn guid-remapping file breaks prefab resolution
             // for every commit that relies on a remap.
