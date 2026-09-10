@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using AvatarVcs.Core.Model;
 
@@ -26,6 +28,39 @@ namespace AvatarVcs.Core.History
                 entry.commitId = commitId;
             else
                 config.branches.Add(new BranchEntry { name = branch, commitId = commitId });
+        }
+
+        /// <summary>
+        /// Rebuilds branch heads from the commits themselves, for when
+        /// config.json is gone or unreadable (CommitStore.LoadConfig).
+        ///
+        /// Every commit records the branch it was made on, so each branch's
+        /// head is its newest commit -- which is what config.json holds
+        /// anyway. Two things can't be recovered this way and are handled
+        /// rather than guessed: which branch was checked out (falls back to
+        /// the branch of the newest commit overall, since that is where work
+        /// was last happening), and a branch created but never committed to,
+        /// which leaves no trace in any commit and is simply gone.
+        ///
+        /// Ordering is by timestamp string, matching CommitIndexOps.NewestFirst
+        /// -- these are round-trip "o" format, so ordinal order is time order.
+        /// </summary>
+        public static BranchConfig RebuildFrom(IEnumerable<Commit> commits)
+        {
+            var config = new BranchConfig();
+
+            var ordered = (commits ?? Enumerable.Empty<Commit>())
+                .Where(c => c != null && !string.IsNullOrEmpty(c.commitId) && !string.IsNullOrEmpty(c.branch))
+                .OrderBy(c => c.timestamp, StringComparer.Ordinal)
+                .ToList();
+
+            foreach (var commit in ordered)
+                SetHead(config, commit.branch, commit.commitId);
+
+            var newest = ordered.LastOrDefault();
+            if (newest != null) config.currentBranch = newest.branch;
+
+            return config;
         }
 
         /// <summary>

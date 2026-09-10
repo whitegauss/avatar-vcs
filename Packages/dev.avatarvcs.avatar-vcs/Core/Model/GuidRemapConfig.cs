@@ -20,6 +20,10 @@ namespace AvatarVcs.Core.Model
     [Serializable]
     public class GuidRemapConfig
     {
+        /// <summary>See CommitIndex.CurrentSchemaVersion.</summary>
+        public const int CurrentSchemaVersion = 1;
+
+        public int schemaVersion = CurrentSchemaVersion;
         public List<GuidRemapEntry> mappings = new();
     }
 }

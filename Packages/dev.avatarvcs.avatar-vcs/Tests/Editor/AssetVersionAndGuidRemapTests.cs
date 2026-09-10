@@ -63,6 +63,17 @@ namespace AvatarVcs.Tests.Editor
         public void TearDown()
         {
             GuidRemapper.Save(originalRemapConfig);
+
+            // A test that leaves an unreadable config behind gets it moved
+            // aside by that Save (StoredJson.EnsureWritable) rather than
+            // overwritten -- which is the point, but it must not accumulate
+            // in a real project's ProjectSettings.
+            foreach (var quarantined in System.IO.Directory.GetFiles(
+                         System.IO.Path.GetDirectoryName(RemapConfigPath)!, "guid-remapping.json.corrupt-*"))
+            {
+                System.IO.File.Delete(quarantined);
+            }
+
             if (avatarGuid != null)
                 CommitStore.DeleteAvatarHistory(avatarGuid);
             if (avatarRoot != null)
@@ -242,6 +253,31 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsEmpty(loaded.mappings);
 
             Assert.DoesNotThrow(() => GuidRemapper.Resolve("any-guid"));
+        }
+
+        // Load answering an unreadable file with an empty config is only safe
+        // because the next Save doesn't land on top of it. AddMapping is
+        // load-modify-write, so without this the first remap a user answered
+        // after the file was damaged would erase every remap they had already
+        // answered.
+        [Test]
+        public void GuidRemapper_CorruptConfigFile_IsMovedAsideRatherThanOverwritten()
+        {
+            const string corrupt = "{ \"mappings\": [ truncated";
+            System.IO.File.WriteAllText(RemapConfigPath, corrupt);
+
+            LogAssert.ignoreFailingMessages = true;
+            GuidRemapper.AddMapping("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+            LogAssert.ignoreFailingMessages = false;
+
+            var kept = System.IO.Directory.GetFiles(
+                System.IO.Path.GetDirectoryName(RemapConfigPath)!, "guid-remapping.json.corrupt-*");
+            Assert.AreEqual(1, kept.Length);
+            Assert.AreEqual(corrupt, System.IO.File.ReadAllText(kept[0]));
+
+            Assert.AreEqual("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                GuidRemapper.Resolve("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                "and the new mapping still saved");
         }
 
         // KAN-83: GuidRemapper.Save had been left out of KAN-18's flush-to-

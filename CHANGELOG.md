@@ -5,6 +5,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A damaged `index.json` no longer costs an avatar its history.** The commit list is a cache — every field in it is copied from the commit files — but a file left truncated by a crash, or edited badly by hand, used to read as "this avatar has no commits", and the next commit then wrote a one-entry list over it. The history was still on disk and nothing could see it again. An unreadable list is now rebuilt from the commit files themselves, and a save that would land on top of one moves it aside (to `index.json.corrupt-<date>`) instead of onto it. `config.json` recovers the same way: each branch's head is its newest commit. A branch created but never committed to leaves no trace in any commit and can't be recovered; nothing else is lost.
+- The same protection covers `guid-remapping.json`, where there is nothing to rebuild from: answering one asset's new GUID after the file was damaged used to erase every answer already given.
+
+### Changed
+
+- **These files now record the schema they were written with, and an older AvatarVCS refuses to write over a newer one's.** Unity's JSON reader silently drops fields it has no place for, so an older build that opened a newer build's history, changed one thing and saved it deleted whatever the newer one had recorded. Commits already worked this way; the commit list, branch config and GUID remapping now do too. Files written before this release read as current, which is right — they hold exactly the fields this build knows about.
+- The automatic cleanup of orphaned history now stands down while any open scene has a missing script. Whether a history is orphaned is judged from what the scenes reference, and a half-finished package update — exactly what the missing `.meta` files used to cause — makes that judgement unreliable at the worst possible moment. `Tools > AvatarVCS > Clean Up Orphaned History` still runs on request.
+
 ## [0.8.0-poc] - 2026-09-09
 
 ### Added
