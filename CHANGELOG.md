@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0-poc] - 2026-09-10
+
 ### Added
 
 - **`Tools > AvatarVCS > Repair Markers`**, for one specific situation: an AvatarVCS update left the `[AvatarVCS]` root, the containers, or the Track/Untrack markers showing "missing script". It reads the guids back out of the saved scene file — Unity keeps a missing component's data even though nothing can read it through the editor — and puts the components back as they were, so the avatar keeps the commit history it already had rather than starting an empty one. It shows exactly what it will restore before doing anything, and leaves alone any missing script it can't identify, including other packages' broken components. Needed once, on the way into the version that ships `.meta` files with the package.
