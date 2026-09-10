@@ -16,6 +16,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      # Before anything expensive: a package file without its .meta reassigns
+      # its GUID on every install, which breaks every reference a user's scene
+      # holds to our marker components the next time they update. See the
+      # script's docstring and LESSONS.md.
+      - name: Check .meta coverage
+        run: python3 .github/scripts/check_meta.py
+
       # A restored Library carries Unity's Bee build graph, which is keyed to
       # the set of source files that existed when it was written. Restore one
       # across an add/rename/delete and the compile fails on files the graph
