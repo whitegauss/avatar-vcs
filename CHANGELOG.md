@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0-poc] - 2026-09-11
+
 ### Changed
 
 - **A checkout writes the recorded material settings onto your material, instead of copying it first.** Copy-on-write was there so your own `.mat` files were never touched — but a copy was made for *every* material slot on the avatar, changed or not, once per commit, and the next commit then recorded the copy as the material to restore onto, so the checkout after that copied the copy. One real avatar reached 552 generated materials — 82% of every material in the project, names six levels deep like `SmartPhone_avatarvcs 3_avatarvcs_avatarvcs_avatarvcs 2_avatarvcs.mat` — all of them rendering identically to the originals. Settings are now applied the same way every other kind of tracked state is: written onto the thing they belong to. Present since 0.5.0-poc, which is when shader settings first started being recorded for real avatars.
