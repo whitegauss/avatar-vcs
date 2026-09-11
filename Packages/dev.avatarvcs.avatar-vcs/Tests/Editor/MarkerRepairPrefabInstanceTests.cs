@@ -75,7 +75,7 @@ namespace AvatarVcs.Tests.Editor
                 "precondition: the marker is broken");
             Assert.IsNull(avatar.GetComponent<AvatarVcsTrackedReference>(), "precondition: and gone");
 
-            var plan = MarkerRepair.Plan();
+            var plan = Planned();
             MarkerRepair.Apply(plan);
 
             Assert.IsNotNull(avatar.GetComponent<AvatarVcsTrackedReference>(), "the marker must be back");
@@ -100,9 +100,10 @@ namespace AvatarVcs.Tests.Editor
             // Put the marker back by hand, leaving the broken one behind:
             // exactly the state the first Repair left the reporter's scene in.
             Undo.AddComponent<AvatarVcsTrackedReference>(avatar);
+            EditorSceneManager.SaveScene(scene);
             Assert.Greater(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(avatar), 0);
 
-            var plan = MarkerRepair.Plan();
+            var plan = Planned();
             Assert.IsEmpty(plan.actions, "nothing to add: the marker is already there");
             Assert.Greater(plan.BrokenComponents, 0, "but there is still something to clear");
 
@@ -163,6 +164,25 @@ namespace AvatarVcs.Tests.Editor
             LogAssert.ignoreFailingMessages = true;
             scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
             LogAssert.ignoreFailingMessages = false;
+
+            // Repair reads the guids out of the file on disk, so it declines a
+            // scene with unsaved changes. Opening one with broken scripts can
+            // leave it dirty, so make the two agree before planning.
+            EditorSceneManager.SaveScene(scene);
+        }
+
+        /// <summary>
+        /// Plan, with the reasons it might have found nothing folded into the
+        /// failure message -- a plan that skipped this scene and a plan that
+        /// could not identify the marker look identical from the assertions.
+        /// </summary>
+        private MarkerRepairPlan Planned()
+        {
+            var plan = MarkerRepair.Plan();
+            Assert.IsFalse(plan.blockers.Any(b => b.Contains(scene.name)),
+                $"the fixture scene was skipped: {string.Join(" | ", plan.blockers)}");
+            Assert.IsEmpty(plan.unresolved, "the marker should have been identified from the commit");
+            return plan;
         }
 
         private GameObject ReopenedAvatar()
