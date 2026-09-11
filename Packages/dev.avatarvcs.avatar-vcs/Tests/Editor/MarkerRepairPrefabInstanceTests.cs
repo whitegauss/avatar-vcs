@@ -33,9 +33,14 @@ namespace AvatarVcs.Tests.Editor
             "Packages/dev.avatarvcs.avatar-vcs/Runtime/Components/AvatarVcsTrackedReference.cs";
         private const string BogusGuid = "ffffffffffffffffffffffffffffffff";
 
+        // Distinct from the "Avatar" every other fixture spawns: the scene
+        // copy this writes contains whatever else is in the runner's scene.
+        private const string AvatarName = "RepairFixtureAvatar";
+
         private string scenePath;
         private string avatarGuid;
         private Scene scene;
+        private GameObject live;
 
         [SetUp]
         public void SetUp()
@@ -49,6 +54,7 @@ namespace AvatarVcs.Tests.Editor
         [TearDown]
         public void TearDown()
         {
+            if (live != null) { Object.DestroyImmediate(live); live = null; }
             if (scene.IsValid() && scene.isLoaded) EditorSceneManager.CloseScene(scene, true);
             if (avatarGuid != null) { CommitStore.DeleteAvatarHistory(avatarGuid); avatarGuid = null; }
             if (AssetDatabase.IsValidFolder(Dir)) AssetDatabase.DeleteAsset(Dir);
@@ -105,26 +111,37 @@ namespace AvatarVcs.Tests.Editor
             Assert.AreEqual(0, GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(avatar));
         }
 
+        /// <summary>
+        /// Builds the avatar in whatever scene is already active and writes a
+        /// *copy* of that scene to disk, rather than making a new one.
+        /// EditorSceneManager.NewScene refuses to add a scene while an
+        /// untitled one is unsaved, which is exactly how the test runner
+        /// starts, and saving the runner's scene out from under itself is not
+        /// this fixture's business.
+        /// </summary>
         private void BuildAvatarSceneAndCommit()
         {
-            scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
-
             // An avatar is a prefab instance, which is the whole point here.
-            var source = new GameObject("Avatar");
+            var source = new GameObject(AvatarName);
             var body = new GameObject("Body");
             body.transform.SetParent(source.transform, false);
             var prefab = PrefabUtility.SaveAsPrefabAsset(source, $"{Dir}/Avatar.prefab");
             Object.DestroyImmediate(source);
 
-            var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
-            ContainerManager.EnsureRootWithDefaults(instance);
-            avatarGuid = ContainerManager.GetAvatarGuid(instance);
+            live = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            ContainerManager.EnsureRootWithDefaults(live);
+            avatarGuid = ContainerManager.GetAvatarGuid(live);
 
             // A commit is what tells Repair that the field-less marker on this
             // object was a Track Properties Here (avatarReferences[].path).
-            BranchManager.Commit(instance, "init");
+            BranchManager.Commit(live, "init");
 
-            EditorSceneManager.SaveScene(scene, scenePath);
+            EditorSceneManager.SaveScene(SceneManager.GetActiveScene(), scenePath, saveAsCopy: true);
+
+            // The copy on disk is the fixture from here on; the live one would
+            // only be a second avatar carrying the same avatarGuid.
+            Object.DestroyImmediate(live);
+            live = null;
         }
 
         /// <summary>
@@ -134,8 +151,6 @@ namespace AvatarVcs.Tests.Editor
         /// </summary>
         private void BreakTheScriptGuid(string trackedGuid)
         {
-            EditorSceneManager.CloseScene(scene, true);
-
             var text = File.ReadAllText(scenePath);
             Assert.IsTrue(text.Contains(trackedGuid), "the saved scene should reference the marker script");
             File.WriteAllText(scenePath, text.Replace(trackedGuid, BogusGuid));
@@ -147,6 +162,6 @@ namespace AvatarVcs.Tests.Editor
         }
 
         private GameObject ReopenedAvatar() =>
-            scene.GetRootGameObjects().Single(go => go.name == "Avatar");
+            scene.GetRootGameObjects().Single(go => go.name == AvatarName);
     }
 }
