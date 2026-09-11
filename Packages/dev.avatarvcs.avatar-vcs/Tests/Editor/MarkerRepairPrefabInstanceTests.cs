@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using AvatarVcs.Editor.Core;
 using AvatarVcs.Editor.History;
+using AvatarVcs.Core.Repair;
 using AvatarVcs.Editor.Repair;
 using AvatarVcs.Runtime;
 using NUnit.Framework;
@@ -74,6 +75,7 @@ namespace AvatarVcs.Tests.Editor
             Assert.Greater(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(avatar), 0,
                 "precondition: the marker is broken");
             Assert.IsNull(avatar.GetComponent<AvatarVcsTrackedReference>(), "precondition: and gone");
+            AssertTheBrokenBlockIsFindable(avatar);
 
             var plan = Planned();
             MarkerRepair.Apply(plan);
@@ -183,6 +185,38 @@ namespace AvatarVcs.Tests.Editor
                 $"the fixture scene was skipped: {string.Join(" | ", plan.blockers)}");
             Assert.IsEmpty(plan.unresolved, "the marker should have been identified from the commit");
             return plan;
+        }
+
+        /// <summary>
+        /// Reports which half of the repair lost the block, since a plan that
+        /// found nothing looks the same from the outside either way: the file
+        /// not holding an unresolvable MonoBehaviour (the break didn't take),
+        /// or its m_GameObject id not matching any live object (the id the
+        /// scene file uses is not the one GlobalObjectId hands back).
+        /// </summary>
+        private void AssertTheBrokenBlockIsFindable(GameObject avatar)
+        {
+            var blocks = SceneYamlMarkerScanner.ReadMonoBehaviours(File.ReadAllText(scenePath));
+            var broken = blocks
+                .Where(b => string.IsNullOrEmpty(AssetDatabase.GUIDToAssetPath(b.scriptGuid)))
+                .ToList();
+            Assert.IsNotEmpty(broken,
+                $"no unresolvable MonoBehaviour in the saved scene ({blocks.Count} blocks: "
+                + string.Join(", ", blocks.Select(b => b.scriptGuid.Substring(0, 8))) + ")");
+
+            var liveIds = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
+                .ToDictionary(
+                    tr => (long)GlobalObjectId.GetGlobalObjectIdSlow(tr.gameObject).targetObjectId,
+                    tr => tr.name,
+                    (a, b) => a);
+
+            var matched = broken.Where(b => liveIds.ContainsKey(b.gameObjectFileId)).ToList();
+            Assert.IsNotEmpty(matched,
+                "no broken block could be matched to a live object.\n"
+                + $"  blocks want: {string.Join(", ", broken.Select(b => b.gameObjectFileId))}\n"
+                + $"  live objects are: {string.Join(", ", liveIds.Take(12).Select(kv => $"{kv.Value}={kv.Key}"))}\n"
+                + $"  avatar itself: {GlobalObjectId.GetGlobalObjectIdSlow(avatar)}");
         }
 
         private GameObject ReopenedAvatar()
