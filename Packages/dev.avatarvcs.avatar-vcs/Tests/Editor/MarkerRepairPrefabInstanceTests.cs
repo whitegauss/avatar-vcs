@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AvatarVcs.Editor.Core;
@@ -204,12 +205,12 @@ namespace AvatarVcs.Tests.Editor
                 $"no unresolvable MonoBehaviour in the saved scene ({blocks.Count} blocks: "
                 + string.Join(", ", blocks.Select(b => b.scriptGuid.Substring(0, 8))) + ")");
 
-            var liveIds = scene.GetRootGameObjects()
-                .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
-                .ToDictionary(
-                    tr => (long)GlobalObjectId.GetGlobalObjectIdSlow(tr.gameObject).targetObjectId,
-                    tr => tr.name,
-                    (a, b) => a);
+            var liveIds = new Dictionary<long, string>();
+            foreach (var tr in scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<Transform>(true)))
+            {
+                var id = (long)GlobalObjectId.GetGlobalObjectIdSlow(tr.gameObject).targetObjectId;
+                if (!liveIds.ContainsKey(id)) liveIds[id] = tr.name;
+            }
 
             var matched = broken.Where(b => liveIds.ContainsKey(b.gameObjectFileId)).ToList();
             Assert.IsNotEmpty(matched,
