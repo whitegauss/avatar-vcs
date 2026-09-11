@@ -87,7 +87,7 @@ namespace AvatarVcs.Tests.Editor
 
             var applied = MaterialSettingsApplier.Apply(state, avatarRoot);
 
-            Assert.AreSame(source, applied);
+            AssertSameAsset(sourcePath, applied);
             Assert.IsTrue(string.IsNullOrEmpty(state.generatedGuid));
             CollectionAssert.IsEmpty(GeneratedIn(Dir));
         }
@@ -99,8 +99,8 @@ namespace AvatarVcs.Tests.Editor
 
             var applied = MaterialSettingsApplier.Apply(state, avatarRoot);
 
-            Assert.AreSame(source, applied);
-            Assert.AreEqual(Color.green, source.GetColor("_Color"));
+            AssertSameAsset(sourcePath, applied);
+            Assert.AreEqual(Color.green, Reload().GetColor("_Color"));
             CollectionAssert.IsEmpty(GeneratedIn(Dir));
         }
 
@@ -122,9 +122,9 @@ namespace AvatarVcs.Tests.Editor
 
             Assert.AreEqual(1, GeneratedIn(Dir).Count, "one copy per material, for good");
             Assert.AreEqual(green.generatedGuid, blue.generatedGuid);
-            Assert.AreSame(first, second);
+            Assert.AreEqual(AssetDatabase.GetAssetPath(first), AssetDatabase.GetAssetPath(second));
             Assert.AreEqual(Color.blue, second.GetColor("_Color"), "the copy holds whatever is checked out now");
-            Assert.AreEqual(SourceColor, source.GetColor("_Color"), "and the shared material is never written to");
+            Assert.AreEqual(SourceColor, Reload().GetColor("_Color"), "and the shared material is never written to");
         }
 
         // The chaining fault: after a checkout the renderer wears the copy, so
@@ -136,7 +136,8 @@ namespace AvatarVcs.Tests.Editor
             LogAssert.ignoreFailingMessages = true;
             var copy = MaterialSettingsApplier.Apply(State(Color.green), avatarRoot);
             LogAssert.ignoreFailingMessages = false;
-            Assert.AreSame(copy, bodyRenderer.sharedMaterials[0], "precondition: the slot wears the copy");
+            Assert.AreEqual(AssetDatabase.GetAssetPath(copy), AssetDatabase.GetAssetPath(bodyRenderer.sharedMaterials[0]),
+                "precondition: the slot wears the copy");
 
             var recaptured = MaterialSettingsCapture.Capture(
                 copy, "lilToon", "Body", 0, GeneratedMaterialSource.Resolve(copy));
@@ -154,8 +155,8 @@ namespace AvatarVcs.Tests.Editor
             var copy = MaterialSettingsApplier.Apply(State(Color.green), avatarRoot);
             LogAssert.ignoreFailingMessages = false;
 
-            Assert.AreSame(source, GeneratedMaterialSource.Resolve(copy));
-            Assert.AreSame(source, GeneratedMaterialSource.Resolve(source), "a material of the user's own is its own source");
+            AssertSameAsset(sourcePath, GeneratedMaterialSource.Resolve(copy));
+            AssertSameAsset(sourcePath, GeneratedMaterialSource.Resolve(source), "a material of the user's own is its own source");
         }
 
         [Test]
@@ -218,6 +219,11 @@ namespace AvatarVcs.Tests.Editor
             outsider = new GameObject("SomeoneElse");
             outsider.AddComponent<MeshRenderer>().sharedMaterials = new[] { source };
         }
+
+        private static void AssertSameAsset(string expectedPath, Material actual, string because = null) =>
+            Assert.AreEqual(expectedPath, AssetDatabase.GetAssetPath(actual), because ?? string.Empty);
+
+        private Material Reload() => AssetDatabase.LoadAssetAtPath<Material>(sourcePath);
 
         private static Color ParseColor(MaterialSettingsState state)
         {

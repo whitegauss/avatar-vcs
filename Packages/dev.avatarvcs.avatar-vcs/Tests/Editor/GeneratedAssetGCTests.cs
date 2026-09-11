@@ -23,6 +23,7 @@ namespace AvatarVcs.Tests.Editor
         private string sourceMaterialGuid;
         private GameObject avatarRoot;
         private string avatarGuid;
+        private GameObject outsider;
 
         [OneTimeSetUp]
         public void OneTimeSetUp()
@@ -46,20 +47,33 @@ namespace AvatarVcs.Tests.Editor
         [SetUp]
         public void SetUp()
         {
+            sourceMaterial.SetColor("_Color", Color.white);
             avatarRoot = new GameObject("Avatar");
             var body = new GameObject("Body");
             body.transform.SetParent(avatarRoot.transform);
             var renderer = body.AddComponent<MeshRenderer>();
             renderer.sharedMaterials = new[] { sourceMaterial };
+
+            // This fixture is about the lifecycle of *generated* materials, and
+            // a checkout only generates one now when the material is not this
+            // avatar's to write to. Something outside the avatar wearing it is
+            // that case, and it is the realistic one: a second avatar, or a
+            // prop, sharing an outfit's material.
+            outsider = new GameObject("SomeoneElse");
+            outsider.AddComponent<MeshRenderer>().sharedMaterials = new[] { sourceMaterial };
+            LogAssert.ignoreFailingMessages = true;
         }
 
         [TearDown]
         public void TearDown()
         {
+            LogAssert.ignoreFailingMessages = false;
             if (avatarGuid != null)
                 CommitStore.DeleteAvatarHistory(avatarGuid);
             if (avatarRoot != null)
                 Object.DestroyImmediate(avatarRoot);
+            if (outsider != null)
+                Object.DestroyImmediate(outsider);
         }
 
         private Commit CommitWithMaterialSetting(string message, string parentCommitId)

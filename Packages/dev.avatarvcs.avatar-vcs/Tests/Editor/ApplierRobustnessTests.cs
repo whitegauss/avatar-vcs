@@ -432,7 +432,7 @@ namespace AvatarVcs.Tests.Editor
                 },
             };
 
-            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Duplicate material has no property '_NonExistentProperty12345'"));
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Material has no property '_NonExistentProperty12345'"));
             var duplicate = MaterialSettingsApplier.Apply(state, root);
             Assert.IsNotNull(duplicate);
         }

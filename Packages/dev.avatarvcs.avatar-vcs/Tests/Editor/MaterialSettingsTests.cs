@@ -90,8 +90,8 @@ namespace AvatarVcs.Tests.Editor
 
             var applied = MaterialSettingsApplier.Apply(state, avatarRoot);
 
-            Assert.AreSame(sourceMaterial, applied);
-            Assert.Less(Vector4.Distance(newColor, sourceMaterial.GetColor("_Color")), 0.001f);
+            AssertSameAsset(sourceMaterialPath, applied);
+            Assert.Less(Vector4.Distance(newColor, Reload().GetColor("_Color")), 0.001f);
             Assert.IsTrue(string.IsNullOrEmpty(state.generatedGuid), "nothing should have been generated");
             CollectionAssert.IsEmpty(GeneratedMaterialsInTestDir());
 
@@ -113,8 +113,8 @@ namespace AvatarVcs.Tests.Editor
                 LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("also used by 'SomeoneElse'"));
                 var applied = MaterialSettingsApplier.Apply(state, avatarRoot);
 
-                Assert.AreNotSame(sourceMaterial, applied);
-                Assert.Less(Vector4.Distance(originalColor, sourceMaterial.GetColor("_Color")), 0.001f,
+                Assert.AreNotEqual(sourceMaterialPath, AssetDatabase.GetAssetPath(applied));
+                Assert.Less(Vector4.Distance(originalColor, Reload().GetColor("_Color")), 0.001f,
                     "the other object's material must be left exactly as it was");
                 Assert.Less(Vector4.Distance(newColor, applied.GetColor("_Color")), 0.001f);
                 Assert.IsFalse(string.IsNullOrEmpty(state.generatedGuid));
@@ -140,8 +140,8 @@ namespace AvatarVcs.Tests.Editor
                 LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("overwritten anyway"));
                 var applied = MaterialSettingsApplier.Apply(StateWithColor(newColor), avatarRoot);
 
-                Assert.AreSame(sourceMaterial, applied);
-                Assert.Less(Vector4.Distance(newColor, sourceMaterial.GetColor("_Color")), 0.001f);
+                AssertSameAsset(sourceMaterialPath, applied);
+                Assert.Less(Vector4.Distance(newColor, Reload().GetColor("_Color")), 0.001f);
             }
             finally
             {
@@ -181,8 +181,8 @@ namespace AvatarVcs.Tests.Editor
             var first = MaterialSettingsApplier.Apply(state, avatarRoot);
             var second = MaterialSettingsApplier.Apply(state, avatarRoot);
 
-            Assert.AreSame(first, second);
-            Assert.AreSame(sourceMaterial, second);
+            AssertSameAsset(sourceMaterialPath, first);
+            AssertSameAsset(sourceMaterialPath, second);
             CollectionAssert.IsEmpty(GeneratedMaterialsInTestDir());
         }
 
@@ -204,13 +204,13 @@ namespace AvatarVcs.Tests.Editor
             };
             state.properties.Add(new MaterialPropertyValue { name = "_Color", type = "color", value = "0,1,0,1" });
 
-            var first = MaterialSettingsApplier.Apply(state, avatarRoot);
-            first.SetColor("_Color", new Color(1f, 1f, 1f, 1f)); // simulate drift on the duplicate itself
+            MaterialSettingsApplier.Apply(state, avatarRoot);
+            Reload().SetColor("_Color", new Color(1f, 1f, 1f, 1f)); // simulate the user editing it afterwards
 
             var second = MaterialSettingsApplier.Apply(state, avatarRoot);
 
-            Assert.AreSame(first, second);
-            Assert.Less(Vector4.Distance(new Color(0f, 1f, 0f, 1f), second.GetColor("_Color")), 0.001f,
+            AssertSameAsset(sourceMaterialPath, second);
+            Assert.Less(Vector4.Distance(new Color(0f, 1f, 0f, 1f), Reload().GetColor("_Color")), 0.001f,
                 "the recorded property must be reasserted, not left at the drifted value");
         }
 
@@ -312,6 +312,17 @@ namespace AvatarVcs.Tests.Editor
         {
             Assert.IsEmpty(ShaderPropertyMap.GetProperties(null));
         }
+
+        /// <summary>
+        /// Materials are compared by asset path, not reference: LoadAssetAtPath
+        /// can hand back a different wrapper for the same asset after a save or
+        /// reimport, so AreSame is not a reliable "it's that asset" check.
+        /// </summary>
+        private static void AssertSameAsset(string expectedPath, Material actual) =>
+            Assert.AreEqual(expectedPath, AssetDatabase.GetAssetPath(actual));
+
+        /// <summary>The source material as the AssetDatabase currently holds it.</summary>
+        private Material Reload() => AssetDatabase.LoadAssetAtPath<Material>(sourceMaterialPath);
 
         private MaterialSettingsState StateWithColor(Color color)
         {

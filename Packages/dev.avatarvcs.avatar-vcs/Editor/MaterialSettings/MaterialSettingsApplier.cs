@@ -168,8 +168,14 @@ namespace AvatarVcs.Editor.MaterialSettings
             // lilToon avatar recorded 31-46 slots and a checkout wrote a
             // duplicate for every one of them, per commit, none of which the
             // user had ever edited.
-            if (!WouldChange(sourceMaterial, state.properties))
+            var probe = new DiagnosticLog();
+            if (!WouldChange(sourceMaterial, state.properties, probe))
             {
+                // Nothing to write -- but a property that could not be applied
+                // at all is still worth saying, and the real apply that would
+                // have said it never runs on this path.
+                log.AddRange(probe);
+
                 // Drop any duplicate a previous checkout made for this entry:
                 // the commit no longer claims it, so the sweeper can collect
                 // it (CheckoutOperation rewrites generatedAssets from these).
@@ -306,15 +312,18 @@ namespace AvatarVcs.Editor.MaterialSettings
         /// drifting from this one is exactly how "it renders identically but
         /// we duplicated it anyway" comes back.
         /// </summary>
-        private static bool WouldChange(Material material, List<MaterialPropertyValue> properties)
+        /// <param name="probeLog">
+        /// Collects the warnings the dry run produces. The caller decides what
+        /// to do with them: fold them in when this returns false (nothing else
+        /// will report them), drop them when it returns true (the real apply
+        /// is about to say the same thing).
+        /// </param>
+        private static bool WouldChange(Material material, List<MaterialPropertyValue> properties, DiagnosticLog probeLog)
         {
             var probe = new Material(material);
             try
             {
-                // Its own log, dropped on the floor: a property this material
-                // doesn't have is worth one warning from the real apply, not
-                // two from a dry run the user never asked for.
-                return ApplyProperties(probe, properties, new DiagnosticLog());
+                return ApplyProperties(probe, properties, probeLog);
             }
             finally
             {
@@ -353,7 +362,7 @@ namespace AvatarVcs.Editor.MaterialSettings
             {
                 if (!material.HasProperty(property.name))
                 {
-                    log.Warn($"[AvatarVCS] Duplicate material has no property '{property.name}'; skipped.");
+                    log.Warn($"[AvatarVCS] Material has no property '{property.name}'; skipped.");
                     continue;
                 }
 

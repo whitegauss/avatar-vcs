@@ -176,7 +176,14 @@ namespace AvatarVcs.Tests.Editor
         // restored -- design doc 1.4.3. Pinned separately so a fix for the
         // test above can't "work" by mutating the user's own asset.
         [Test]
-        public void Checkout_NeverMutatesTheSourceMaterialAsset()
+        // Rewritten (was Checkout_NeverMutatesTheSourceMaterialAsset). Copying
+        // the material rather than writing to it is what produced 552
+        // generated materials on a real avatar -- one per slot per commit,
+        // for slots nobody had touched. Restoring a commit now puts the
+        // recorded values back where they came from, like every other kind of
+        // tracked state. The case where the material is still left alone has
+        // its own test below.
+        public void Checkout_PutsTheRecordedColourBackOntoTheMaterialItself()
         {
             var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
             PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
@@ -191,8 +198,47 @@ namespace AvatarVcs.Tests.Editor
             BranchManager.RestoreToCommit(avatarRoot, first.commitId);
 
             var onDisk = AssetDatabase.LoadAssetAtPath<Material>($"{Dir}/Coat.mat");
-            Assert.AreEqual(Color.red, onDisk.GetColor("_Color"),
-                "the source asset keeps whatever the user last set; only the generated duplicate carries recorded values");
+            Assert.AreEqual(Color.white, onDisk.GetColor("_Color"),
+                "the commit recorded white, so checking it out makes the material white again");
+            Assert.AreEqual($"{Dir}/Coat.mat", AssetDatabase.GetAssetPath(LiveCoatRenderer().sharedMaterials[0]),
+                "and the slot still holds the user's own material, not a copy");
+        }
+
+        [Test]
+        public void Checkout_WhenSomethingOutsideTheAvatarWearsTheMaterial_LeavesItAloneAndUsesACopy()
+        {
+            var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
+            PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
+
+            avatarGuid = ContainerManager.GetAvatarGuid(avatarRoot);
+            var first = BranchManager.Commit(avatarRoot, "initial, coat is white");
+
+            coat.SetColor("_Color", Color.red);
+            EditorUtility.SetDirty(coat);
+            AssetDatabase.SaveAssets();
+
+            // Another avatar in the scene wearing the same material. Checking
+            // this one out must not restyle it.
+            var outsider = new GameObject("OtherAvatar");
+            outsider.AddComponent<MeshRenderer>().sharedMaterials = new[] { coat };
+
+            try
+            {
+                LogAssert.ignoreFailingMessages = true;
+                BranchManager.RestoreToCommit(avatarRoot, first.commitId);
+                LogAssert.ignoreFailingMessages = false;
+
+                var onDisk = AssetDatabase.LoadAssetAtPath<Material>($"{Dir}/Coat.mat");
+                Assert.AreEqual(Color.red, onDisk.GetColor("_Color"), "the shared material keeps what it had");
+
+                var worn = LiveCoatRenderer().sharedMaterials[0];
+                Assert.IsTrue(worn.name.Contains("_avatarvcs"), "this avatar wears its own copy instead");
+                Assert.AreEqual(Color.white, worn.GetColor("_Color"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(outsider);
+            }
         }
 
         // Track Properties, not containers: a renderer sitting outside
@@ -302,7 +348,7 @@ namespace AvatarVcs.Tests.Editor
         // that edited the duplicate in the meantime -- a checkout is a
         // regenerate, not a one-time stamp.
         [Test]
-        public void ReCheckout_StillOverwritesAHandEditedDuplicate()
+        public void ReCheckout_StillOverwritesAHandEditedMaterial()
         {
             var root = ContainerManager.EnsureRootWithDefaults(avatarRoot);
             PrefabUtility.InstantiatePrefab(outfitPrefab, root.transform);
@@ -311,17 +357,17 @@ namespace AvatarVcs.Tests.Editor
             var first = BranchManager.Commit(avatarRoot, "initial, coat is white");
             Assert.IsTrue(BranchManager.RestoreToCommit(avatarRoot, first.commitId).IsSuccess);
 
-            // Someone edits the generated duplicate directly.
-            var duplicate = LiveCoatRenderer().sharedMaterials[0];
-            Assert.IsTrue(duplicate.name.Contains("_avatarvcs"), "sanity check: the slot holds the generated duplicate");
-            duplicate.SetColor("_Color", Color.magenta);
-            EditorUtility.SetDirty(duplicate);
+            // Someone edits the material afterwards (it is their own file now,
+            // not a generated copy, so this is a normal thing to do).
+            var worn = LiveCoatRenderer().sharedMaterials[0];
+            worn.SetColor("_Color", Color.magenta);
+            EditorUtility.SetDirty(worn);
             AssetDatabase.SaveAssets();
 
             Assert.IsTrue(BranchManager.RestoreToCommit(avatarRoot, first.commitId).IsSuccess);
 
             Assert.AreEqual(Color.white, LiveCoatRenderer().sharedMaterials[0].GetColor("_Color"),
-                "the recorded value must win over a hand-edited duplicate");
+                "the recorded value must win over a hand edit");
         }
 
         [Test]
