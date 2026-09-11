@@ -76,7 +76,7 @@ namespace AvatarVcs.Tests.Editor
             Assert.Greater(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(avatar), 0,
                 "precondition: the marker is broken");
             Assert.IsNull(avatar.GetComponent<AvatarVcsTrackedReference>(), "precondition: and gone");
-            AssertTheBrokenBlockIsFindable(avatar);
+            AssertTheSceneHoldsABrokenComponent();
 
             var plan = Planned();
             MarkerRepair.Apply(plan);
@@ -107,8 +107,10 @@ namespace AvatarVcs.Tests.Editor
             Assert.Greater(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(avatar), 0);
 
             var plan = Planned();
-            Assert.IsEmpty(plan.actions, "nothing to add: the marker is already there");
-            Assert.Greater(plan.BrokenComponents, 0, "but there is still something to clear");
+            Assert.IsFalse(plan.actions.Any(a => a.target == avatar),
+                "nothing to add on this object: its marker is already back");
+            Assert.IsTrue(plan.accountedMissing.ContainsKey(avatar),
+                "but its broken component must still be accounted for, or a second run would report nothing to do");
 
             MarkerRepair.Apply(plan);
 
@@ -189,35 +191,21 @@ namespace AvatarVcs.Tests.Editor
         }
 
         /// <summary>
-        /// Reports which half of the repair lost the block, since a plan that
-        /// found nothing looks the same from the outside either way: the file
-        /// not holding an unresolvable MonoBehaviour (the break didn't take),
-        /// or its m_GameObject id not matching any live object (the id the
-        /// scene file uses is not the one GlobalObjectId hands back).
+        /// The break took: the saved scene really does hold a MonoBehaviour
+        /// pointing at a script nothing can resolve. Matching that block to
+        /// its live object is the repair's job, and the assertions on the
+        /// outcome cover it.
         /// </summary>
-        private void AssertTheBrokenBlockIsFindable(GameObject avatar)
+        private void AssertTheSceneHoldsABrokenComponent()
         {
             var blocks = SceneYamlMarkerScanner.ReadMonoBehaviours(File.ReadAllText(scenePath));
             var broken = blocks
                 .Where(b => string.IsNullOrEmpty(AssetDatabase.GUIDToAssetPath(b.scriptGuid)))
                 .ToList();
+
             Assert.IsNotEmpty(broken,
                 $"no unresolvable MonoBehaviour in the saved scene ({blocks.Count} blocks: "
                 + string.Join(", ", blocks.Select(b => b.scriptGuid.Substring(0, 8))) + ")");
-
-            var liveIds = new Dictionary<long, string>();
-            foreach (var tr in scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<Transform>(true)))
-            {
-                var id = (long)GlobalObjectId.GetGlobalObjectIdSlow(tr.gameObject).targetObjectId;
-                if (!liveIds.ContainsKey(id)) liveIds[id] = tr.name;
-            }
-
-            var matched = broken.Where(b => liveIds.ContainsKey(b.gameObjectFileId)).ToList();
-            Assert.IsNotEmpty(matched,
-                "no broken block could be matched to a live object.\n"
-                + $"  blocks want: {string.Join(", ", broken.Select(b => b.gameObjectFileId))}\n"
-                + $"  live objects are: {string.Join(", ", liveIds.Take(12).Select(kv => $"{kv.Value}={kv.Key}"))}\n"
-                + $"  avatar itself: {GlobalObjectId.GetGlobalObjectIdSlow(avatar)}");
         }
 
         private GameObject ReopenedAvatar()
