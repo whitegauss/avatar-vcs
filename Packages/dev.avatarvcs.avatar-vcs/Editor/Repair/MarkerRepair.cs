@@ -42,6 +42,14 @@ namespace AvatarVcs.Editor.Repair
         /// component from some other package must survive untouched.
         /// </summary>
         public readonly Dictionary<GameObject, int> accountedMissing = new Dictionary<GameObject, int>();
+
+        /// <summary>
+        /// How many broken components this plan will clear. Not the same as
+        /// actions.Count: a marker that was already put back on an earlier run
+        /// leaves its broken component behind, and clearing that is the whole
+        /// job the second time.
+        /// </summary>
+        public int BrokenComponents => accountedMissing.Values.Sum();
     }
 
     /// <summary>
@@ -91,7 +99,8 @@ namespace AvatarVcs.Editor.Repair
                 return;
             }
 
-            var blocks = SceneYamlMarkerScanner.ReadMonoBehaviours(File.ReadAllText(scene.path));
+            var sceneText = File.ReadAllText(scene.path);
+            var blocks = SceneYamlMarkerScanner.ReadMonoBehaviours(sceneText);
 
             // A script Unity can still resolve is not broken, whoever owns it.
             var missing = blocks
@@ -99,7 +108,7 @@ namespace AvatarVcs.Editor.Repair
                 .ToList();
             if (missing.Count == 0) return;
 
-            var objectsByFileId = ObjectsByFileId(scene);
+            var objectsByFileId = ObjectsByFileId(scene, SceneYamlMarkerScanner.ReadGameObjects(sceneText));
             var resolved = new List<(SceneMarkerBlock block, GameObject go)>();
             foreach (var block in missing)
             {
@@ -141,6 +150,16 @@ namespace AvatarVcs.Editor.Repair
                     continue;
                 }
 
+                // Counted whether or not a component gets added below. The
+                // block was identified as one of ours, so the broken component
+                // it describes is ours to clear -- including on a second run,
+                // where the marker is already back and the broken one is all
+                // that is left. Leaving it there is not cosmetic: Unity, the
+                // VRChat SDK and VRCQuestTools all report a missing script,
+                // and the user has no way to tell it apart from a real one.
+                plan.accountedMissing.TryGetValue(go, out var count);
+                plan.accountedMissing[go] = count + 1;
+
                 // Already repaired (or never broken): nothing to add.
                 if (HasMarker(go, kind)) continue;
 
@@ -151,8 +170,6 @@ namespace AvatarVcs.Editor.Repair
                     guid = block.avatarGuid ?? block.containerGuid,
                     path = path,
                 });
-                plan.accountedMissing.TryGetValue(go, out var count);
-                plan.accountedMissing[go] = count + 1;
             }
         }
 
@@ -188,18 +205,36 @@ namespace AvatarVcs.Editor.Repair
                 applied++;
             }
 
+            var stuck = new List<string>();
             foreach (var pair in plan.accountedMissing)
             {
                 var go = pair.Key;
                 if (go == null) continue;
 
-                // RemoveMonoBehavioursWithMissingScript takes the whole
-                // object, so it may only run where every missing script on it
-                // is one this plan just replaced.
+                // Removal takes the whole object, so it may only run where
+                // every missing script on it is one this plan accounted for.
                 if (GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(go) != pair.Value) continue;
 
                 Undo.RegisterCompleteObjectUndo(go, "Repair AvatarVCS Markers");
                 GameObjectUtility.RemoveMonoBehavioursWithMissingScript(go);
+
+                if (GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(go) == 0) continue;
+
+                // That call does nothing on a GameObject inside a prefab
+                // instance -- restructuring an instance is not something it
+                // will do -- and an avatar is a prefab instance, so this is
+                // the normal case rather than the exception. Taking the entry
+                // out of the object's own component list works there, and the
+                // components in question were added to the instance in the
+                // first place, so nothing of the prefab's is being removed.
+                if (RemoveMissingComponentEntries(go) == 0) stuck.Add(HierarchyPath(go));
+            }
+
+            if (stuck.Count > 0)
+            {
+                Debug.LogWarning($"[AvatarVCS] Restored the markers, but {stuck.Count} broken component(s) could not be "
+                    + "removed automatically. Remove them from the Inspector (the \"missing script\" entry) on:\n"
+                    + string.Join("\n", stuck.Take(10)));
             }
 
             if (applied > 0)
@@ -213,20 +248,73 @@ namespace AvatarVcs.Editor.Repair
         }
 
         /// <summary>
+        /// Deletes the missing-script entries from a GameObject's own
+        /// component list. Returns how many went.
+        ///
+        /// The supported API (GameObjectUtility.RemoveMonoBehavioursWithMissingScript)
+        /// declines on prefab instances, which is where these markers mostly
+        /// live. Editing m_Component directly is the same thing the Inspector's
+        /// own "remove" does for a script it can't load.
+        /// </summary>
+        private static int RemoveMissingComponentEntries(GameObject go)
+        {
+            var serialized = new SerializedObject(go);
+            var components = serialized.FindProperty("m_Component");
+            if (components == null || !components.isArray) return 0;
+
+            var removed = 0;
+            for (var i = components.arraySize - 1; i >= 0; i--)
+            {
+                var entry = components.GetArrayElementAtIndex(i).FindPropertyRelative("component");
+                if (entry == null || entry.objectReferenceValue != null) continue;
+
+                components.DeleteArrayElementAtIndex(i);
+                removed++;
+            }
+
+            if (removed > 0) serialized.ApplyModifiedProperties();
+
+            return removed;
+        }
+
+        /// <summary>
         /// Every GameObject in the scene, keyed by the local file id the scene
         /// file refers to it by. GlobalObjectId's targetObjectId is that id,
         /// and it is stable across the script going missing -- unlike a name
         /// or a hierarchy path, which is what makes it the thing to match on.
         /// </summary>
-        private static Dictionary<long, GameObject> ObjectsByFileId(Scene scene)
+        private static Dictionary<long, GameObject> ObjectsByFileId(
+            Scene scene, List<SceneGameObjectEntry> sceneObjects)
         {
+            // An object that came from a prefab is referred to by an id of the
+            // scene's own making, while GlobalObjectId reports the pair (which
+            // object of the prefab, which instance) -- so those need the file's
+            // own stripped entries to be translated. Everything else is
+            // referred to by exactly the id GlobalObjectId gives back.
+            var byPrefabIdentity = new Dictionary<(long source, long instance), long>();
+            foreach (var entry in sceneObjects)
+            {
+                if (entry.prefabInstanceFileId != 0)
+                    byPrefabIdentity[(entry.sourceFileId, entry.prefabInstanceFileId)] = entry.fileId;
+            }
+
             var map = new Dictionary<long, GameObject>();
             foreach (var root in scene.GetRootGameObjects())
             {
                 foreach (var transform in root.GetComponentsInChildren<Transform>(includeInactive: true))
                 {
-                    var id = GlobalObjectId.GetGlobalObjectIdSlow(transform.gameObject).targetObjectId;
-                    if (id != 0) map[(long)id] = transform.gameObject;
+                    var id = GlobalObjectId.GetGlobalObjectIdSlow(transform.gameObject);
+                    var target = unchecked((long)id.targetObjectId);
+                    var prefab = unchecked((long)id.targetPrefabId);
+
+                    if (prefab == 0)
+                    {
+                        if (target != 0) map[target] = transform.gameObject;
+                        continue;
+                    }
+
+                    if (byPrefabIdentity.TryGetValue((target, prefab), out var sceneFileId))
+                        map[sceneFileId] = transform.gameObject;
                 }
             }
 

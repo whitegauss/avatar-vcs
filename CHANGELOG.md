@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Repair Markers now actually removes the broken components, instead of leaving them beside the restored ones.** The markers came back correctly, but the "missing script" entries they replaced stayed put — so Unity, the VRChat SDK and VRCQuestTools all kept reporting missing scripts and it looked like the repair had done nothing. Unity's own remove-missing-scripts call quietly does nothing on a GameObject inside a prefab instance, which is what an avatar is; the entries are now taken off the object directly. Running Repair Markers again on a scene that was repaired by 0.9.0-poc or 0.10.0-poc finishes the job.
+
 ## [0.10.0-poc] - 2026-09-11
 
 ### Changed

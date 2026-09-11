@@ -141,6 +141,46 @@ MonoBehaviour:
             Assert.That(SceneYamlMarkerScanner.ReadMonoBehaviours(string.Empty), Is.Empty);
         }
 
+        // A GameObject that came from a prefab is written as a "stripped"
+        // entry: the scene refers to it by an id of its own, and its identity
+        // is (object inside the prefab, instance of the prefab) -- the pair
+        // GlobalObjectId reports for the live object. Matching a broken
+        // component to its object needs the translation, and an avatar is a
+        // prefab instance, so this is the normal case rather than an edge one.
+        [Test]
+        public void ReadGameObjects_KeepsWhatTiesAStrippedObjectToItsPrefab()
+        {
+            const string yaml = @"--- !u!1 &1045269335 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1906648432186579218, guid: b1d34e1d58e909247bd7fb3c972d09d4, type: 3}
+  m_PrefabInstance: {fileID: 1045269334}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &724812167
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_Name: [AvatarVCS]
+";
+            var entries = SceneYamlMarkerScanner.ReadGameObjects(yaml);
+
+            var stripped = entries.Single(e => e.fileId == 1045269335);
+            Assert.AreEqual(1906648432186579218, stripped.sourceFileId);
+            Assert.AreEqual(1045269334, stripped.prefabInstanceFileId);
+
+            var plain = entries.Single(e => e.fileId == 724812167);
+            Assert.AreEqual(0, plain.sourceFileId);
+            Assert.AreEqual(0, plain.prefabInstanceFileId);
+        }
+
+        [Test]
+        public void ReadGameObjects_IgnoresEverythingThatIsNotAGameObject()
+        {
+            Assert.IsEmpty(SceneYamlMarkerScanner.ReadGameObjects(RealSceneExcerpt)
+                .Where(e => e.fileId == 443647173));
+            Assert.IsEmpty(SceneYamlMarkerScanner.ReadGameObjects(null));
+        }
+
         private static SceneMarkerBlock Single(string yaml, string scriptGuid) =>
             SceneYamlMarkerScanner.ReadMonoBehaviours(yaml).Single(b => b.scriptGuid == scriptGuid);
     }

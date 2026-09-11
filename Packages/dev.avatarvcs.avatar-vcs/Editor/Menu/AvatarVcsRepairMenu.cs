@@ -34,6 +34,22 @@ namespace AvatarVcs.Editor.Menu
                 return;
             }
 
+            // A second run: the markers are back, and what is left is the
+            // broken components they were restored alongside.
+            if (plan.actions.Count == 0 && plan.BrokenComponents > 0)
+            {
+                var leftovers = $"Remove {plan.BrokenComponents} broken component(s)?\n\n"
+                    + "The markers themselves are already back. These are the entries the old scripts left behind, "
+                    + "which Unity, the VRChat SDK and VRCQuestTools all report as \"missing script\".";
+                if (EditorUtility.DisplayDialog("AvatarVCS — Repair Markers", leftovers, "Remove", "Cancel"))
+                {
+                    MarkerRepair.Apply(plan);
+                    Debug.Log($"[AvatarVCS] Cleared {plan.BrokenComponents} broken component(s).");
+                }
+
+                return;
+            }
+
             if (plan.actions.Count == 0)
             {
                 var body = plan.unresolved.Count == 0
@@ -66,7 +82,8 @@ namespace AvatarVcs.Editor.Menu
                 + (plan.actions.Count == 1 ? "component" : "components")
                 + " that lost their script?\n\n"
                 + string.Join("\n\n", byKind)
-                + "\n\nThe guids come from the scene file, so the avatar keeps the commit history it already had.";
+                + "\n\nThe guids come from the scene file, so the avatar keeps the commit history it already had. "
+                + $"The {plan.BrokenComponents} broken component(s) they are replacing are removed at the same time.";
 
             if (plan.unresolved.Count > 0)
             {

@@ -37,4 +37,18 @@ namespace AvatarVcs.Core.Repair
         /// </summary>
         public bool IsDataless => avatarGuid == null && containerGuid == null;
     }
+
+    /// <summary>
+    /// One GameObject document in a scene, and what ties it to a prefab.
+    /// sourceFileId/prefabInstanceFileId are 0 for an object that is just
+    /// part of the scene; for one that came from a prefab they are the id of
+    /// the object inside the prefab and the id of the instance, which is the
+    /// pair GlobalObjectId reports for the live object.
+    /// </summary>
+    public sealed class SceneGameObjectEntry
+    {
+        public long fileId;
+        public long sourceFileId;
+        public long prefabInstanceFileId;
+    }
 }

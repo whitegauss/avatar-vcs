@@ -32,7 +32,67 @@ namespace AvatarVcs.Core.Repair
         private static readonly Regex GuidField =
             new Regex(@"^\s{2}(?<name>avatarGuid|containerGuid): (?<value>[0-9a-fA-F]{32})\s*$", RegexOptions.Compiled);
 
+        private static readonly Regex CorrespondingSource =
+            new Regex(@"^\s{2}m_CorrespondingSourceObject: \{fileID: (?<fileId>-?\d+)", RegexOptions.Compiled);
+
+        private static readonly Regex PrefabInstance =
+            new Regex(@"^\s{2}m_PrefabInstance: \{fileID: (?<fileId>-?\d+)\}", RegexOptions.Compiled);
+
         private const string MonoBehaviourClassId = "114";
+        private const string GameObjectClassId = "1";
+
+        /// <summary>
+        /// Every GameObject document, with what ties it to a prefab.
+        ///
+        /// A GameObject that came from a prefab is serialized as a "stripped"
+        /// entry: the id the scene refers to it by is its own, but its
+        /// identity is (which object of the prefab, which instance of that
+        /// prefab). That pair is what GlobalObjectId reports for the live
+        /// object -- its targetObjectId is the id *inside the prefab*, not the
+        /// scene id -- so matching the two needs this, not just the scene id.
+        /// Avatars are prefab instances, so this is the normal case.
+        /// </summary>
+        public static List<SceneGameObjectEntry> ReadGameObjects(string sceneYaml)
+        {
+            var entries = new List<SceneGameObjectEntry>();
+            if (string.IsNullOrEmpty(sceneYaml)) return entries;
+
+            SceneGameObjectEntry current = null;
+            foreach (var line in sceneYaml.Split('\n'))
+            {
+                var trimmed = line.TrimEnd('\r');
+
+                var header = DocumentHeader.Match(trimmed);
+                if (header.Success)
+                {
+                    if (current != null) entries.Add(current);
+                    current = header.Groups["classId"].Value == GameObjectClassId
+                        ? new SceneGameObjectEntry
+                        {
+                            fileId = long.Parse(header.Groups["fileId"].Value, CultureInfo.InvariantCulture),
+                        }
+                        : null;
+                    continue;
+                }
+
+                if (current == null) continue;
+
+                var source = CorrespondingSource.Match(trimmed);
+                if (source.Success)
+                {
+                    current.sourceFileId = long.Parse(source.Groups["fileId"].Value, CultureInfo.InvariantCulture);
+                    continue;
+                }
+
+                var instance = PrefabInstance.Match(trimmed);
+                if (instance.Success)
+                    current.prefabInstanceFileId = long.Parse(instance.Groups["fileId"].Value, CultureInfo.InvariantCulture);
+            }
+
+            if (current != null) entries.Add(current);
+
+            return entries;
+        }
 
         public static List<SceneMarkerBlock> ReadMonoBehaviours(string sceneYaml)
         {
