@@ -125,7 +125,11 @@ namespace AvatarVcs.Tests.Editor
             var source = new GameObject(AvatarName);
             var body = new GameObject("Body");
             body.transform.SetParent(source.transform, false);
-            var prefab = PrefabUtility.SaveAsPrefabAsset(source, $"{Dir}/Avatar.prefab");
+            // Named after the instance, not the other way round: InstantiatePrefab
+            // names the instance after the prefab asset, so a prefab called
+            // "Avatar" would put an "Avatar" in the scene copy -- and there are
+            // several of those from other fixtures.
+            var prefab = PrefabUtility.SaveAsPrefabAsset(source, $"{Dir}/{AvatarName}.prefab");
             Object.DestroyImmediate(source);
 
             live = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
@@ -161,7 +165,13 @@ namespace AvatarVcs.Tests.Editor
             LogAssert.ignoreFailingMessages = false;
         }
 
-        private GameObject ReopenedAvatar() =>
-            scene.GetRootGameObjects().Single(go => go.name == AvatarName);
+        private GameObject ReopenedAvatar()
+        {
+            var roots = scene.GetRootGameObjects();
+            var avatar = roots.FirstOrDefault(go => go.name == AvatarName);
+            Assert.IsNotNull(avatar,
+                $"'{AvatarName}' is not in the reopened scene. Roots: {string.Join(", ", roots.Select(r => r.name))}");
+            return avatar;
+        }
     }
 }
