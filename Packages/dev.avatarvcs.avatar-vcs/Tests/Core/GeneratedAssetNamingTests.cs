@@ -78,5 +78,34 @@ namespace AvatarVcs.Tests.Core
         {
             Assert.IsTrue(GeneratedAssetNaming.LooksGenerated(@"Assets\AvatarVCS_Generated\Body_avatarvcs.mat"));
         }
+
+        // Real names off the avatar that turned this up: capture recorded the
+        // duplicate as the source, so each checkout duplicated the previous
+        // duplicate. 552 of these existed, six levels deep at the worst.
+        [TestCase("SmartPhone_avatarvcs", "SmartPhone")]
+        [TestCase("SmartPhone_avatarvcs 1", "SmartPhone")]
+        [TestCase("Mat_Hat_Bag_01_avatarvcs 3_avatarvcs 1_avatarvcs", "Mat_Hat_Bag_01")]
+        [TestCase("SmartPhone_avatarvcs 3_avatarvcs_avatarvcs_avatarvcs 2_avatarvcs", "SmartPhone")]
+        public void StripSuffixes_TracesADuplicateChainBackToTheOriginalName(string generated, string expected)
+        {
+            Assert.AreEqual(expected, GeneratedAssetNaming.StripSuffixes(generated));
+        }
+
+        // Same strictness as LooksGenerated: a name that merely contains the
+        // suffix is somebody else's file and must come back unchanged.
+        [TestCase("Face")]
+        [TestCase("Coat_avatarvcs_backup")]
+        [TestCase("clip_avatarvcs v2")]
+        public void StripSuffixes_LeavesNamesThatAreNotOurOutputAlone(string name)
+        {
+            Assert.AreEqual(name, GeneratedAssetNaming.StripSuffixes(name));
+        }
+
+        [Test]
+        public void StripSuffixes_NullOrEmptyComesBackUnchanged()
+        {
+            Assert.IsNull(GeneratedAssetNaming.StripSuffixes(null));
+            Assert.AreEqual("", GeneratedAssetNaming.StripSuffixes(""));
+        }
     }
 }

@@ -5,6 +5,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **A checkout writes the recorded material settings onto your material, instead of copying it first.** Copy-on-write was there so your own `.mat` files were never touched — but a copy was made for *every* material slot on the avatar, changed or not, once per commit, and the next commit then recorded the copy as the material to restore onto, so the checkout after that copied the copy. One real avatar reached 552 generated materials — 82% of every material in the project, names six levels deep like `SmartPhone_avatarvcs 3_avatarvcs_avatarvcs_avatarvcs 2_avatarvcs.mat` — all of them rendering identically to the originals. Settings are now applied the same way every other kind of tracked state is: written onto the thing they belong to. Present since 0.5.0-poc, which is when shader settings first started being recorded for real avatars.
+- **A material something outside the avatar is also using is copied rather than changed**, so checking out one avatar can't restyle another, and the console says which object caused it. Same for a material inside a read-only package. There is now exactly **one** copy per material, reused for good, rather than one per commit.
+
+### Added
+
+- **`Tools > AvatarVCS > Clean Up Generated Materials`**, to collect the copies already on disk. It deletes only files that look like this tool's own output, that no commit of any avatar still names, and that no renderer in an open scene is wearing — and if any commit can't be read it deletes nothing at all rather than guessing. On the avatar above that is 552 files and about 13 MB.
+- **`Tools > AvatarVCS > Overwrite Shared Materials`** (off by default): turn it on and a shared material is changed in place too, no copy. For a project where the materials belong to one avatar anyway, the copy is just a file in the way.
+
 ## [0.9.0-poc] - 2026-09-10
 
 ### Added

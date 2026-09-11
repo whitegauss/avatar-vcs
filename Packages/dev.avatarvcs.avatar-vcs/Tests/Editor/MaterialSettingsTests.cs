@@ -5,6 +5,7 @@ using AvatarVcs.Core.Model;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace AvatarVcs.Tests.Editor
 {
@@ -57,6 +58,9 @@ namespace AvatarVcs.Tests.Editor
         [SetUp]
         public void SetUp()
         {
+            // A checkout writes onto this material now, so put it back before
+            // each test rather than letting one test's edit reach the next.
+            sourceMaterial.SetColor("_Color", originalColor);
             avatarRoot = new GameObject("Avatar");
             var body = new GameObject("Body");
             body.transform.SetParent(avatarRoot.transform);
@@ -70,43 +74,80 @@ namespace AvatarVcs.Tests.Editor
             if (avatarRoot != null) Object.DestroyImmediate(avatarRoot);
         }
 
+        // Rewritten (was Apply_DuplicatesMaterial_LeavesSourceUnchanged_
+        // AndPointsRendererAtDuplicate). Copy-on-write was the original design
+        // (design doc 1.4.3) and it produced 552 generated materials on a real
+        // avatar -- one per slot per commit, for slots the user had never
+        // touched. The recorded settings are now written onto the material
+        // itself, like every other kind of tracked state; the copy survives
+        // only for a material this checkout has no business changing (shared
+        // with something outside the avatar, or read-only), covered below.
         [Test]
-        public void Apply_DuplicatesMaterial_LeavesSourceUnchanged_AndPointsRendererAtDuplicate()
+        public void Apply_WritesTheRecordedSettingsOntoTheMaterialItself()
         {
-            var state = new MaterialSettingsState
-            {
-                targetPath = "Body",
-                slot = 0,
-                sourceMaterialGuid = sourceMaterialGuid,
-                shader = "lilToon",
-            };
             var newColor = new Color(0f, 1f, 0f, 1f);
-            state.properties.Add(new MaterialPropertyValue
-            {
-                name = "_Color",
-                type = "color",
-                value = $"{newColor.r},{newColor.g},{newColor.b},{newColor.a}",
-            });
+            var state = StateWithColor(newColor);
 
-            var duplicate = MaterialSettingsApplier.Apply(state, avatarRoot);
+            var applied = MaterialSettingsApplier.Apply(state, avatarRoot);
 
-            Assert.IsNotNull(duplicate);
-            Assert.AreNotSame(sourceMaterial, duplicate);
-            Assert.Less(Vector4.Distance(originalColor, sourceMaterial.GetColor("_Color")), 0.001f);
-            Assert.Less(Vector4.Distance(newColor, duplicate.GetColor("_Color")), 0.001f);
+            AssertSameAsset(sourceMaterialPath, applied);
+            Assert.Less(Vector4.Distance(newColor, Reload().GetColor("_Color")), 0.001f);
+            Assert.IsTrue(string.IsNullOrEmpty(state.generatedGuid), "nothing should have been generated");
+            CollectionAssert.IsEmpty(GeneratedMaterialsInTestDir());
 
             var renderer = avatarRoot.transform.Find("Body").GetComponent<MeshRenderer>();
-            // Compare by asset identity, not reference equality: Renderer.
-            // sharedMaterials allocates a fresh array (and sometimes a
-            // fresh wrapper) on every read, which isn't always AreSame to a
-            // previously-held reference even when nothing was reassigned.
-            Assert.AreEqual(AssetDatabase.GetAssetPath(duplicate), AssetDatabase.GetAssetPath(renderer.sharedMaterials[0]));
+            Assert.AreEqual(sourceMaterialPath, AssetDatabase.GetAssetPath(renderer.sharedMaterials[0]));
+        }
 
-            var duplicatePath = AssetDatabase.GetAssetPath(duplicate);
-            Assert.IsFalse(string.IsNullOrEmpty(duplicatePath), "duplicate must be saved as an asset");
-            var duplicateDir = System.IO.Path.GetDirectoryName(duplicatePath)?.Replace('\\', '/');
-            var sourceDir = System.IO.Path.GetDirectoryName(sourceMaterialPath)?.Replace('\\', '/');
-            Assert.AreEqual(sourceDir, duplicateDir);
+        [Test]
+        public void Apply_WhenSomethingOutsideTheAvatarWearsIt_CopiesRatherThanChangingIt()
+        {
+            var outsider = new GameObject("SomeoneElse");
+            outsider.AddComponent<MeshRenderer>().sharedMaterials = new[] { sourceMaterial };
+
+            try
+            {
+                var newColor = new Color(0f, 1f, 0f, 1f);
+                var state = StateWithColor(newColor);
+
+                LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("also used by 'SomeoneElse'"));
+                var applied = MaterialSettingsApplier.Apply(state, avatarRoot);
+
+                Assert.AreNotEqual(sourceMaterialPath, AssetDatabase.GetAssetPath(applied));
+                Assert.Less(Vector4.Distance(originalColor, Reload().GetColor("_Color")), 0.001f,
+                    "the other object's material must be left exactly as it was");
+                Assert.Less(Vector4.Distance(newColor, applied.GetColor("_Color")), 0.001f);
+                Assert.IsFalse(string.IsNullOrEmpty(state.generatedGuid));
+            }
+            finally
+            {
+                Object.DestroyImmediate(outsider);
+                foreach (var path in GeneratedMaterialsInTestDir()) AssetDatabase.DeleteAsset(path);
+            }
+        }
+
+        [Test]
+        public void Apply_SharedMaterialWithOverwriteTurnedOn_ChangesTheMaterialAnyway()
+        {
+            var outsider = new GameObject("SomeoneElse");
+            outsider.AddComponent<MeshRenderer>().sharedMaterials = new[] { sourceMaterial };
+            MaterialSettingsApplier.OverwriteSharedMaterials = true;
+
+            try
+            {
+                var newColor = new Color(0f, 1f, 0f, 1f);
+
+                LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("overwritten anyway"));
+                var applied = MaterialSettingsApplier.Apply(StateWithColor(newColor), avatarRoot);
+
+                AssertSameAsset(sourceMaterialPath, applied);
+                Assert.Less(Vector4.Distance(newColor, Reload().GetColor("_Color")), 0.001f);
+            }
+            finally
+            {
+                MaterialSettingsApplier.OverwriteSharedMaterials = false;
+                Object.DestroyImmediate(outsider);
+            }
         }
 
         [Test]
@@ -127,26 +168,22 @@ namespace AvatarVcs.Tests.Editor
             Assert.IsFalse(state.properties.Any(p => p.name == "_OutlineWidth"));
         }
 
+        // Rewritten (was Apply_CalledTwiceWithSameState_ReusesGeneratedDuplicate).
+        // It used to guard against a second duplicate appearing; with the
+        // settings written onto the material itself there is nothing to
+        // duplicate twice, and the property worth pinning is that a second
+        // checkout of the same commit is a no-op rather than more files.
         [Test]
-        public void Apply_CalledTwiceWithSameState_ReusesGeneratedDuplicate()
+        public void Apply_CalledTwiceWithSameState_ChangesNothingTheSecondTime()
         {
-            var state = new MaterialSettingsState
-            {
-                targetPath = "Body",
-                slot = 0,
-                sourceMaterialGuid = sourceMaterialGuid,
-                shader = "lilToon",
-            };
-            state.properties.Add(new MaterialPropertyValue { name = "_Color", type = "color", value = "0,1,0,1" });
+            var state = StateWithColor(new Color(0f, 1f, 0f, 1f));
 
             var first = MaterialSettingsApplier.Apply(state, avatarRoot);
-            Assert.IsFalse(string.IsNullOrEmpty(state.generatedGuid));
-            var firstPath = AssetDatabase.GetAssetPath(first);
-
             var second = MaterialSettingsApplier.Apply(state, avatarRoot);
 
-            Assert.AreSame(first, second, "second Apply should reuse the same duplicate, not create a new one");
-            Assert.AreEqual(firstPath, AssetDatabase.GetAssetPath(second));
+            AssertSameAsset(sourceMaterialPath, first);
+            AssertSameAsset(sourceMaterialPath, second);
+            CollectionAssert.IsEmpty(GeneratedMaterialsInTestDir());
         }
 
         [Test]
@@ -167,13 +204,13 @@ namespace AvatarVcs.Tests.Editor
             };
             state.properties.Add(new MaterialPropertyValue { name = "_Color", type = "color", value = "0,1,0,1" });
 
-            var first = MaterialSettingsApplier.Apply(state, avatarRoot);
-            first.SetColor("_Color", new Color(1f, 1f, 1f, 1f)); // simulate drift on the duplicate itself
+            MaterialSettingsApplier.Apply(state, avatarRoot);
+            Reload().SetColor("_Color", new Color(1f, 1f, 1f, 1f)); // simulate the user editing it afterwards
 
             var second = MaterialSettingsApplier.Apply(state, avatarRoot);
 
-            Assert.AreSame(first, second);
-            Assert.Less(Vector4.Distance(new Color(0f, 1f, 0f, 1f), second.GetColor("_Color")), 0.001f,
+            AssertSameAsset(sourceMaterialPath, second);
+            Assert.Less(Vector4.Distance(new Color(0f, 1f, 0f, 1f), Reload().GetColor("_Color")), 0.001f,
                 "the recorded property must be reasserted, not left at the drifted value");
         }
 
@@ -275,6 +312,41 @@ namespace AvatarVcs.Tests.Editor
         {
             Assert.IsEmpty(ShaderPropertyMap.GetProperties(null));
         }
+
+        /// <summary>
+        /// Materials are compared by asset path, not reference: LoadAssetAtPath
+        /// can hand back a different wrapper for the same asset after a save or
+        /// reimport, so AreSame is not a reliable "it's that asset" check.
+        /// </summary>
+        private static void AssertSameAsset(string expectedPath, Material actual) =>
+            Assert.AreEqual(expectedPath, AssetDatabase.GetAssetPath(actual));
+
+        /// <summary>The source material as the AssetDatabase currently holds it.</summary>
+        private Material Reload() => AssetDatabase.LoadAssetAtPath<Material>(sourceMaterialPath);
+
+        private MaterialSettingsState StateWithColor(Color color)
+        {
+            var state = new MaterialSettingsState
+            {
+                targetPath = "Body",
+                slot = 0,
+                sourceMaterialGuid = sourceMaterialGuid,
+                shader = "lilToon",
+            };
+            state.properties.Add(new MaterialPropertyValue
+            {
+                name = "_Color",
+                type = "color",
+                value = $"{color.r},{color.g},{color.b},{color.a}",
+            });
+            return state;
+        }
+
+        private static System.Collections.Generic.List<string> GeneratedMaterialsInTestDir() =>
+            AssetDatabase.FindAssets("t:Material", new[] { TestAssetDir })
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Where(AvatarVcs.Core.Naming.GeneratedAssetNaming.LooksGenerated)
+                .ToList();
 
         [Test]
         public void ShaderPropertyMap_GetProperties_EnumeratesColorFloatAndTextureFromTheShaderItself()

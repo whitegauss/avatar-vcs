@@ -66,7 +66,13 @@ namespace AvatarVcs.Tests.Editor
         }
 
         [SetUp]
-        public void SetUp() => avatarRoot = new GameObject("Avatar");
+        public void SetUp()
+        {
+            // A checkout writes recorded settings onto the material itself
+            // now, so put the shared fixture asset back before each test.
+            matA.SetColor("_Color", Color.white);
+            avatarRoot = new GameObject("Avatar");
+        }
 
         [TearDown]
         public void TearDown()
@@ -199,11 +205,14 @@ namespace AvatarVcs.Tests.Editor
             var freshOutfit = ContainerManager.GetContainers(root).Single(c => c.name == "outfit_a").Find("Outfit").gameObject;
             var applied = freshOutfit.GetComponent<SkinnedMeshRenderer>().sharedMaterials[0];
 
-            StringAssert.Contains("_avatarvcs", applied.name, "slot points at the generated duplicate, not the source");
+            // The recorded settings go onto the material itself now (they used
+            // to go onto a copy, which is what buried a real project under 552
+            // generated materials). Nothing here is shared outside the avatar,
+            // so there is no copy.
+            Assert.AreEqual(MatPath(matA), AssetDatabase.GetAssetPath(applied),
+                "the slot holds the material the settings were recorded for");
             Assert.Less(Vector4.Distance(new Color(0f, 1f, 0f, 1f), applied.GetColor("_Color")), 0.001f,
-                "recorded main color re-applied onto the duplicate");
-            Assert.AreNotEqual(new Color(0f, 1f, 0f, 1f), matA.GetColor("_Color"),
-                "the source material asset is never mutated");
+                "recorded main color re-applied");
         }
 
         [Test]

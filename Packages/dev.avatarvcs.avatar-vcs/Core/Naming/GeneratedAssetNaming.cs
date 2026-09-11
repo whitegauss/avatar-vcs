@@ -62,6 +62,36 @@ namespace AvatarVcs.Core.Naming
         /// overlap is inherent to a name-based scheme; the extension and
         /// folder constraints narrow it to the one shape we actually emit.
         /// </summary>
+        /// <summary>
+        /// The name the duplicate was made from: every "_avatarvcs" and
+        /// uniquifier stripped off the end, repeatedly.
+        ///
+        /// Repeatedly, because duplicates used to be made *of duplicates*.
+        /// Capture recorded whichever material the renderer was pointing at,
+        /// and after a checkout that is the duplicate -- so the next checkout
+        /// duplicated that, and a real avatar accumulated names like
+        /// "SmartPhone_avatarvcs 3_avatarvcs_avatarvcs_avatarvcs 2_avatarvcs".
+        /// Capture now resolves back to the source
+        /// (GeneratedMaterialSource), and this is how the ones already on
+        /// disk are traced back to what they came from.
+        ///
+        /// Name-based, so it only works while the duplicate still sits beside
+        /// its source under its generated name; GeneratedMaterialSource asks
+        /// the asset itself first and only falls back to this.
+        /// </summary>
+        public static string StripSuffixes(string fileNameWithoutExtension)
+        {
+            if (string.IsNullOrEmpty(fileNameWithoutExtension)) return fileNameWithoutExtension;
+
+            var name = fileNameWithoutExtension;
+            while (true)
+            {
+                var stripped = NamePattern.Replace(name, string.Empty);
+                if (stripped == name || stripped.Length == 0) return name;
+                name = stripped;
+            }
+        }
+
         public static bool LooksGenerated(string assetPath)
         {
             if (string.IsNullOrEmpty(assetPath)) return false;
