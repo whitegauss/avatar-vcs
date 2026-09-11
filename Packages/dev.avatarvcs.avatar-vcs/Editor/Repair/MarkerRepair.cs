@@ -99,7 +99,8 @@ namespace AvatarVcs.Editor.Repair
                 return;
             }
 
-            var blocks = SceneYamlMarkerScanner.ReadMonoBehaviours(File.ReadAllText(scene.path));
+            var sceneText = File.ReadAllText(scene.path);
+            var blocks = SceneYamlMarkerScanner.ReadMonoBehaviours(sceneText);
 
             // A script Unity can still resolve is not broken, whoever owns it.
             var missing = blocks
@@ -107,7 +108,7 @@ namespace AvatarVcs.Editor.Repair
                 .ToList();
             if (missing.Count == 0) return;
 
-            var objectsByFileId = ObjectsByFileId(scene);
+            var objectsByFileId = ObjectsByFileId(scene, SceneYamlMarkerScanner.ReadGameObjects(sceneText));
             var resolved = new List<(SceneMarkerBlock block, GameObject go)>();
             foreach (var block in missing)
             {
@@ -282,15 +283,38 @@ namespace AvatarVcs.Editor.Repair
         /// and it is stable across the script going missing -- unlike a name
         /// or a hierarchy path, which is what makes it the thing to match on.
         /// </summary>
-        private static Dictionary<long, GameObject> ObjectsByFileId(Scene scene)
+        private static Dictionary<long, GameObject> ObjectsByFileId(
+            Scene scene, List<SceneGameObjectEntry> sceneObjects)
         {
+            // An object that came from a prefab is referred to by an id of the
+            // scene's own making, while GlobalObjectId reports the pair (which
+            // object of the prefab, which instance) -- so those need the file's
+            // own stripped entries to be translated. Everything else is
+            // referred to by exactly the id GlobalObjectId gives back.
+            var byPrefabIdentity = new Dictionary<(long source, long instance), long>();
+            foreach (var entry in sceneObjects)
+            {
+                if (entry.prefabInstanceFileId != 0)
+                    byPrefabIdentity[(entry.sourceFileId, entry.prefabInstanceFileId)] = entry.fileId;
+            }
+
             var map = new Dictionary<long, GameObject>();
             foreach (var root in scene.GetRootGameObjects())
             {
                 foreach (var transform in root.GetComponentsInChildren<Transform>(includeInactive: true))
                 {
-                    var id = GlobalObjectId.GetGlobalObjectIdSlow(transform.gameObject).targetObjectId;
-                    if (id != 0) map[(long)id] = transform.gameObject;
+                    var id = GlobalObjectId.GetGlobalObjectIdSlow(transform.gameObject);
+                    var target = unchecked((long)id.targetObjectId);
+                    var prefab = unchecked((long)id.targetPrefabId);
+
+                    if (prefab == 0)
+                    {
+                        if (target != 0) map[target] = transform.gameObject;
+                        continue;
+                    }
+
+                    if (byPrefabIdentity.TryGetValue((target, prefab), out var sceneFileId))
+                        map[sceneFileId] = transform.gameObject;
                 }
             }
 
