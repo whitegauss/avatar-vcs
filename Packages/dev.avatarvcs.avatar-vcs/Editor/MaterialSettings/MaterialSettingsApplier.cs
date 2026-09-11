@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using AvatarVcs.Core.Diagnostics;
 using AvatarVcs.Core.MaterialSettings;
 using AvatarVcs.Core.Naming;
@@ -59,6 +60,56 @@ namespace AvatarVcs.Editor.MaterialSettings
             if (saveBatchDepth == 0) AssetDatabase.SaveAssets();
         }
 
+        private const string OverwriteSharedPref = "AvatarVcs.OverwriteSharedMaterials";
+
+        /// <summary>
+        /// Whether a material something outside the avatar is also wearing may
+        /// be written to anyway.
+        ///
+        /// Off by default, and the warning that fires instead names this, so
+        /// the choice is the user's and they find out it exists at the moment
+        /// it matters. The safe direction is the default: an avatar quietly
+        /// changing because a different avatar was checked out is the kind of
+        /// surprise there is no undo for.
+        /// </summary>
+        public static bool OverwriteSharedMaterials
+        {
+            get => EditorPrefs.GetBool(OverwriteSharedPref, false);
+            set => EditorPrefs.SetBool(OverwriteSharedPref, value);
+        }
+
+        /// <summary>
+        /// The name of something outside avatarRoot that wears this material,
+        /// or null when nothing does.
+        ///
+        /// Renderers inside prefab *assets* are skipped: the avatar in the
+        /// scene is usually a prefab instance, so its own asset would
+        /// otherwise report every one of its materials as shared. That leaves
+        /// a material used only by a prefab (or a closed scene) undetected --
+        /// the same open-scenes-only limit the rest of the tool works under.
+        /// </summary>
+        private static string SharedOutside(Material material, GameObject avatarRoot)
+        {
+            foreach (var renderer in Resources.FindObjectsOfTypeAll<Renderer>())
+            {
+                if (renderer == null || EditorUtility.IsPersistent(renderer.gameObject)) continue;
+                if (renderer.transform.IsChildOf(avatarRoot.transform)) continue;
+                if (!renderer.sharedMaterials.Any(m => m == material)) continue;
+
+                return renderer.gameObject.name;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// A material inside a package is read-only: AssetDatabase can't write
+        /// there, and it isn't the user's file to change either.
+        /// </summary>
+        private static bool IsWritable(string assetPath) =>
+            !string.IsNullOrEmpty(assetPath)
+            && assetPath.Replace('\\', '/').StartsWith("Assets/", StringComparison.Ordinal);
+
         public static Material Apply(MaterialSettingsState state, GameObject avatarRoot, DiagnosticLog log = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -104,47 +155,84 @@ namespace AvatarVcs.Editor.MaterialSettings
             if (sourceMaterial == null)
                 throw new InvalidOperationException($"Asset at '{sourcePath}' is not a Material.");
 
-            // Reuse a previously-generated duplicate for this exact state if
-            // it's still there, instead of creating another one on every
-            // checkout of the same commit. Still re-applies state.properties
-            // onto it every time: a checkout is supposed to be a regenerate,
-            // not a one-time stamp -- if the duplicate was hand-edited (or
-            // came from a since-replaced commit that reused this guid), the
-            // recorded values must win, same as containers always destroying
-            // and rebuilding rather than trusting whatever's already there.
-            if (!string.IsNullOrEmpty(state.generatedGuid))
+            // Before anything is generated: when the recorded values are
+            // already what the source material holds, the source *is* the
+            // recorded state and duplicating it buys nothing. The copy would
+            // not even be byte-identical -- writing every recorded property
+            // out explicitly materialises defaults the source never
+            // serialised -- so nothing downstream could tell the two apart
+            // and collapse them again.
+            //
+            // This is where the volume came from. materialSettings records
+            // every slot whose shader is supported, changed or not, so a real
+            // lilToon avatar recorded 31-46 slots and a checkout wrote a
+            // duplicate for every one of them, per commit, none of which the
+            // user had ever edited.
+            if (!WouldChange(sourceMaterial, state.properties))
             {
-                var existingPath = AssetDatabase.GUIDToAssetPath(state.generatedGuid);
-                var existing = string.IsNullOrEmpty(existingPath) ? null : AssetDatabase.LoadAssetAtPath<Material>(existingPath);
-                if (existing != null)
-                {
-                    // Re-checking out the same commit normally finds the
-                    // duplicate already holding these values. Writing them
-                    // back anyway would dirty the asset and make the flush
-                    // real work every time, so only touch it when a value
-                    // actually differs.
-                    if (ApplyProperties(existing, state.properties, log))
-                    {
-                        EditorUtility.SetDirty(existing);
-                        SaveUnlessBatched();
-                    }
-
-                    PointRendererAt(renderer, state.slot, state.targetPath, existing);
-                    return existing;
-                }
+                // Drop any duplicate a previous checkout made for this entry:
+                // the commit no longer claims it, so the sweeper can collect
+                // it (CheckoutOperation rewrites generatedAssets from these).
+                state.generatedGuid = null;
+                PointRendererAt(renderer, state.slot, state.targetPath, sourceMaterial);
+                return sourceMaterial;
             }
 
-            // Copy-constructing reads sourceMaterial but never writes to it.
-            // Name/placement come from GeneratedAssetNaming so the deletion
-            // guard in CommitStore recognises exactly what we emit (KAN-76).
-            var duplicate = new Material(sourceMaterial)
+            // The recorded settings go onto the user's own material. A
+            // separate copy per commit is what buried a real project under 552
+            // generated materials; the settings are the thing being version-
+            // controlled, and every other kind of tracked state (BlendShape
+            // weights, component fields, active flags) is likewise written
+            // straight onto the object it belongs to.
+            //
+            // Two cases still can't write there, and both fall through to the
+            // one duplicate below: a material inside a read-only package, and
+            // one that something outside this avatar is also wearing --
+            // changing that would reach into work this checkout was never
+            // asked to touch.
+            var sourceGuid = AssetDatabase.AssetPathToGUID(sourcePath);
+            var sharedWith = SharedOutside(sourceMaterial, avatarRoot);
+            var writable = IsWritable(sourcePath);
+
+            if (writable && (sharedWith == null || OverwriteSharedMaterials))
             {
-                name = GeneratedAssetNaming.DuplicateName(sourceMaterial.name),
-            };
-            ApplyProperties(duplicate, state.properties, log);
+                if (sharedWith != null)
+                {
+                    log.Warn($"[AvatarVCS] '{sourcePath}' is also used by '{sharedWith}', outside this avatar, "
+                        + "and was overwritten anyway because Tools > AvatarVCS > Overwrite Shared Materials is on.");
+                }
+
+                if (ApplyProperties(sourceMaterial, state.properties, log))
+                {
+                    EditorUtility.SetDirty(sourceMaterial);
+                    SaveUnlessBatched();
+                }
+
+                // Any duplicate an older checkout made for this entry is no
+                // longer claimed by the commit, so the sweeper can collect it
+                // (CheckoutOperation rewrites generatedAssets from these).
+                state.generatedGuid = null;
+                PointRendererAt(renderer, state.slot, state.targetPath, sourceMaterial);
+                return sourceMaterial;
+            }
+
+            if (sharedWith != null)
+            {
+                log.Warn($"[AvatarVCS] '{sourcePath}' is also used by '{sharedWith}', outside this avatar, so this "
+                    + "avatar gets its own copy of it instead of that material being changed. "
+                    + "Turn on Tools > AvatarVCS > Overwrite Shared Materials to change the material itself.");
+            }
+
+            // Exactly one duplicate per source material, at a fixed path,
+            // reused for the life of the project -- not one per commit. Only
+            // one commit's state is ever live in the scene, so the duplicate
+            // is a working copy of whatever is currently checked out, and
+            // re-applying the recorded values onto it is the same
+            // destroy-and-regenerate contract containers have.
+            var duplicateName = GeneratedAssetNaming.DuplicateName(sourceMaterial.name);
 
             var directory = System.IO.Path.GetDirectoryName(sourcePath)?.Replace('\\', '/');
-            if (string.IsNullOrEmpty(directory) || directory.StartsWith("Packages/") || directory == "Packages")
+            if (!writable || string.IsNullOrEmpty(directory))
             {
                 // A source material inside an immutable/read-only UPM
                 // package (Packages/...) can't have a sibling asset written
@@ -153,19 +241,85 @@ namespace AvatarVcs.Editor.MaterialSettings
                 if (!AssetDatabase.IsValidFolder(directory))
                     AssetDatabase.CreateFolder("Assets", System.IO.Path.GetFileName(GeneratedAssetNaming.GeneratedFolder));
             }
-            var assetPath = AssetDatabase.GenerateUniqueAssetPath(
-                $"{directory}/{duplicate.name}{GeneratedAssetNaming.MaterialExtension}");
-            AssetDatabase.CreateAsset(duplicate, assetPath);
+
+            var canonicalPath = $"{directory}/{duplicateName}{GeneratedAssetNaming.MaterialExtension}";
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(canonicalPath);
+
+            // Somebody else's asset sitting on the name we want. Very
+            // unlikely, and still not ours to overwrite.
+            if (existing != null && GeneratedMaterialSource.ResolveSourceGuid(canonicalPath) != sourceGuid)
+            {
+                canonicalPath = AssetDatabase.GenerateUniqueAssetPath(canonicalPath);
+                existing = null;
+            }
+
+            if (existing != null)
+            {
+                // Only write when a value actually differs: re-checking out
+                // the same commit normally finds the duplicate already
+                // correct, and dirtying it would make every checkout flush
+                // the asset database for nothing.
+                if (ApplyProperties(existing, state.properties, log))
+                {
+                    EditorUtility.SetDirty(existing);
+                    SaveUnlessBatched();
+                }
+
+                state.generatedGuid = AssetDatabase.AssetPathToGUID(canonicalPath);
+                PointRendererAt(renderer, state.slot, state.targetPath, existing);
+                return existing;
+            }
+
+            // Copy-constructing reads sourceMaterial but never writes to it.
+            // Name/placement come from GeneratedAssetNaming so the deletion
+            // guard in CommitStore recognises exactly what we emit (KAN-76).
+            var duplicate = new Material(sourceMaterial) { name = duplicateName };
+            ApplyProperties(duplicate, state.properties, log);
+
+            AssetDatabase.CreateAsset(duplicate, canonicalPath);
             SaveUnlessBatched();
+
+            // The link back to what this was made from, written into the
+            // duplicate's own .meta so capture can resolve it later even
+            // after a rename or a move (GeneratedMaterialSource). Before the
+            // reload below, not after: it re-imports the asset, which is
+            // exactly what makes an already-held reference stale.
+            GeneratedMaterialSource.Record(canonicalPath, sourceGuid);
+
             // CreateAsset can trigger a reimport that leaves the pre-save
             // reference stale; reload so callers and the renderer get the
             // same canonical instance that later AssetDatabase lookups see.
-            duplicate = AssetDatabase.LoadAssetAtPath<Material>(assetPath);
+            duplicate = AssetDatabase.LoadAssetAtPath<Material>(canonicalPath);
 
-            state.generatedGuid = AssetDatabase.AssetPathToGUID(assetPath);
+            state.generatedGuid = AssetDatabase.AssetPathToGUID(canonicalPath);
             PointRendererAt(renderer, state.slot, state.targetPath, duplicate);
 
             return duplicate;
+        }
+
+        /// <summary>
+        /// Whether applying these properties to material would actually
+        /// change it.
+        ///
+        /// Runs the real ApplyProperties against a throwaway in-memory copy
+        /// rather than reimplementing the comparison. A second implementation
+        /// drifting from this one is exactly how "it renders identically but
+        /// we duplicated it anyway" comes back.
+        /// </summary>
+        private static bool WouldChange(Material material, List<MaterialPropertyValue> properties)
+        {
+            var probe = new Material(material);
+            try
+            {
+                // Its own log, dropped on the floor: a property this material
+                // doesn't have is worth one warning from the real apply, not
+                // two from a dry run the user never asked for.
+                return ApplyProperties(probe, properties, new DiagnosticLog());
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(probe);
+            }
         }
 
         /// <summary>

@@ -129,7 +129,14 @@ namespace AvatarVcs.Editor.AvatarReferences
 
                 try
                 {
-                    into.Add(MaterialSettingsCapture.Capture(material, material.shader.name, relPath, slot));
+                    // A checkout points the slot at a generated duplicate, so
+                    // capturing "the material that is assigned" recorded the
+                    // duplicate as the thing to restore onto -- and the next
+                    // checkout duplicated that. Record what it was made from
+                    // instead; the values still come off the assigned
+                    // material, which is where the user's edits are.
+                    into.Add(MaterialSettingsCapture.Capture(
+                        material, material.shader.name, relPath, slot, GeneratedMaterialSource.Resolve(material)));
                 }
                 catch (InvalidOperationException)
                 {

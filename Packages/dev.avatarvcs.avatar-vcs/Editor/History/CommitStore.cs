@@ -299,7 +299,7 @@ namespace AvatarVcs.Editor.History
         /// rest of the tool has, and far better than the previous behaviour
         /// of not looking at the scene at all.
         /// </summary>
-        private static HashSet<string> MaterialGuidsUsedInLoadedScenes()
+        internal static HashSet<string> MaterialGuidsUsedInLoadedScenes()
         {
             var guids = new HashSet<string>();
 

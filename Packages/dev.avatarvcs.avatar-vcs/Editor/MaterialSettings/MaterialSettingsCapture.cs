@@ -16,14 +16,23 @@ namespace AvatarVcs.Editor.MaterialSettings
     /// </summary>
     public static class MaterialSettingsCapture
     {
-        public static MaterialSettingsState Capture(Material material, string shaderName, string targetPath, int slot)
+        /// <param name="sourceMaterial">
+        /// What the recorded values should be restored *onto* -- the user's
+        /// own material -- when the one actually assigned to the renderer is
+        /// a duplicate this package generated. Values always come from
+        /// <paramref name="material"/> (the duplicate carries whatever the
+        /// user tuned after a checkout); only the guid comes from here.
+        /// Defaults to material itself, which is the normal case.
+        /// </param>
+        public static MaterialSettingsState Capture(
+            Material material, string shaderName, string targetPath, int slot, Material sourceMaterial = null)
         {
             if (material == null) throw new ArgumentNullException(nameof(material));
             if (string.IsNullOrEmpty(shaderName)) throw new ArgumentException("shaderName must not be empty.", nameof(shaderName));
             if (!ShaderPropertyMap.IsSupported(shaderName))
                 throw new NotSupportedException($"Shader '{shaderName}' is not supported (see ShaderPropertyMap).");
 
-            var assetPath = AssetDatabase.GetAssetPath(material);
+            var assetPath = AssetDatabase.GetAssetPath(sourceMaterial != null ? sourceMaterial : material);
             var guid = string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.AssetPathToGUID(assetPath);
             if (string.IsNullOrEmpty(guid))
                 throw new InvalidOperationException("material must be a saved asset to be captured.");
