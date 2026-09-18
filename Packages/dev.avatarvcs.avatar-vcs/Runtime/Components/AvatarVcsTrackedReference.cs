@@ -17,7 +17,7 @@ namespace AvatarVcs.Runtime
     /// </summary>
     [AddComponentMenu("")]
     [DisallowMultipleComponent]
-    public class AvatarVcsTrackedReference : MonoBehaviour
+    public class AvatarVcsTrackedReference : MonoBehaviour, IAvatarVcsEditorOnly
     {
     }
 }

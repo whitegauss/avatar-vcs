@@ -7,12 +7,17 @@ namespace AvatarVcs.Runtime
     /// <summary>
     /// Marker component identifying the "[AvatarVCS]" management root under an
     /// avatar. Carries an immutable avatarGuid used to key commit history
-    /// storage (design doc 1.3.3), independent of GameObject name or of any
-    /// VRChat SDK type (kept dependency-free).
+    /// storage (design doc 1.3.3), independent of GameObject name.
+    ///
+    /// It is no longer independent of every VRChat SDK type: losing this
+    /// component loses the avatarGuid and with it the only key the stored
+    /// history has, and the SDK's "Auto Fix" destroys any component its
+    /// whitelist doesn't name. IAvatarVcsEditorOnly is what keeps this out of
+    /// that list; see it for the whole trade.
     /// </summary>
     [AddComponentMenu("")]
     [DisallowMultipleComponent]
-    public class AvatarVcsRoot : MonoBehaviour
+    public class AvatarVcsRoot : MonoBehaviour, IAvatarVcsEditorOnly
     {
         // Must match AvatarVcs.Editor.Core.ContainerManager.RootName. Kept as
         // a separate literal since Runtime can't reference the Editor
