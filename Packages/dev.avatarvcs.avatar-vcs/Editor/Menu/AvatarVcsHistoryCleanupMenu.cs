@@ -7,14 +7,14 @@ using UnityEngine;
 namespace AvatarVcs.Editor.Menu
 {
     /// <summary>
-    /// "Clean Up Orphaned History": removes stored histories whose avatar no
-    /// longer exists anywhere in the project.
+    /// "Clean Up Orphaned History": moves stored histories whose avatar no
+    /// longer exists anywhere in the project to CommitPaths.TrashRoot.
     ///
     /// Deliberately a command the user runs, not something a commit does on
-    /// its own. It deletes version-control history, the scan that decides what
-    /// is orphaned reads every scene and prefab in the project, and the whole
-    /// situation only arises from repeated setup churn -- none of which is
-    /// worth doing silently behind an unrelated action.
+    /// its own. It moves version-control history out from under the tool, the
+    /// scan that decides what is orphaned reads every scene and prefab in the
+    /// project, and the whole situation only arises from repeated setup churn
+    /// -- none of which is worth doing silently behind an unrelated action.
     /// </summary>
     public static class AvatarVcsHistoryCleanupMenu
     {
@@ -35,10 +35,10 @@ namespace AvatarVcs.Editor.Menu
             }
 
             var plan = AvatarHistoryCleanupPlanner.Plan(histories);
-            var toDelete = plan.Where(d => d.delete).ToList();
-            var kept = plan.Count - toDelete.Count;
+            var toTrash = plan.Where(d => d.delete).ToList();
+            var kept = plan.Count - toTrash.Count;
 
-            if (toDelete.Count == 0)
+            if (toTrash.Count == 0)
             {
                 EditorUtility.DisplayDialog("AvatarVCS",
                     $"Nothing to clean up.\n\n{kept} stored " + (kept == 1 ? "history" : "histories")
@@ -47,24 +47,27 @@ namespace AvatarVcs.Editor.Menu
                 return;
             }
 
-            var freed = toDelete.Sum(d => d.history.byteSize);
             var body =
-                $"Delete {toDelete.Count} avatar " + (toDelete.Count == 1 ? "history" : "histories")
-                + $" ({EditorUtility.FormatBytes(freed)})?\n\n"
+                $"Move {toTrash.Count} avatar " + (toTrash.Count == 1 ? "history" : "histories")
+                + $" ({EditorUtility.FormatBytes(toTrash.Sum(d => d.history.byteSize))}) to the trash?\n\n"
                 + "No avatar in this project carries these ids any more. Every scene and prefab was searched, "
                 + "not just the open one.\n\n"
-                + string.Join("\n", toDelete.Select(Describe))
-                + $"\n\n{kept} kept. This cannot be undone.";
+                + string.Join("\n", toTrash.Select(Describe))
+                + $"\n\n{kept} kept where they are. Nothing is deleted: the folders move to "
+                + $"'{CommitPaths.TrashRoot}' and stay there. If one of these turns out to belong to an avatar that "
+                + $"is still around, move it back under '{CommitPaths.AvatarsRoot}' named with that avatar's "
+                + "current id.";
 
-            if (!EditorUtility.DisplayDialog("AvatarVCS — Clean Up Orphaned History", body, "Delete", "Cancel"))
+            if (!EditorUtility.DisplayDialog("AvatarVCS — Clean Up Orphaned History", body, "Move to Trash", "Cancel"))
                 return;
 
-            var deleted = AvatarHistoryCleanup.Run(histories);
+            var trashed = AvatarHistoryCleanup.Run(histories);
 
-            Debug.Log($"[AvatarVCS] Deleted {deleted.Count} orphaned avatar "
-                + (deleted.Count == 1 ? "history" : "histories")
-                + $" ({EditorUtility.FormatBytes(freed)}): "
-                + string.Join(", ", deleted.Select(h => h.avatarGuid)));
+            Debug.Log($"[AvatarVCS] Moved {trashed.Count} orphaned avatar "
+                + (trashed.Count == 1 ? "history" : "histories")
+                + $" to '{CommitPaths.TrashRoot}' "
+                + $"({EditorUtility.FormatBytes(trashed.Sum(h => h.byteSize))}): "
+                + string.Join(", ", trashed.Select(h => h.avatarGuid)));
         }
 
         // The same sweep runs on its own once per Unity session when the

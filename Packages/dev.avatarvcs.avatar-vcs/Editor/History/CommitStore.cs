@@ -395,14 +395,68 @@ namespace AvatarVcs.Editor.History
         }
 
         /// <summary>
-        /// Deletes all stored history for one avatar. Mainly for test cleanup;
-        /// not part of the normal user-facing flow.
+        /// Deletes all stored history for one avatar, for good. Mainly for
+        /// test cleanup; not part of the normal user-facing flow, which goes
+        /// through TrashAvatarHistory instead.
         /// </summary>
         public static void DeleteAvatarHistory(string avatarGuid)
         {
             var dir = GetAvatarDir(avatarGuid);
             if (Directory.Exists(dir))
                 Directory.Delete(dir, recursive: true);
+        }
+
+        /// <summary>
+        /// Moves one avatar's whole history under CommitPaths.TrashRoot and
+        /// returns where it went, or null if there was nothing there. This is
+        /// what the orphan sweep uses instead of DeleteAvatarHistory: whether
+        /// a history is orphaned is decided from what the project's scenes
+        /// reference, and that evidence can vanish for reasons that say
+        /// nothing about the avatar -- a destroyed AvatarVcsRoot above all,
+        /// which is one click of the VRChat SDK's "Auto Fix" away and takes
+        /// the avatarGuid with it. Being wrong then costs the user a rename
+        /// rather than their version history.
+        ///
+        /// Nothing prunes the trash. It holds small JSON files, and a tool
+        /// whose entire job is not losing history is the wrong place to
+        /// schedule the deletion of history.
+        /// </summary>
+        public static string TrashAvatarHistory(string avatarGuid)
+        {
+            var dir = GetAvatarDir(avatarGuid);
+            if (!Directory.Exists(dir)) return null;
+
+            Directory.CreateDirectory(CommitPaths.TrashRoot);
+
+            // Same shape as StoredJson.Quarantine: one stamp, then a counter,
+            // because trashing two histories of the same avatar inside one
+            // second is a real sequence (the sweep deletes several at once
+            // and a re-setup can produce ids that only differ by when they
+            // were made).
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            for (var attempt = 0; attempt < 100; attempt++)
+            {
+                var target = attempt == 0
+                    ? CommitPaths.TrashDir(avatarGuid, stamp)
+                    : CommitPaths.TrashDir(avatarGuid, $"{stamp}-{attempt}");
+                if (Directory.Exists(target)) continue;
+
+                try
+                {
+                    Directory.Move(dir, target);
+                    return target;
+                }
+                catch (IOException e)
+                {
+                    // Leaving the history where it is beats deleting it, so
+                    // this reports failure rather than falling back to a
+                    // delete. The caller keeps the history in its list.
+                    Debug.LogWarning($"[AvatarVCS] Could not move '{dir}' to the trash. The history was left alone. {e.Message}");
+                    return null;
+                }
+            }
+
+            return null;
         }
     }
 }

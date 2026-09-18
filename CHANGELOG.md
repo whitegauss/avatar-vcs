@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Orphaned-history cleanup moves histories to a trash folder instead of deleting them.** `Tools > AvatarVCS > Clean Up Orphaned History`, and the automatic sweep, now move the whole folder to `ProjectSettings/AvatarVcs/trash/{avatarGuid}-{timestamp}/`. Nothing prunes the trash. A beta project lost four histories the old way: the VRChat SDK's build tab lists this tool's marker components as ones it will remove — that is what its **Auto Fix** button does, `Undo.DestroyObjectImmediate` on everything outside the SDK's whitelist — and destroying the `AvatarVcsRoot` takes the `avatarGuid` with it, which is the only key the stored history has. Every history then looked orphaned, and the sweep is on by default. "No scene carries this id" is weak evidence that an avatar is gone, so being wrong about it should cost a rename, not version history. `docs/storage-layout.md` says how to move one back.
+
 ## [0.10.0-poc] - 2026-09-11
 
 ### Changed

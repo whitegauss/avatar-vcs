@@ -76,10 +76,12 @@ namespace AvatarVcs.Core.History
 
         /// <summary>
         /// A decision per history, in the order given. Referenced histories are
-        /// never deleted. Among the unreferenced ones the newest keepOrphans
+        /// never picked. Among the unreferenced ones the newest keepOrphans
         /// are kept as a safety net for the case the user actually meant to
         /// keep working with that avatar and removed its root by accident;
-        /// the rest are deleted.
+        /// the rest are marked for the caller to act on -- which today means
+        /// AvatarHistoryCleanup moving them to CommitPaths.TrashRoot, not
+        /// deleting them.
         /// </summary>
         public static List<Decision> Plan(IEnumerable<AvatarHistoryInfo> histories, int keepOrphans = DefaultKeepOrphans)
         {
