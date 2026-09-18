@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The SDK build tab no longer lists this tool's components as ones it will remove, so its "Auto Fix" can't destroy them.** The VRChat SDK validates avatars against a whitelist of type *names*, which makes every component in this package illegal; that shows up as an error blocking the build, and the Auto Fix beside it runs `Undo.DestroyObjectImmediate` over all of them. Destroying the `[AvatarVCS]` root takes its `avatarGuid` with it — the only key your commit history is stored under — and unlike a missing script it leaves nothing in the scene file to recover it from. The marker components now implement `VRC.SDKBase.IEditorOnly` (through `IAvatarVcsEditorOnly`, which is an empty interface when no VRChat SDK is installed, so nothing changes for a project without one), and the SDK's validation skips editor-only components. This is the same mechanism Modular Avatar's components use to stay off that list.
+
 ## [0.10.0-poc] - 2026-09-11
 
 ### Changed

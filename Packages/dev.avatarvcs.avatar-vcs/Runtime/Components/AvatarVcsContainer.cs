@@ -9,7 +9,7 @@ namespace AvatarVcs.Runtime
     /// </summary>
     [AddComponentMenu("")]
     [DisallowMultipleComponent]
-    public class AvatarVcsContainer : MonoBehaviour
+    public class AvatarVcsContainer : MonoBehaviour, IAvatarVcsEditorOnly
     {
         [SerializeField] private string containerGuid;
 
