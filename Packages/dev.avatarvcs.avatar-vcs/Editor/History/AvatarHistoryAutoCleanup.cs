@@ -10,8 +10,10 @@ using UnityEngine.SceneManagement;
 namespace AvatarVcs.Editor.History
 {
     /// <summary>
-    /// Removes orphaned avatar histories on its own, so the folder doesn't
-    /// grow forever without anyone remembering the menu command.
+    /// Moves orphaned avatar histories to the trash on its own, so the
+    /// avatars folder doesn't grow forever without anyone remembering the
+    /// menu command. Nothing here deletes anything: see
+    /// CommitStore.TrashAvatarHistory for why the sweep is not allowed to.
     ///
     /// The reason this isn't simply run everywhere is cost: deciding what is
     /// orphaned reads every scene and prefab in the project. So it is fenced
@@ -30,9 +32,9 @@ namespace AvatarVcs.Editor.History
     ///      skipped outright. This is the condition that makes it free in the
     ///      normal case.
     ///
-    /// Deletion itself keeps every guarantee the manual command has: an
-    /// incomplete scan deletes nothing, and the most recently committed
-    /// orphan is always kept.
+    /// The sweep keeps every guarantee the manual command has: an incomplete
+    /// scan moves nothing, and the most recently committed orphan is always
+    /// left in place.
     /// </summary>
     public static class AvatarHistoryAutoCleanup
     {
@@ -75,13 +77,17 @@ namespace AvatarVcs.Editor.History
                 return;
             }
 
-            var deleted = AvatarHistoryCleanup.Run(AvatarHistoryInventory.Scan());
-            if (deleted.Count == 0) return;
+            var trashed = AvatarHistoryCleanup.Run(AvatarHistoryInventory.Scan());
+            if (trashed.Count == 0) return;
 
-            Debug.Log($"[AvatarVCS] Removed {deleted.Count} avatar "
-                + (deleted.Count == 1 ? "history" : "histories")
-                + $" no avatar in this project claims any more ({EditorUtility.FormatBytes(deleted.Sum(d => d.byteSize))}). "
-                + "The most recent one was kept. Turn this off under "
+            Debug.Log($"[AvatarVCS] Moved {trashed.Count} avatar "
+                + (trashed.Count == 1 ? "history" : "histories")
+                + $" no avatar in this project claims any more to '{CommitPaths.TrashRoot}' "
+                + $"({EditorUtility.FormatBytes(trashed.Sum(d => d.byteSize))}): "
+                + string.Join(", ", trashed.Select(d => d.avatarGuid)) + ". "
+                + "The most recent one was kept where it was. Nothing was deleted -- if one of these belongs to an "
+                + "avatar that is still around, rename its folder back under "
+                + $"'{CommitPaths.AvatarsRoot}' with that avatar's current id. Turn this off under "
                 + "Tools > AvatarVCS > Clean Up Orphaned History Automatically.");
         }
 
@@ -125,9 +131,10 @@ namespace AvatarVcs.Editor.History
         /// AvatarHistoryInventory finds the avatarGuid in the scene's text --
         /// but the moment the user tidies the missing components away and
         /// saves, the last evidence of that avatarGuid is gone and its history
-        /// looks orphaned. Deleting it then would be silent and permanent, so
-        /// nothing is deleted automatically while any missing script is around,
-        /// whoever's it is.
+        /// looks orphaned. Moving it aside then would be silent, and silently
+        /// moving a live avatar's history is still a bad afternoon even though
+        /// the trash makes it recoverable -- so nothing is swept automatically
+        /// while any missing script is around, whoever's it is.
         /// </summary>
         private static bool ProjectLooksMidUpgrade(out string why)
         {
@@ -154,22 +161,28 @@ namespace AvatarVcs.Editor.History
     }
 
     /// <summary>
-    /// The delete half, shared by the menu command and the automatic run so
-    /// the two can't drift into different policies.
+    /// The half that touches the disk, shared by the menu command and the
+    /// automatic run so the two can't drift into different policies.
     /// </summary>
     public static class AvatarHistoryCleanup
     {
+        /// <summary>
+        /// Moves every history the planner marked to the trash and returns the
+        /// ones that actually moved -- a history whose folder is locked stays
+        /// where it is and is left out, so callers report what happened rather
+        /// than what was intended.
+        /// </summary>
         public static List<AvatarHistoryInfo> Run(IEnumerable<AvatarHistoryInfo> histories)
         {
-            var deleted = AvatarHistoryCleanupPlanner.Plan(histories)
-                .Where(d => d.delete)
-                .Select(d => d.history)
-                .ToList();
+            var trashed = new List<AvatarHistoryInfo>();
 
-            foreach (var history in deleted)
-                CommitStore.DeleteAvatarHistory(history.avatarGuid);
+            foreach (var history in AvatarHistoryCleanupPlanner.Plan(histories).Where(d => d.delete).Select(d => d.history))
+            {
+                if (CommitStore.TrashAvatarHistory(history.avatarGuid) != null)
+                    trashed.Add(history);
+            }
 
-            return deleted;
+            return trashed;
         }
     }
 }

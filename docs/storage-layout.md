@@ -10,14 +10,16 @@ avatar-vcs のコミットデータはすべて Unity プロジェクトの `Pro
 ProjectSettings/
 └── AvatarVcs/
     ├── guid-remapping.json              # GUID 再マッピング設定（プロジェクト全体で共有）
-    └── avatars/
-        └── {avatarGuid}/               # アバターごとのディレクトリ（32文字 hex）
-            ├── config.json             # ブランチ設定（ブランチ名 → HEAD コミット ID）
-            ├── index.json              # コミット ID 一覧 + ブランチ情報
-            └── commits/
-                ├── {commitId}.json     # コミットのスナップショット本体
-                ├── {commitId}.json
-                └── ...
+    ├── avatars/
+    │   └── {avatarGuid}/               # アバターごとのディレクトリ（32文字 hex）
+    │       ├── config.json             # ブランチ設定（ブランチ名 → HEAD コミット ID）
+    │       ├── index.json              # コミット ID 一覧 + ブランチ情報
+    │       └── commits/
+    │           ├── {commitId}.json     # コミットのスナップショット本体
+    │           ├── {commitId}.json
+    │           └── ...
+    └── trash/
+        └── {avatarGuid}-{YYYYMMDD-HHMMSS}/  # 孤児判定で退避された履歴（中身は上と同じ）
 ```
 
 > **`{avatarGuid}` はシーン側にしか無い**: この値はアバター配下の `[AvatarVCS]` に付いた
@@ -27,6 +29,24 @@ ProjectSettings/
 > 履歴を切り離す操作でもある、ということです（`AvatarHistoryInventory` はシーンと prefab の
 > テキストを走査して guid を探すので、保存済みシーンに文字列として残っていれば
 > 「まだ使われている履歴」とは認識されます）。
+
+---
+
+## `trash/` — 孤児履歴の退避先
+
+`Tools > AvatarVCS > Clean Up Orphaned History`（および同 Automatically）は、**削除ではなく
+`trash/` への移動**です。`avatars/{guid}` ごと `trash/{guid}-{日時}/` へ `Directory.Move` され、
+自動削除は一切行いません。
+
+そうなっている理由は、「孤児かどうか」の判定根拠がシーン側にしか無いことです。`AvatarVcsRoot` が
+何らかの理由で消えれば——**VRChat SDK のビルドタブにある Auto Fix はワンクリックでこれを
+destroy します**——そのアバターは生きているのに履歴が孤児に見えます。判定を間違えたときの代償は、
+版管理データの消失ではなくフォルダ名のリネームであるべきです。
+
+**戻し方**: 戻したいアバターで `Ensure Root` を実行して新しい `avatarGuid` を確認し、
+`trash/{古いguid}-{日時}/` を `avatars/{新しいguid}/` という名前で移動してください。コミットの読み込みは
+ディレクトリ名だけを見ており、commit JSON 内の `avatarGuid` フィールドと照合はしていないので、
+リネームだけで履歴が繋がります（`avatarName` フィールドがどのアバターのものかの手がかりになります）。
 
 ---
 
